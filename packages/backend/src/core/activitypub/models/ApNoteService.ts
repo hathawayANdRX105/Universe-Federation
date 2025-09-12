@@ -118,8 +118,17 @@ export class ApNoteService implements OnModuleInit {
 			return new IdentifiableError('d450b8a9-48e4-4dab-ae36-f4db763fda7c', `invalid Note from ${uri}: invalid object type ${apType ?? 'undefined'}`);
 		}
 
-		if (object.id && this.utilityService.extractDbHost(object.id) !== expectHost) {
-			return new IdentifiableError('d450b8a9-48e4-4dab-ae36-f4db763fda7c', `invalid Note from ${uri}: id has different host. expected: ${expectHost}, actual: ${this.utilityService.extractDbHost(object.id)}`);
+		// Validate id (URI)
+		if (!object.id) {
+			throw new UnrecoverableError(`invalid Note from ${uri}: missing id`);
+		}
+		if (typeof(object.id) !== 'string') {
+			throw new UnrecoverableError(`invalid Note from ${uri}: wrong id type ${typeof(object.id)}`);
+		}
+		const parsedId = this.utilityService.assertUrl(object.id, { allowFragment: false });
+		const idHost = this.utilityService.punyHostPSLDomain(parsedId);
+		if (idHost !== expectHost) {
+			throw new UnrecoverableError(`invalid Note from ${uri}: wrong host in id ${object.id} (got ${parsedId}, expected ${expectHost})`);
 		}
 
 		const actualHost = object.attributedTo && this.utilityService.extractDbHost(getOneApId(object.attributedTo));
