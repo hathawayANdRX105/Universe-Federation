@@ -25,8 +25,6 @@ export interface CollapsedQueueOpts<V> {
 	collapse: (oldValue: V, newValue: V) => V,
 	perform: (key: string, value: V) => void | Promise<void>,
 	check?: (key: string, value: V) => boolean,
-
-	onError?: (queue: CollapsedQueue<V>, error: unknown) => void | Promise<void>,
 	limiter?: number | Limiter,
 }
 
