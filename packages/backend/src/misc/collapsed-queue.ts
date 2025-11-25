@@ -24,6 +24,7 @@ export interface CollapsedQueueOpts<V> {
 	timeout: number,
 	collapse: (oldValue: V, newValue: V) => V,
 	perform: (key: string, value: V) => void | Promise<void>,
+	check?: (key: string, value: V) => boolean,
 
 	onError?: (queue: CollapsedQueue<V>, error: unknown) => void | Promise<void>,
 	limiter?: number | Limiter,
@@ -38,6 +39,7 @@ export class CollapsedQueue<V> {
 	private readonly timeout: number;
 	private readonly collapse: (oldValue: V, newValue: V) => V;
 	private readonly perform: (key: string, value: V) => void | Promise<void>;
+	private readonly check: undefined | ((key: string, value: V) => boolean);
 
 	constructor(
 		public readonly name: string,
@@ -50,6 +52,7 @@ export class CollapsedQueue<V> {
 		this.timeout = opts.timeout;
 		this.collapse = opts.collapse;
 		this.perform = opts.perform;
+		this.check = opts.check;
 		this.limiter = typeof(opts.limiter) === 'number'
 			? promiseLimit(opts.limiter)
 			: (opts.limiter ?? (cb => cb()));
@@ -116,12 +119,12 @@ export class CollapsedQueue<V> {
 		});
 
 		const total = entries.length;
-		const successes = results.reduce((sum, result) => sum + (result ? 1 : 0), 0);
-		const failures = results.reduce((sum, result) => sum + (result ? 0 : 1), 0);
+		const successes = results.reduce((sum, result) => sum + (result === true ? 1 : 0), 0);
+		const failures = results.reduce((sum, result) => sum + (result === false ? 0 : 1), 0);
 
-		if (total > 0) {
+		if (successes > 0 || failures > 0) {
 			if (failures > 0) {
-				this.logger.debug(`Persistence completed: ${successes}/${total} jobs succeeded, and ${failures}/${total} failed`);
+				this.logger.debug(`Persistence completed: ${successes}/${total} jobs succeeded and ${failures}/${total} failed`);
 			} else {
 				this.logger.debug(`Persistence completed: ${successes} jobs completed successfully`);
 			}
@@ -130,8 +133,12 @@ export class CollapsedQueue<V> {
 		}
 	}
 
-	private async performSafe(key: string, value: V): Promise<boolean> {
+	private async performSafe(key: string, value: V): Promise<boolean | 'skip'> {
 		try {
+			if (this.check != null && !this.check(key, value)) {
+				return 'skip';
+			}
+
 			await this.perform(key, value);
 			return true;
 		} catch (err) {
