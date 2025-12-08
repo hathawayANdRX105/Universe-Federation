@@ -32,31 +32,18 @@ export abstract class Channel {
 		return this.connection.cacheService;
 	}
 
-	/**
-	 * @deprecated use cacheService.userFollowingsCache to avoid stale data
-	 */
 	protected get following() {
 		return this.connection.following;
 	}
 
-	/**
-	 * TODO use onChange to keep these in sync?
-	 * @deprecated use cacheService.userMutingsCache to avoid stale data
-	 */
 	protected get userIdsWhoMeMuting() {
 		return this.connection.userIdsWhoMeMuting;
 	}
 
-	/**
-	 * @deprecated use cacheService.renoteMutingsCache to avoid stale data
-	 */
 	protected get userIdsWhoMeMutingRenotes() {
 		return this.connection.userIdsWhoMeMutingRenotes;
 	}
 
-	/**
-	 * @deprecated use cacheService.userBlockedCache to avoid stale data
-	 */
 	protected get userIdsWhoBlockingMe() {
 		return this.connection.userIdsWhoBlockingMe;
 	}
@@ -68,16 +55,10 @@ export abstract class Channel {
 		return this.connection.userMutedInstances;
 	}
 
-	/**
-	 * @deprecated use cacheService.threadMutingsCache to avoid stale data
-	 */
 	protected get userMutedThreads() {
 		return this.connection.userMutedThreads;
 	}
 
-	/**
-	 * @deprecated use cacheService.noteMutingsCache to avoid stale data
-	 */
 	protected get userMutedNotes() {
 		return this.connection.userMutedNotes;
 	}
@@ -168,8 +149,17 @@ export abstract class NoteChannel extends Channel {
 			return note;
 		}
 
+		// TODO should probably pass list context here
 		// Otherwise, re-pack the anonymous note for the actual target user.
 		return await this.noteEntityService.rePack(note, this.user, {
+			// TODO verify these
+			userFollowings: this.following,
+			userBlockers: this.userIdsWhoBlockingMe,
+			userMutedUsers: this.userIdsWhoMeMuting,
+			userMutedUserRenotes: this.userIdsWhoMeMutingRenotes,
+			userMutedInstances: this.userMutedInstances,
+			userMutedNotes: this.userMutedNotes,
+			userMutedThreads: this.userMutedThreads,
 			myReactions: this.myRecentReactions,
 			myRenotes: this.myRecentRenotes,
 			myFavorites: this.myRecentFavorites,
