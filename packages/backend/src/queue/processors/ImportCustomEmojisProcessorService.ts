@@ -18,8 +18,8 @@ import { DownloadService } from '@/core/DownloadService.js';
 import { bindThis } from '@/decorators.js';
 import type { Config } from '@/config.js';
 import { renderInlineError } from '@/misc/render-inline-error.js';
-import { QueueLoggerService } from '../QueueLoggerService.js';
 import { NotificationService } from '@/core/NotificationService.js';
+import { QueueLoggerService } from '../QueueLoggerService.js';
 import type * as Bull from 'bullmq';
 import type { DbUserImportJobData } from '../types.js';
 
@@ -122,10 +122,9 @@ export class ImportCustomEmojisProcessorService {
 						name: record.fileName,
 						force: true,
 					});
-					await this.customEmojiService.add({
+					await this.customEmojiService.createEmoji({
 						originalUrl: driveFile.url,
 						publicUrl: driveFile.webpublicUrl ?? driveFile.url,
-						fileType: driveFile.webpublicType ?? driveFile.type,
 						name: nameNfc,
 						category: emojiInfo.category?.normalize('NFC'),
 						host: null,
@@ -136,10 +135,7 @@ export class ImportCustomEmojisProcessorService {
 						roleIdsThatCanBeUsedThisEmojiAsReaction: [],
 					});
 				} catch (e) {
-					if (e instanceof Error || typeof e === 'string') {
-						this.logger.error(`couldn't import ${emojiPath} for ${emojiInfo.name}: ${renderInlineError(e)}`);
-					}
-					continue;
+					this.logger.error(`couldn't import ${emojiPath} for ${emojiInfo.name}: ${renderInlineError(e)}`);
 				}
 			}
 
