@@ -13,6 +13,7 @@ import type { MiUser } from '@/models/User.js';
 import type { MiNote } from '@/models/Note.js';
 import type { UsersRepository, NotesRepository, FollowingsRepository, PollsRepository, PollVotesRepository, NoteReactionsRepository, ChannelsRepository, MiMeta, MiPollVote, MiPoll, MiChannel, NoteFavoritesRepository } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
+import { IsOne } from '@/misc/is-one.js';
 import { deepClone } from '@/misc/clone.js';
 import { crawlNote } from '@/misc/crawl-note.js';
 import { DebounceLoader } from '@/misc/loader.js';
@@ -775,7 +776,7 @@ export class NoteEntityService implements OnModuleInit {
 		if (notes.length === 0) return [];
 
 		const targetNotes = await this.fetchRequiredNotes(notes, options?.detail ?? false);
-		const noteIds = Array.from(new Set(targetNotes.map(n => n.id)));
+		const noteIds = Array.from(new Set(targetNotes.keys()));
 
 		const usersMap = new Map<string, MiUser | string>();
 		const allUsers = notes.flatMap(note => [
@@ -799,12 +800,12 @@ export class NoteEntityService implements OnModuleInit {
 		const users = Array.from(usersMap.values());
 		const userIds = Array.from(usersMap.keys());
 
-		const fileIds = new Set(targetNotes.flatMap(n => n.fileIds));
-		const mentionedUsers = new Set(targetNotes.flatMap(note => note.mentions));
+		const fileIds = new Set(targetNotes.values().flatMap(n => n.fileIds));
+		const mentionedUsers = new Set(targetNotes.values().flatMap(note => note.mentions));
 
 		const [{ bufferedReactions, myReactionsMap }, packedFiles, packedUsers, mentionHandles, polls, pollVotes, channels, mutedThreads, mutedNotes, favoriteNotes, renotedNotes, userRelations] = await Promise.all([
 			// bufferedReactions & myReactionsMap
-			this.getReactions(targetNotes, me),
+			this.getReactions(targetNotes.values().toArray(), me),
 			// packedFiles
 			this.driveFileEntityService.packManyByIdsMap(Array.from(fileIds)),
 			// packedUsers
@@ -832,7 +833,7 @@ export class NoteEntityService implements OnModuleInit {
 					return noteMap;
 				}, new Map<string, Map<string, MiPollVote[]>>)),
 			// channels
-			this.getChannels(targetNotes),
+			this.getChannels(targetNotes.values()),
 			// mutedThreads
 			me ? this.cacheService.threadMutingsCache.fetch(me.id) : new Set<string>(),
 			// mutedNotes
@@ -872,7 +873,7 @@ export class NoteEntityService implements OnModuleInit {
 				polls,
 				pollVotes,
 				channels,
-				notes: new Map(targetNotes.map(n => [n.id, n])),
+				notes: targetNotes,
 				mutedThreads,
 				mutedNotes,
 				favoriteNotes,
@@ -884,20 +885,22 @@ export class NoteEntityService implements OnModuleInit {
 
 	// TODO find a way to de-duplicate pack() calls when we have multiple references to the same note.
 
-	private async fetchRequiredNotes(notes: MiNote[], detail: boolean): Promise<MiNote[]> {
+	private async fetchRequiredNotes(notes: MiNote[], detail: boolean): Promise<Map<string, MiNote>> {
 		const notesMap = new Map<string, MiNote>();
 		const notesToFetch = new Set<string>();
+		const notesToRecurse = new Set<string>();
 
-		function addNote(note: string | MiNote | null | undefined) {
-			if (note == null) return;
+		function addNote(note: string | MiNote | null | undefined, forceDetail = false) {
+			if (!note) return;
+
+			const noteId = typeof(note) === 'object' ? note.id : note;
+			if (notesMap.has(noteId)) return;
 
 			if (typeof(note) === 'object') {
-				notesMap.set(note.id, note);
-				notesToFetch.delete(note.id);
-			} else if (detail) {
-				if (!notesMap.has(note)) {
-					notesToFetch.add(note);
-				}
+				notesMap.set(noteId, note);
+				notesToFetch.delete(noteId);
+			} else if (detail || forceDetail) {
+				notesToFetch.add(noteId);
 			}
 		}
 
@@ -915,6 +918,10 @@ export class NoteEntityService implements OnModuleInit {
 				} else {
 					addNote(note.renoteId);
 				}
+
+				if (isPureRenote(note)) {
+					notesToRecurse.add(note.renoteId);
+				}
 			}
 
 			// Add reply
@@ -925,39 +932,41 @@ export class NoteEntityService implements OnModuleInit {
 		if (notesToFetch.size > 0) {
 			const newNotes = await this.notesRepository.find({
 				where: {
-					id: In(Array.from(notesToFetch)),
-				},
-				relations: {
-					reply: true,
-					renote: {
-						reply: true,
-						renote: true,
-					},
-					channel: true,
+					id: IsOne(Array.from(notesToFetch)),
 				},
 			});
 
 			for (const note of newNotes) {
 				addNote(note);
 			}
-
-			notesToFetch.clear();
 		}
 
-		// Extract second-tier dependencies
-		for (const note of Array.from(notesMap.values())) {
-			if (isPureRenote(note) && note.renote) {
-				if (note.renote.reply && !notesMap.has(note.renote.reply.id)) {
-					notesMap.set(note.renote.reply.id, note.renote.reply);
-				}
+		// Reset state for phase transition
+		notesToFetch.clear();
 
-				if (note.renote.renote && !notesMap.has(note.renote.renote.id)) {
-					notesMap.set(note.renote.renote.id, note.renote.renote);
-				}
+		// Enumerate 2nd-tier dependencies (boost->quote->reply and boost->quote->renote)
+		for (const noteId of notesToRecurse) {
+			const maybeQuote = notesMap.get(noteId);
+			if (maybeQuote) {
+				addNote(maybeQuote.renote ?? maybeQuote.renoteId, true);
+				addNote(maybeQuote.reply ?? maybeQuote.replyId, true);
 			}
 		}
 
-		return Array.from(notesMap.values());
+		// Populate 2nd-tier dependencies
+		if (notesToFetch.size > 0) {
+			const newNotes = await this.notesRepository.find({
+				where: {
+					id: IsOne(Array.from(notesToFetch)),
+				},
+			});
+
+			for (const note of newNotes) {
+				addNote(note);
+			}
+		}
+
+		return notesMap;
 	}
 
 	@bindThis
