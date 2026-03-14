@@ -237,9 +237,9 @@ export default class Connection {
 
 		switch (type) {
 			case 'readNotification': await this.onReadNotification(); break;
-			case 'subNote': this.onSubscribeNote(body); break;
-			case 's': this.onSubscribeNote(body); break; // alias
-			case 'sr': this.onSubscribeNote(body); break;
+			case 'subNote': await this.onSubscribeNote(body); break;
+			case 's': await this.onSubscribeNote(body); break; // alias
+			case 'sr': await this.onSubscribeNote(body); break; // alias
 			case 'unsubNote': this.onUnsubscribeNote(body); break;
 			case 'un': this.onUnsubscribeNote(body); break; // alias
 			case 'connect': this.onChannelConnectRequested(body); break;
@@ -264,26 +264,41 @@ export default class Connection {
 	 * 投稿購読要求時
 	 */
 	@bindThis
-	private onSubscribeNote(payload: JsonValue | undefined) {
+	private async onSubscribeNote(payload: JsonValue | undefined) {
 		if (!isJsonObject(payload)) return;
 		if (!payload.id || typeof payload.id !== 'string') return;
 
-		const current = this.subscribingNotes.get(payload.id) ?? 0;
-		const updated = current + 1;
-		this.subscribingNotes.set(payload.id, updated);
+		// If already connected, then just bump count and skip other checks.
+		const oldSubCount = this.subscribingNotes.get(payload.id);
+		if (oldSubCount) {
+			// Remove and re-insert to fix map ordering.
+			const newSubCount = oldSubCount + 1;
+			this.subscribingNotes.delete(payload.id);
+			this.subscribingNotes.set(payload.id, newSubCount);
+			return;
+		}
+
+		// Make sure the note exists.
+		const note = await this.notesRepository.findOneBy({ id: payload.id });
+		if (!note) {
+			return;
+		}
+
+		// Make sure the user can access the note.
+		const { accessible } = await this.noteVisibilityService.checkNoteVisibilityAsync(note, this.user);
+		if (!accessible) {
+			return;
+		}
+
+		// Checks ok; set up the connection.
+		this.subscriber?.on(`noteStream:${payload.id}`, this.onNoteStreamMessage);
 
 		// Limit the number of distinct notes that can be subscribed to.
 		while (this.subscribingNotes.size > MAX_SUBSCRIPTIONS_PER_CONNECTION) {
 			// Map maintains insertion order, so first key is always the oldest
 			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 			const oldestKey = this.subscribingNotes.keys().next().value!;
-
-			this.subscribingNotes.delete(oldestKey);
-			this.subscriber?.off(`noteStream:${oldestKey}`, this.onNoteStreamMessage);
-		}
-
-		if (updated === 1) {
-			this.subscriber?.on(`noteStream:${payload.id}`, this.onNoteStreamMessage);
+			this.disconnectNoteEvents(oldestKey);
 		}
 	}
 
@@ -295,38 +310,56 @@ export default class Connection {
 		if (!isJsonObject(payload)) return;
 		if (!payload.id || typeof payload.id !== 'string') return;
 
-		const current = this.subscribingNotes.get(payload.id);
-		if (current == null) return;
-		const updated = current - 1;
-		this.subscribingNotes.set(payload.id, updated);
-		if (updated <= 0) {
-			this.subscribingNotes.delete(payload.id);
-			this.subscriber?.off(`noteStream:${payload.id}`, this.onNoteStreamMessage);
+		const oldSubCount = this.subscribingNotes.get(payload.id) ?? 0;
+		const newSubCount = oldSubCount - 1;
+		if (newSubCount > 0) {
+			this.subscribingNotes.set(payload.id, newSubCount);
+		} else {
+			this.disconnectNoteEvents(payload.id);
 		}
 	}
 
 	@bindThis
 	private async onNoteStreamMessage(data: GlobalEvents['note']['payload']) {
-		const note = await this.notesRepository.findOne({
-			where: { id: data.body.id },
-			relations: { reply: true, renote: true },
-		});
-		if (!note && data.type !== 'deleted') return;
-
-		if (note) {
-			// Skip and stop tracking if the message contains a note the user can't or shouldn't see.
-			const { accessible, silence } = await this.noteEntityService.noteVisibilityService.checkNoteVisibilityAsync(note, this.user);
-			if (!accessible || silence) {
-				this.onUnsubscribeNote({ id: data.body.id });
-				return;
+		// If the event involves a third user, then we need to check access.
+		// Reply visibility checks can be skipped since we don't actually send the contents - just ID.
+		if ('userId' in data.body && typeof(data.body.userId) === 'string') {
+			if (this.user) {
+				// If client is logged in, then check user blocks.
+				const relation = await this.cacheService.getUserRelation(this.user, data.body.userId);
+				if (relation.isBlocked) {
+					return;
+				}
+			} else {
+				// If client is anonymous (not logged in), then check privacy settings.
+				const otherUser = await this.cacheService.findUserById(data.body.userId);
+				if (otherUser.requireSigninToViewContents) {
+					return;
+				}
 			}
 		}
 
+		// Unsubscribe when note is deleted, but make sure we still send the message!
+		if (data.type === 'deleted') {
+			this.disconnectNoteEvents(data.body.id);
+		}
+
+		// Checks ok; send the message.
 		this.sendMessageToWs('noteUpdated', {
 			id: data.body.id,
 			type: data.type,
 			body: data.body.body,
 		});
+	}
+
+	/**
+	 * Stops tracking the provided note and cleans up all related state.
+	 * Does nothing if the note isn't tracked.
+	 */
+	@bindThis
+	private disconnectNoteEvents(noteId: string): void {
+		this.subscribingNotes.delete(noteId);
+		this.subscriber?.off(`noteStream:${noteId}`, this.onNoteStreamMessage);
 	}
 
 	/**
