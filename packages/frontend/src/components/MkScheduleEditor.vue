@@ -18,7 +18,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { onMounted, ref, watch } from 'vue';
-import moment from 'moment';
 import MkInput from '@/components/MkInput.vue';
 import { formatDateTimeString } from '@/utility/format-time-string.js';
 import { addTime } from '@/utility/time.js';
@@ -47,7 +46,7 @@ if (props.modelValue.scheduledAt) {
 
 function get() {
 	const calcAt = () => {
-		return moment(`${ atDate.value } ${ atTime.value }`).utc().valueOf();
+		return new Date(`${ atDate.value } ${ atTime.value }`).valueOf();
 	};
 
 	return { scheduledAt: calcAt() };

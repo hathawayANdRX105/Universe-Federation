@@ -17,19 +17,19 @@
 	},
 	"devDependencies": {
 		"@types/node": "22.18.1",
-		"@typescript-eslint/eslint-plugin": "8.50.1",
-		"@typescript-eslint/parser": "8.50.1",
-		"@rollup/plugin-replace": "6.0.2",
+		"@typescript-eslint/eslint-plugin": "8.57.1",
+		"@typescript-eslint/parser": "8.57.1",
+		"@rollup/plugin-replace": "6.0.3",
 		"@rollup/pluginutils": "5.3.0",
-		"esbuild": "0.25.10",
-		"eslint": "9.39.2",
+		"esbuild": "0.27.4",
+		"eslint": "9.39.4",
 		"eslint-plugin-import": "2.32.0",
-		"eslint-plugin-vue": "10.5.0",
+		"eslint-plugin-vue": "10.8.0",
 		"execa": "9.6.0",
 		"nodemon": "3.1.10",
-		"rollup": "4.52.2",
-		"typescript": "5.9.2",
-		"vue-eslint-parser": "10.2.0"
+		"rollup": "4.59.0",
+		"typescript": "5.9.3",
+		"vue-eslint-parser": "10.4.0"
 	},
 	"files": [
 		"built/js",

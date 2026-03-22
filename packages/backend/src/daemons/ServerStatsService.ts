@@ -6,7 +6,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import si from 'systeminformation';
 import Xev from 'xev';
-import * as osUtils from 'os-utils';
 import { bindThis } from '@/decorators.js';
 import type { OnApplicationShutdown } from '@nestjs/common';
 import { MiMeta } from '@/models/_.js';
@@ -114,16 +113,9 @@ export class ServerStatsService implements OnApplicationShutdown {
 }
 
 // CPU STAT
-function cpuUsage(): Promise<number> {
-	return new Promise((res, rej) => {
-		try {
-			osUtils.cpuUsage((cpuUsage) => {
-				res(cpuUsage);
-			});
-		} catch (err) {
-			rej(err);
-		}
-	});
+async function cpuUsage(): Promise<number> {
+	const cpuUsage = await si.currentLoad();
+	return cpuUsage.currentLoad;
 }
 
 // MEMORY STAT

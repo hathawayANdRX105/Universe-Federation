@@ -10,7 +10,6 @@ import * as os from 'node:os';
 import cluster from 'node:cluster';
 import * as net from 'node:net';
 import chalk from 'chalk';
-import chalkTemplate from 'chalk-template';
 import * as Sentry from '@sentry/node';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import type Logger from '@/logger.js';
@@ -48,7 +47,7 @@ function greet(logger: Logger, bootLogger: Logger, envOption: EnvOption) {
 		logger.info(chalk.rgb(255, 136, 0)(' If you like Sharkey, please donate to support development. https://opencollective.com/sharkey'));
 
 		logger.info('');
-		logger.info(chalkTemplate`--- ${os.hostname()} {gray (PID: ${process.pid.toString()})} ---`);
+		logger.info(`--- ${os.hostname()} ${chalk.grey(`(PID: ${process.pid.toString()})`)} ---`);
 	}
 
 	bootLogger.info('Welcome to Sharkey!');
