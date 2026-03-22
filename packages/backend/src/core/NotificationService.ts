@@ -53,28 +53,27 @@ export class NotificationService implements OnApplicationShutdown {
 		userId: MiUser['id'],
 		force = false,
 	) {
-		const latestReadNotificationId = await this.redisClient.get(`latestReadNotification:${userId}`);
+		const [latestReadNotificationId, latestNotificationIdsRes] = await Promise.all([
+			this.redisClient.get(`latestReadNotification:${userId}`),
+			this.redisClient.xrevrange(
+				`notificationTimeline:${userId}`,
+				'+',
+				'-',
+				'COUNT', 1),
+		]);
 
-		const latestNotificationIdsRes = await this.redisClient.xrevrange(
-			`notificationTimeline:${userId}`,
-			'+',
-			'-',
-			'COUNT', 1);
-		const latestNotificationId = latestNotificationIdsRes[0]?.[0];
-
+		// Bail if the user has no notifications.
+		// Type Assertion is required because TS tries to incorrectly "infer" latestNotificationId as non-nullable.
+		const latestNotificationId = latestNotificationIdsRes[0]?.[0] as string | undefined;
 		if (latestNotificationId == null) return;
 
-		this.redisClient.set(`latestReadNotification:${userId}`, latestNotificationId);
-
-		if (force || latestReadNotificationId == null || (latestReadNotificationId < latestNotificationId)) {
-			return this.postReadAllNotifications(userId);
+		if (force || latestNotificationId !== latestReadNotificationId) {
+			await Promise.all([
+				this.redisClient.set(`latestReadNotification:${userId}`, latestNotificationId),
+				this.globalEventService.publishMainStream(userId, 'readAllNotifications', {}),
+				this.pushNotificationService.pushNotification(userId, 'readAllNotifications', undefined),
+			]);
 		}
-	}
-
-	@bindThis
-	private async postReadAllNotifications(userId: MiUser['id']) {
-		this.globalEventService.publishMainStream(userId, 'readAllNotifications');
-		await this.pushNotificationService.pushNotification(userId, 'readAllNotifications', undefined);
 	}
 
 	@bindThis
@@ -248,8 +247,8 @@ export class NotificationService implements OnApplicationShutdown {
 		await Promise.all([
 			this.redisClient.del(`notificationTimeline:${userId}`),
 			this.redisClient.del(`latestReadNotification:${userId}`),
+			this.globalEventService.publishMainStream(userId, 'notificationFlushed', {}),
 		]);
-		this.globalEventService.publishMainStream(userId, 'notificationFlushed');
 	}
 
 	@bindThis
