@@ -51,6 +51,7 @@ import { TimeService } from '@/global/TimeService.js';
 import { EnvService } from '@/global/EnvService.js';
 import { CacheService } from '@/core/CacheService.js';
 import { UtilityService } from '@/core/UtilityService.js';
+import { InstanceStatsService } from '@/core/InstanceStatsService.js';
 import { ReversiGameEntityService } from '@/core/entities/ReversiGameEntityService.js';
 import { AnnouncementEntityService } from '@/core/entities/AnnouncementEntityService.js';
 import { FeedService } from './FeedService.js';
@@ -128,6 +129,7 @@ export class ClientServerService {
 		private readonly envService: EnvService,
 		private readonly cacheService: CacheService,
 		private readonly utilityService: UtilityService,
+		private readonly instanceStatsService: InstanceStatsService,
 	) {
 		//this.createServer = this.createServer.bind(this);
 	}
@@ -190,7 +192,6 @@ export class ClientServerService {
 		return (manifest);
 	}
 
-	// TODO cache this
 	@bindThis
 	private async generateCommonPugData(meta: MiMeta) {
 		return {
@@ -902,13 +903,14 @@ export class ClientServerService {
 		fastify.get('/_info_card_', async (request, reply) => {
 			reply.removeHeader('X-Frame-Options');
 
+			const stats = await this.instanceStatsService.fetch();
 			return await reply.view('info-card', {
 				version: this.config.version,
 				host: this.config.host,
 				url: this.config.url,
 				meta: this.meta,
-				originalUsersCount: await this.usersRepository.countBy({ host: IsNull() }),
-				originalNotesCount: await this.notesRepository.countBy({ userHost: IsNull() }),
+				originalUsersCount: stats.localUsers,
+				originalNotesCount: stats.localNotes,
 			});
 		});
 		//#endregion

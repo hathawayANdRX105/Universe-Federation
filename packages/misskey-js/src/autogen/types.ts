@@ -9211,7 +9211,13 @@ export type paths = {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * stats
+         * @description No description provided.
+         *
+         *     **Credential required**: *No*
+         */
+        get: operations['stats'];
         put?: never;
         /**
          * stats
