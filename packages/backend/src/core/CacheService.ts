@@ -242,7 +242,7 @@ export class CacheService implements OnApplicationShutdown {
 					.select('user.id')
 					.where({
 						usernameLower: parsed.username.toLowerCase(),
-						host: parsed.host ? this.utilityService.toPuny(parsed.host) : IsNull(),
+						host: parsed.host ?? IsNull(),
 					})
 					.getOneOrFail();
 				return id;
@@ -254,7 +254,7 @@ export class CacheService implements OnApplicationShutdown {
 					.select('user.id')
 					.where({
 						usernameLower: parsed.username.toLowerCase(),
-						host: parsed.host ? this.utilityService.toPuny(parsed.host) : IsNull(),
+						host: parsed.host ?? IsNull(),
 					})
 					.getOne();
 				return res?.id;

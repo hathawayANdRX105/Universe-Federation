@@ -8,7 +8,6 @@ import * as mfm from 'mfm-js';
 import { In, DataSource, IsNull, LessThan } from 'typeorm';
 import * as Redis from 'ioredis';
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
-import { extractMentions } from '@/misc/extract-mentions.js';
 import { extractCustomEmojisFromMfm } from '@/misc/extract-custom-emojis-from-mfm.js';
 import { extractHashtags } from '@/misc/extract-hashtags.js';
 import type { IMentionedRemoteUsers } from '@/models/Note.js';
@@ -56,6 +55,7 @@ import { LatestNoteService } from '@/core/LatestNoteService.js';
 import { CollapsedQueue } from '@/misc/collapsed-queue.js';
 import { CacheService } from '@/core/CacheService.js';
 import { TimeService } from '@/global/TimeService.js';
+import { MfmService } from '@/core/MfmService.js';
 import { NoteVisibilityService } from '@/core/NoteVisibilityService.js';
 import { CollapsedQueueService } from '@/core/CollapsedQueueService.js';
 import { promiseMap } from '@/misc/promise-map.js';
@@ -226,6 +226,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		private readonly timeService: TimeService,
 		private readonly noteVisibilityService: NoteVisibilityService,
 		private readonly collapsedQueueService: CollapsedQueueService,
+		private readonly mfmService: MfmService,
 	) {
 	}
 
@@ -942,15 +943,14 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 	@bindThis
 	public async extractMentionedUsers(user: { host: MiUser['host']; }, tokens: mfm.MfmNode[]): Promise<MiUser[]> {
-		if (tokens == null || tokens.length === 0) return [];
+		// Extract unique, normalized mentions
+		const mentions = this.mfmService.extractMentions(tokens, user.host);
 
-		const allMentions = extractMentions(tokens);
-		const mentions = new Map(allMentions.map(m => [`${m.username.toLowerCase()}@${m.host?.toLowerCase()}`, m]));
+		// Resolve each mention to a user
+		const mentionedUsers = await promiseMap(mentions, async m => await this.remoteUserResolveService.resolveUser(m.username, m.host).catch(() => null), { limiter: 2 });
 
-		const allMentionedUsers = await promiseMap(mentions.values(), async m => await this.remoteUserResolveService.resolveUser(m.username, m.host ?? user.host).catch(() => null), { limiter: 2 });
-		const mentionedUsers = new Map(allMentionedUsers.filter(u => u != null).map(u => [u.id, u]));
-
-		return Array.from(mentionedUsers.values());
+		// Filter for unique, resolved users
+		return new Map(mentionedUsers.filter(u => u != null).map(u => [u.id, u])).values().toArray();
 	}
 
 	@bindThis

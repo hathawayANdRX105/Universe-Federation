@@ -38,6 +38,8 @@ export type UriParseResult = {
 
 @Injectable()
 export class UtilityService {
+	private readonly punyConfigHost: string;
+
 	constructor(
 		@Inject(DI.config)
 		private config: Config,
@@ -47,6 +49,7 @@ export class UtilityService {
 
 		private readonly envService: EnvService,
 	) {
+		this.punyConfigHost = this.toPuny(config.host);
 	}
 
 	@bindThis
@@ -422,14 +425,24 @@ export class UtilityService {
 		};
 	}
 
+	/**
+	 * Parses an input Acct into username and normalized host.
+	 * @param input Parsed or stringified Acct input
+	 * @param usernameLower If true (default), then username will be lowercased. Host is always lowercased.
+	 * @param selfHost How to interpret a null host
+	 */
 	@bindThis
-	public parseAcct(input: string | Acct.Acct): Acct.Acct {
-		const acct = typeof(input) === 'string' ? Acct.parse(input) : input;
+	public parseAcct(input: string | Acct.Acct, usernameLower = true, selfHost: string | null = null): Acct.Acct {
+		const acct = typeof(input) === 'string' ? Acct.parse(input, false) : input;
 
-		const dbHost = this.toPunyNullable(acct.host);
-		const host = dbHost === this.config.host ? null : dbHost;
+		const dbHost = this.toPunyNullable(acct.host ?? selfHost);
+		const host = dbHost === this.punyConfigHost ? null : dbHost;
 
-		return { username: acct.username, host };
+		const username = usernameLower
+			? acct.username.toLowerCase()
+			: acct.username;
+
+		return { username, host };
 	}
 
 	@bindThis

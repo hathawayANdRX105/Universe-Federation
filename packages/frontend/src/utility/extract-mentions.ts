@@ -3,9 +3,6 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-// TODO move to mfm-js and use in backend
-// test is located in test/extract-mentions
-
 import { acct } from 'misskey-js';
 import { toASCII } from 'punycode.js';
 import * as mfm from 'mfm-js';
@@ -15,9 +12,16 @@ export type MfmMention = mfm.MfmMention['props'];
 
 const localHost = normalize(config.host);
 
+/**
+ * Extracts unique, deduplicated, and host-normalized mentions from a chunk of MFM.
+ * Keep in sync with backend MfmService.extractMentions
+ * @param nodes MFM nodes to search.
+ * @param selfHost How to interpret "local" mentions (without a host).
+ */
 export function extractMentions(nodes: mfm.MfmNode[], selfHost: string | null = null): MfmMention[] {
-	const normalSelfHost = selfHost != null ? normalize(selfHost) : null;
+	if (nodes.length < 1) return [];
 
+	const normalSelfHost = selfHost != null ? normalize(selfHost) : null;
 	const mentionNodes = mfm.extract(nodes, (node) => node.type === 'mention') as mfm.MfmMention[];
 	const mentions = mentionNodes.map(({ props: mention }) => {
 		// Normalize hostnames
