@@ -4,7 +4,7 @@
  */
 
 import { types } from 'node:util';
-import { CountingSet, isCountingSet } from '@/misc/CountingSet.js';
+import { isCountingSet } from '@/misc/CountingSet.js';
 
 /**
  * Checks whether two provided values are deeply identical.
@@ -24,7 +24,7 @@ function compare(first: unknown, second: unknown, seen: Map<unknown, Set<unknown
 	// Compare arrays by contents
 	if (Array.isArray(first)) {
 		if (!Array.isArray(second)) return false;
-		if (checkSeen(first, second, seen)) return false;
+		if (checkSeen(first, second, seen)) return true;
 		if (first.length !== second.length) return false;
 
 		for (let i = 0; i < first.length; i++) {
@@ -41,19 +41,15 @@ function compare(first: unknown, second: unknown, seen: Map<unknown, Set<unknown
 	// Compare Sets by values
 	if (types.isSet(first)) {
 		if (!types.isSet(second)) return false;
-		if (checkSeen(first, second, seen)) return false;
+		if (checkSeen(first, second, seen)) return true;
 
 		const set1 = first as Set<unknown>;
 		const set2 = second as Set<unknown>;
 		if (set1.size !== set2.size) return false;
 
-		for (const item of set1) {
-			if (!set2.has(item)) {
-				return false;
-			}
-		}
-
-		return true;
+		const firstEntries = set1.entries();
+		const secondEntries = set2.entries();
+		return compareIterables(firstEntries, secondEntries, seen);
 	} else if (types.isSet(second)) {
 		return false;
 	}
@@ -61,18 +57,13 @@ function compare(first: unknown, second: unknown, seen: Map<unknown, Set<unknown
 	// Compare counting sets by value + count
 	if (isCountingSet(first)) {
 		if (!isCountingSet(second)) return false;
-		if (checkSeen(first, second, seen)) return false;
+		if (checkSeen(first, second, seen)) return true;
 
-		if (first.values().size !== second.values().size) return false;
-		if (first.debts().size !== second.debts().size) return false;
+		const firstEntries = first.entries();
+		const secondEntries = second.entries();
+		if (firstEntries.size !== secondEntries.size) return false;
 
-		for (const [item, count] of first.entries()) {
-			if (second.count(item) !== count) {
-				return false;
-			}
-		}
-
-		return true;
+		return compareIterables(firstEntries, secondEntries, seen);
 	} else if (isCountingSet(second)) {
 		return false;
 	}
@@ -80,17 +71,15 @@ function compare(first: unknown, second: unknown, seen: Map<unknown, Set<unknown
 	// Compare Maps by contents
 	if (types.isMap(first)) {
 		if (!types.isMap(second)) return false;
-		if (checkSeen(first, second, seen)) return false;
+		if (checkSeen(first, second, seen)) return true;
 
 		const map1 = first as Map<unknown, unknown>;
 		const map2 = second as Map<unknown, unknown>;
 		if (map1.size !== map2.size) return false;
 
-		for (const [key, value] of map1) {
-			if (!map2.has(key)) return false;
-			if (map2.get(key) !== value) return false;
-		}
-		return true;
+		const firstEntries = map1.entries();
+		const secondEntries = map2.entries();
+		return compareIterables(firstEntries, secondEntries, seen);
 	} else if (types.isMap(second)) {
 		return false;
 	}
@@ -125,7 +114,7 @@ function compare(first: unknown, second: unknown, seen: Map<unknown, Set<unknown
 	// Compare regular objects by prototypes, keys, and values
 	if (typeof(first) === 'object') {
 		if (typeof(second) !== 'object') return false;
-		if (checkSeen(first, second, seen)) return false;
+		if (checkSeen(first, second, seen)) return true;
 		if (Object.getPrototypeOf(first) !== Object.getPrototypeOf(second)) return false;
 
 		const firstKeys = Object.keys(first);
@@ -154,6 +143,26 @@ function compare(first: unknown, second: unknown, seen: Map<unknown, Set<unknown
 
 	// Compare primitives & functions by strict equality
 	return first === second;
+}
+
+/**
+ * Order-independent, semantic, and fuzzy compare of two iterables.
+ */
+function compareIterables(first: Iterable<unknown>, second: Iterable<unknown>, seen: Map<unknown, Set<unknown>>): boolean {
+	const secondItems = Array.from(second);
+
+	for (const firstItem of first) {
+		const matchIdx = secondItems.findIndex(secondItem => compare(firstItem, secondItem, seen));
+		if (matchIdx < 0) {
+			return false;
+		}
+
+		// "pop" the item that we consumed
+		secondItems.splice(matchIdx, 1);
+	}
+
+	// Make sure there was nothing left over
+	return secondItems.length === 0;
 }
 
 function checkSeen(first: unknown, second: unknown, seen: Map<unknown, Set<unknown>>): boolean {

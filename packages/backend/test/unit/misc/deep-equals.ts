@@ -261,6 +261,63 @@ describe(deepEquals, () => {
 
 		testMatrix(dates);
 	});
+
+	describe('when comparing deep object graphs', () => {
+		it('should deep-compare recursively', () => {
+			const input1 = {
+				repeated: { foo: 'bar' },
+				array: [{ foo: 'bar' }, { foo: 'bar' }],
+				set: new Set([{ foo: 'bar' }]),
+				countingSet: new CountingSet([{ foo: 'bar' }]),
+				map: new Map([[{ foo: 'bar' }, { foo: 'bar' }]]),
+			};
+			const input2 = {
+				repeated: { foo: 'bar' },
+				array: [{ foo: 'bar' }, { foo: 'bar' }],
+				set: new Set([{ foo: 'bar' }]),
+				countingSet: new CountingSet([{ foo: 'bar' }]),
+				map: new Map([[{ foo: 'bar' }, { foo: 'bar' }]]),
+			};
+
+			const result = deepEquals(input1, input2);
+
+			expect(result).toBe(true);
+		});
+
+		it('should accept the same object multiple times', () => {
+			const repeated = { foo: 'bar' };
+			const input1 = {
+				repeated,
+				array: [repeated, repeated],
+				set: new Set([repeated]),
+				countingSet: new CountingSet([repeated]),
+				map: new Map([[repeated, repeated]]),
+			};
+			const input2 = {
+				repeated,
+				array: [repeated, repeated],
+				set: new Set([repeated]),
+				countingSet: new CountingSet([repeated]),
+				map: new Map([[repeated, repeated]]),
+			};
+
+			const result = deepEquals(input1, input2);
+
+			expect(result).toBe(true);
+		});
+
+		it('should skip recursive objects', () => {
+			const input1: Record<string, unknown> = {};
+			const input2: Record<string, unknown> = {};
+			const inner = { input1, input2 };
+			input1.inner = inner;
+			input2.inner = inner;
+
+			const result = deepEquals(input1, input2);
+
+			expect(result).toBe(true);
+		});
+	});
 });
 
 function testMatrix(matrix: readonly (readonly [label: string, value: unknown])[]): void {
