@@ -16,7 +16,7 @@ import { MemoryKVCache, RedisSingleCache } from '@/misc/cache.js';
 import { sqlLikeEscape } from '@/misc/sql-like-escape.js';
 import type { DriveFilesRepository, EmojisRepository, MiUser, MiDriveFile, NotesRepository } from '@/models/_.js';
 import type { MiEmoji } from '@/models/Emoji.js';
-import type { Serialized } from '@/types.js';
+import type { NullableToOptional, SemiPartial } from '@/types.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 import type { Config } from '@/config.js';
 import { DriveService } from '@/core/DriveService.js';
@@ -26,17 +26,6 @@ import { LoggerService } from '@/core/LoggerService.js';
 import { promiseMap } from '@/misc/promise-map.js';
 import { isRetryableSymbol } from '@/misc/is-retryable-error.js';
 import type Logger from '@/logger.js';
-
-// TODO move to sk-types.d.ts when merged
-type MinEntity<T> = Omit<T, NullableProps<T>> & {
-	[K in NullableProps<T>]?: T[K] | undefined;
-};
-type SemiPartial<T, P extends keyof T> = Omit<T, P> & {
-	[Key in P]?: T[Key] | undefined;
-};
-type NullableProps<T> = {
-	[K in keyof T]: null extends T[K] ? K : never;
-}[keyof T];
 
 const parseEmojiStrRegexp = /^([-\w]+)(?:@([\w.-]+))?$/;
 
@@ -148,7 +137,7 @@ export class CustomEmojiService {
 	}
 
 	public async createEmoji(
-		data: SemiPartial<MinEntity<MiEmoji>, 'id' | 'updatedAt' | 'aliases' | 'roleIdsThatCanBeUsedThisEmojiAsReaction'>,
+		data: SemiPartial<NullableToOptional<MiEmoji>, 'id' | 'updatedAt' | 'aliases' | 'roleIdsThatCanBeUsedThisEmojiAsReaction'>,
 		opts?: { moderator?: { id: string } },
 	): Promise<MiEmoji> {
 		// Set defaults

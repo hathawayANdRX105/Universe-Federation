@@ -625,3 +625,24 @@ export type UnionToInterface<T> = {
  * Represents the empty object - {}
  */
 export type EmptyObject = Record<string, never>;
+
+/**
+ * Creates a "partially partial" type from T, where all keys in P are optional and the rest are required.
+ */
+export type SemiPartial<T, P extends keyof T> = Omit<T, P> & {
+	[Key in P]?: T[Key] | undefined;
+};
+
+/**
+ * Returns the input type T with all nullable properties converted to optional.
+ */
+export type NullableToOptional<T> = Omit<T, NullableKeys<T>> & {
+	[K in NullableKeys<T>]?: T[K] | undefined;
+};
+
+/**
+ * Extracts the keys from T where the value is permitted to be "null".
+ */
+export type NullableKeys<T> = {
+	[K in keyof T]: null extends T[K] ? K : never;
+}[keyof T];
