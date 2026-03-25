@@ -96,7 +96,6 @@ build: &build
       paths:
         - 'built/'
         - 'packages/*/built/'
-        - 'packages/megalodon/lib/'
       policy: pull-push
       when: on_success
 
