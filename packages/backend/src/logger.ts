@@ -39,8 +39,7 @@ const levelFuncs = {
 	debug: 'debug',
 } as const satisfies Record<Level, keyof Console>;
 
-// eslint-disable-next-line import/no-default-export
-export default class Logger {
+export class Logger {
 	private context: Context;
 	private parentLogger: Logger | null = null;
 	private readonly timeService: TimeService;
@@ -152,3 +151,6 @@ export default class Logger {
 		this.log('info', message, data, important);
 	}
 }
+
+// eslint-disable-next-line import/no-default-export
+export default Logger;
