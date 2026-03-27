@@ -5,9 +5,11 @@
 
 import { Global, Inject, Module } from '@nestjs/common';
 import * as Redis from 'ioredis';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull, Not } from 'typeorm';
 import { MeiliSearch } from 'meilisearch';
-import { MiMeta } from '@/models/Meta.js';
+import type { MiMeta } from '@/models/Meta.js';
+import type { MetasRepository } from '@/models/_.js';
+import type { Logger } from '@/logger.js';
 import { bindThis } from '@/decorators.js';
 import { renderInlineError } from '@/misc/render-inline-error.js';
 import { TimeService, NativeTimeService } from '@/global/TimeService.js';
@@ -21,9 +23,7 @@ import { Config, loadConfig } from './config.js';
 import { createPostgresDataSource } from './postgres.js';
 import { RepositoryModule } from './models/RepositoryModule.js';
 import { allSettled } from './misc/promise-tracker.js';
-import { GlobalEvents } from './core/GlobalEventService.js';
-import Logger from './logger.js';
-import type { Provider, OnApplicationShutdown } from '@nestjs/common';
+import type { Provider, OnApplicationShutdown, OnApplicationBootstrap } from '@nestjs/common';
 
 const $config: Provider = {
 	provide: DI.config,
@@ -112,59 +112,48 @@ const $redisForRateLimit: Provider = {
 
 const $meta: Provider = {
 	provide: DI.meta,
-	useFactory: async (db: DataSource, redisForSub: Redis.Redis) => {
-		const meta = await db.transaction(async transactionalEntityManager => {
-			// 過去のバグでレコードが複数出来てしまっている可能性があるので新しいIDを優先する
-			const metas = await transactionalEntityManager.find(MiMeta, {
-				order: {
-					id: 'DESC',
-				},
-			});
+	useFactory: async (metasRepository: MetasRepository, internalEventService: InternalEventService, loggerService: LoggerService) => {
+		const logger = loggerService.getLogger('meta');
 
-			const meta = metas[0];
+		const metaSingleton: MiMeta & OnApplicationShutdown & OnApplicationBootstrap = {
+			...await fetchMeta(),
+			onApplicationBootstrap() {
+				internalEventService.on('metaUpdated', onMetaUpdated);
+			},
+			onApplicationShutdown() {
+				internalEventService.off('metaUpdated', onMetaUpdated);
+			},
+		};
 
-			if (meta) {
-				return meta;
-			} else {
-				// metaが空のときfetchMetaが同時に呼ばれるとここが同時に呼ばれてしまうことがあるのでフェイルセーフなupsertを使う
-				const saved = await transactionalEntityManager
-					.upsert(
-						MiMeta,
-						{
-							id: 'x',
-						},
-						['id'],
-					)
-					.then((x) => transactionalEntityManager.findOneByOrFail(MiMeta, x.identifiers[0]));
+		async function fetchMeta(): Promise<MiMeta> {
+			let meta = await metasRepository.findOne({ where: { id: Not(IsNull()) }, order: { id: 'DESC' } });
 
-				return saved;
+			if (!meta) {
+				logger.info('Meta table is empty; populating with defaults');
+
+				// No-op UPSERT to safely create the row
+				await metasRepository.upsert({ id: 'x' }, ['id']);
+				meta = await metasRepository.findOneOrFail({ where: { id: Not(IsNull()) }, order: { id: 'DESC' } });
 			}
-		});
 
-		async function onMessage(_: string, data: string): Promise<void> {
-			const obj = JSON.parse(data);
-
-			if (obj.channel === 'internal') {
-				const { type, body } = obj.message as GlobalEvents['internal']['payload'];
-				switch (type) {
-					case 'metaUpdated': {
-						for (const key in body.after) {
-							(meta as any)[key] = (body.after as any)[key];
-						}
-						meta.rootUser = null; // joinなカラムは通常取ってこないので
-						break;
-					}
-					default:
-						break;
-				}
-			}
+			return meta;
 		}
 
-		redisForSub.on('message', onMessage);
+		async function onMetaUpdated(): Promise<void> {
+			const updated = await fetchMeta();
+			Object.assign(metaSingleton, updated);
+			logger.debug('Updated meta from remote change: ', { updated });
+		}
 
-		return meta;
+		return metaSingleton;
 	},
-	inject: [DI.db, DI.redisForSub],
+	inject: [DI.metasRepository, InternalEventService, LoggerService],
+};
+
+const $GlobalLogger: Provider = {
+	provide: DI.globalLogger,
+	useFactory: (loggerService: LoggerService) => loggerService.getLogger('global'),
+	inject: [LoggerService],
 };
 
 const $CacheManagementService: Provider[] = [CacheManagementService, { provide: 'CacheManagementService', useExisting: CacheManagementService }];
@@ -181,12 +170,10 @@ const $DependencyService: Provider[] = [DependencyService, { provide: 'Dependenc
 @Global()
 @Module({
 	imports: [RepositoryModule],
-	providers: [$config, $db, $meta, $meilisearch, $redis, $redisForPub, $redisForSub, $redisForTimelines, $redisForReactions, $redisForRateLimit, $CacheManagementService, $InternalEventService, $TimeService, $EnvService, $LoggerService, $Console, $DependencyService].flat(),
-	exports: [$config, $db, $meta, $meilisearch, $redis, $redisForPub, $redisForSub, $redisForTimelines, $redisForReactions, $redisForRateLimit, $CacheManagementService, $InternalEventService, $TimeService, $EnvService, $LoggerService, RepositoryModule, $Console, $DependencyService].flat(),
+	providers: [$config, $db, $meta, $meilisearch, $redis, $redisForPub, $redisForSub, $redisForTimelines, $redisForReactions, $redisForRateLimit, $CacheManagementService, $InternalEventService, $TimeService, $EnvService, $LoggerService, $Console, $DependencyService, $GlobalLogger].flat(),
+	exports: [$config, $db, $meta, $meilisearch, $redis, $redisForPub, $redisForSub, $redisForTimelines, $redisForReactions, $redisForRateLimit, $CacheManagementService, $InternalEventService, $TimeService, $EnvService, $LoggerService, $Console, $DependencyService, RepositoryModule].flat(),
 })
 export class GlobalModule implements OnApplicationShutdown {
-	private readonly logger = new Logger('global');
-
 	constructor(
 		@Inject(DI.db) private db: DataSource,
 		@Inject(DI.redis) private redisClient: Redis.Redis,
@@ -195,6 +182,7 @@ export class GlobalModule implements OnApplicationShutdown {
 		@Inject(DI.redisForTimelines) private redisForTimelines: Redis.Redis,
 		@Inject(DI.redisForReactions) private redisForReactions: Redis.Redis,
 		@Inject(DI.redisForRateLimit) private redisForRateLimit: Redis.Redis,
+		@Inject(DI.globalLogger) private logger: Logger,
 	) { }
 
 	public async dispose(): Promise<void> {

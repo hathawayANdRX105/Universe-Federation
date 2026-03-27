@@ -15,6 +15,7 @@ export const DI = {
 	redisForReactions: Symbol('redisForReactions'),
 	redisForRateLimit: Symbol('redisForRateLimit'),
 	console: Symbol('console'),
+	globalLogger: Symbol('globalLogger'),
 
 	//#region Repositories
 	usersRepository: Symbol('usersRepository'),

@@ -15,9 +15,9 @@ import { DI } from '@/di-symbols.js';
 import { UtilityService } from '@/core/UtilityService.js';
 import { CacheManagementService, type ManagedQuantumKVCache } from '@/global/CacheManagementService.js';
 import { InternalEventService } from '@/global/InternalEventService.js';
-import { diffArraysSimple } from '@/misc/diff-arrays.js';
-import { bindThis } from '@/decorators.js';
 import { TimeService } from '@/global/TimeService.js';
+import { diffArrays } from '@/misc/diff-arrays.js';
+import { bindThis } from '@/decorators.js';
 
 @Injectable()
 export class FederatedInstanceService implements OnApplicationShutdown {
@@ -71,7 +71,7 @@ export class FederatedInstanceService implements OnApplicationShutdown {
 			},
 		});
 
-		this.internalEventService.on('metaUpdated', this.onMetaUpdated, { ignoreRemote: true });
+		this.internalEventService.on('metaUpdated', this.onMetaUpdated);
 	}
 
 	@bindThis
@@ -172,20 +172,31 @@ export class FederatedInstanceService implements OnApplicationShutdown {
 	}
 
 	@bindThis
-	private async onMetaUpdated(body: InternalEventTypes['metaUpdated']): Promise<void> {
+	private onMetaUpdated(body: InternalEventTypes['metaUpdated']): void {
 		const { before, after } = body;
-		const changed = (
-			diffArraysSimple(before?.blockedHosts, after.blockedHosts) ||
-			diffArraysSimple(before?.silencedHosts, after.silencedHosts) ||
-			diffArraysSimple(before?.mediaSilencedHosts, after.mediaSilencedHosts) ||
-			diffArraysSimple(before?.federationHosts, after.federationHosts) ||
-			diffArraysSimple(before?.bubbleInstances, after.bubbleInstances)
-		);
+		const diffs = [
+			diffArrays(before.blockedHosts, after.blockedHosts),
+			diffArrays(before.silencedHosts, after.silencedHosts),
+			diffArrays(before.mediaSilencedHosts, after.mediaSilencedHosts),
+			diffArrays(before.federationHosts, after.federationHosts),
+			diffArrays(before.bubbleInstances, after.bubbleInstances),
+		];
 
-		if (changed) {
-			// We have to clear the whole thing, otherwise subdomains won't be synced.
-			// This gets fired in *each* process so don't do anything to trigger cache notifications!
-			this.federatedInstanceCache.clear();
+		const changed = diffs.map(r => [r.added, r.removed]).flat(2).map(h => `.${this.utilityService.toPuny(h)}`);
+		const changedHosts = new Set(changed);
+
+		// Each process does this separately, so only scan our own cache.
+		for (const h of this.federatedInstanceCache.keys()) {
+			const host = `.${this.utilityService.toPuny(h)}`;
+
+			// Check if host or any base-domain was changed
+			for (let i = 0; i >= 0; i = host.indexOf('.', i + 1)) {
+				const candidate = host.substring(i);
+				if (changedHosts.has(candidate)) {
+					this.federatedInstanceCache.drop(h);
+					break; // exit inner loop only
+				}
+			}
 		}
 	}
 
