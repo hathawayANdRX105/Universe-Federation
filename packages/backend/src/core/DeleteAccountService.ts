@@ -5,6 +5,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import type { MiMeta, MiUser, UsersRepository } from '@/models/_.js';
+import type { Job } from 'bullmq';
 import { QueueService } from '@/core/QueueService.js';
 import { DI } from '@/di-symbols.js';
 import { bindThis } from '@/decorators.js';
@@ -32,7 +33,7 @@ export class DeleteAccountService {
 	}
 
 	@bindThis
-	public async deleteAccount(user: MiUser, moderator?: MiUser): Promise<void> {
+	public async deleteAccount(user: MiUser, moderator?: MiUser): Promise<Job> {
 		if (this.meta.rootUserId === user.id) {
 			throw new IdentifiableError(errorCodes.userProtected, 'Cannot delete the root account');
 		}
@@ -60,7 +61,7 @@ export class DeleteAccountService {
 		await this.internalEventService.emit('userChangeDeletedState', { id: user.id, isDeleted: true, token: user.token, uri: user.uri, usernameLower: user.username.toLowerCase(), host: user.host });
 
 		// 3. *then* finally start the background job
-		await this.queueService.createDeleteAccountJob(user, {
+		return await this.queueService.createDeleteAccountJob(user, {
 			// soft-delete remote users, otherwise they may get re-created by federation.
 			soft: isRemoteUser(user),
 		});
