@@ -4,6 +4,8 @@
  */
 
 import { build } from './index.js';
+import generateDTS from './generateDTS.js';
 
 console.log('Building locales...');
 build();
+generateDTS();
