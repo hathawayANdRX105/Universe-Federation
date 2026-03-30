@@ -8,6 +8,7 @@ import type { InternalEventTypes as MkInternalEventTypes, EventUnionFromDictiona
 import type { JsonSerialized } from '@/misc/json-value.js';
 import type { Config } from '@/config.js';
 import { SkEventSource, type ListenerProps, type EventListener } from '@/misc/SkEventEmitter.js';
+import { IdService } from '@/core/IdService.js';
 import { withCleanup } from '@/misc/promiseUtils.js';
 import { bindThis } from '@/decorators.js';
 import { DI } from '@/di-symbols.js';
@@ -46,14 +47,14 @@ export interface InternalEventContext {
 	isLocal: boolean;
 }
 
-/**
- * Unique identifier used to detect and ignore our own messages sent through Redis IPC.
- * Implemented as a random 32-bit integer encoded as base-32, which provides a good balance of uniqueness vs memory space.
- */
-const thisNodeId = Math.round(Math.random() * Math.pow(2, 32)).toString(32);
-
 @Injectable()
 export class InternalEventService extends SkEventSource<InternalEventTypes, InternalEventProps, InternalEventContext> implements OnModuleInit, OnApplicationShutdown {
+	/**
+	 * Unique identifier used to detect and ignore our own messages sent through Redis IPC.
+	 * Implemented as a random 50-bit integer encoded in 10 characters, which provides a good balance of uniqueness vs memory space.
+	 */
+	private readonly nodeId: string;
+
 	constructor(
 		@Inject(DI.redis)
 		private readonly redisForPub: Redis.Redis,
@@ -63,8 +64,11 @@ export class InternalEventService extends SkEventSource<InternalEventTypes, Inte
 
 		@Inject(DI.config)
 		private readonly config: Pick<Config, 'host'>,
+
+		idService: IdService,
 	) {
 		super();
+		this.nodeId = idService.genSimple();
 	}
 
 	@bindThis
@@ -84,7 +88,7 @@ export class InternalEventService extends SkEventSource<InternalEventTypes, Inte
 
 	protected async emitExternally<K extends keyof InternalEventTypes>(type: K, value: InternalEventTypes[K]): Promise<void> {
 		const message: InternalEventMessage = {
-			node: thisNodeId,
+			node: this.nodeId,
 			channel: 'internal',
 			message: { type: type, body: value } as EventUnionFromDictionary<InternalEventTypes>,
 		};
@@ -109,7 +113,7 @@ export class InternalEventService extends SkEventSource<InternalEventTypes, Inte
 	private async onMessage(_: string, data: string): Promise<void> {
 		const obj = JSON.parse(data);
 
-		if (isInternalEventMessage(obj) && obj.node !== thisNodeId) {
+		if (isInternalEventMessage(obj) && obj.node !== this.nodeId) {
 			const { type, body } = obj.message;
 			const context = { isLocal: false };
 			await this.emitLocally(type, body, context);
