@@ -681,17 +681,18 @@ export class Connection extends SkEventSource<ConnectionEvents> {
 			return;
 		}
 
-		// 共有可能チャンネルに接続しようとしていて、かつそのチャンネルに既に接続していたら無意味なので無視
-		if (channelService.shouldShare) {
-			for (const c of this.channels.values()) {
-				if (c.chName === channel) {
-					return;
-				}
-			}
-		}
+		// // 共有可能チャンネルに接続しようとしていて、かつそのチャンネルに既に接続していたら無意味なので無視
+		// if (channelService.shouldShare) {
+		// 	for (const c of this.channels.values()) {
+		// 		if (c.chName === channel) {
+		// 			// this.channels.set(id, c);
+		// 			return;
+		// 		}
+		// 	}
+		// }
 
 		const ch: Channel = channelService.create(id, this);
-		this.channels.set(ch.id, ch);
+		this.channels.set(id, ch);
 		const valid = await ch.init(params ?? {});
 		if (valid === false) {
 			this.disconnectChannel(id);
