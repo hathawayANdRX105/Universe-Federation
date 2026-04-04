@@ -317,6 +317,15 @@ export class QueueService implements OnModuleInit, OnApplicationBootstrap {
 	}
 
 	@bindThis
+	public async addOne<
+		QT extends QueueType,
+		Data extends Bull.ExtractDataType<QueueData[QT], QueueData[QT]>,
+		Name extends Bull.ExtractNameType<QueueData[QT], string>,
+	>(qt: QT, job: { name: Name, data: Data, opts?: Bull.JobsOptions }) {
+		return await this.add(qt, job.name, job.data, job.opts);
+	}
+
+	@bindThis
 	public async addBulk<
 		QT extends QueueType,
 		Data extends Bull.ExtractDataType<QueueData[QT], QueueData[QT]>,
