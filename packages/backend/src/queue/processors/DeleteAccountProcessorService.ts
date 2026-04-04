@@ -12,7 +12,7 @@ import { DriveService } from '@/core/DriveService.js';
 import type { MiDriveFile } from '@/models/DriveFile.js';
 import type { MiNote } from '@/models/Note.js';
 import type { MiNoteReaction } from '@/models/NoteReaction.js';
-import type { Queues } from '@/queue/types.js';
+import type { Queues, DbDeleteAccountJobData } from '@/queue/types.js';
 import { EmailService } from '@/core/EmailService.js';
 import { isLocalUser } from '@/models/User.js';
 import { bindThis } from '@/decorators.js';
@@ -26,7 +26,6 @@ import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { InternalEventService } from '@/global/InternalEventService.js';
 import { ApDeliverManagerService } from '@/core/activitypub/ApDeliverManagerService.js';
 import type * as Bull from 'bullmq';
-import type { DbUserDeleteJobData } from '../types.js';
 
 @Injectable()
 export class DeleteAccountProcessorService {
@@ -112,7 +111,7 @@ export class DeleteAccountProcessorService {
 	}
 
 	@bindThis
-	public async process(job: Bull.Job<DbUserDeleteJobData>): Promise<string> {
+	public async process(job: Bull.Job<DbDeleteAccountJobData>): Promise<string> {
 		this.logger.info(`Deleting account of ${job.data.user.id} ...`);
 
 		const user = await this.usersRepository.findOneBy({ id: job.data.user.id });

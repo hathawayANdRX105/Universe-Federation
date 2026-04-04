@@ -22,7 +22,6 @@ import { ApRequestCreator } from '@/core/activitypub/ApRequestService.js';
 import { TimeService } from '@/global/TimeService.js';
 import { LoggerService } from '@/core/LoggerService.js';
 import { EnvService } from '@/global/EnvService.js';
-import type { Antenna } from '@/server/api/endpoints/i/import-antennas.js';
 import type { Logger } from '@/logger.js';
 import type { SystemWebhookPayload } from '@/core/SystemWebhookService.js';
 import type { MiNote } from '@/models/Note.js';
@@ -35,7 +34,9 @@ import type {
 	QueueData,
 	BackgroundTaskJobData,
 	DbJobData,
+	DbImportNotesJobData,
 	DeliverJobData,
+	ImportAntenna,
 	RelationshipJobData,
 	SystemWebhookDeliverJobData,
 	ThinUser,
@@ -47,12 +48,8 @@ import type * as Bull from 'bullmq';
 @Injectable()
 export class QueueService implements OnModuleInit, OnApplicationBootstrap {
 	private readonly logger: Logger;
-	private readonly queues = {} as {
-		[QT in QueueType]: Queues[QT];
-	};
-	private readonly queueEvents = {} as {
-		[QT in QueueType]: Bull.QueueEvents;
-	};
+	private readonly queues = {} as Queues;
+	private readonly queueEvents = {} as QueueEvents;
 
 	private systemQueue: Queues['system'];
 
@@ -452,401 +449,164 @@ export class QueueService implements OnModuleInit, OnApplicationBootstrap {
 
 	@bindThis
 	public createDeleteDriveFilesJob(user: ThinUser) {
-		return this.add('db', 'deleteDriveFiles', {
-			user: { id: user.id },
-			dbJobType: 'deleteDriveFiles',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `deleteDriveFiles_${user.id}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'deleteDriveFiles', user }));
 	}
 
 	@bindThis
 	public createExportCustomEmojisJob(user: ThinUser) {
-		return this.add('db', 'exportCustomEmojis', {
-			user: { id: user.id },
-			dbJobType: 'exportCustomEmojis',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `exportCustomEmojis_${user.id}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'exportCustomEmojis', user }));
 	}
 
 	@bindThis
 	public createExportAccountDataJob(user: ThinUser) {
-		return this.add('db', 'exportAccountData', {
-			user: { id: user.id },
-			dbJobType: 'exportAccountData',
-		}, {
-			removeOnComplete: true,
-			removeOnFail: true,
-			deduplication: {
-				id: `exportAccountData_${user.id}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'exportAccountData', user }));
 	}
 
 	@bindThis
 	public createExportNotesJob(user: ThinUser) {
-		return this.add('db', 'exportNotes', {
-			user: { id: user.id },
-			dbJobType: 'exportNotes',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `exportNotes_${user.id}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'exportNotes', user }));
 	}
 
 	@bindThis
 	public createExportClipsJob(user: ThinUser) {
-		return this.add('db', 'exportClips', {
-			user: { id: user.id },
-			dbJobType: 'exportClips',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `exportClips_${user.id}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'exportClips', user }));
 	}
 
 	@bindThis
 	public createExportFavoritesJob(user: ThinUser) {
-		return this.add('db', 'exportFavorites', {
-			user: { id: user.id },
-			dbJobType: 'exportFavorites',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `exportFavorites_${user.id}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'exportFavorites', user }));
 	}
 
 	@bindThis
 	public createExportFollowingJob(user: ThinUser, excludeMuting = false, excludeInactive = false) {
-		return this.add('db', 'exportFollowing', {
-			user: { id: user.id },
-			excludeMuting,
-			excludeInactive,
-			dbJobType: 'exportFollowing',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `exportFollowing_${user.id}_${excludeMuting ? '' : 'M'}${excludeInactive ? '' : 'I'}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'exportFollowing', user, excludeMuting, excludeInactive }));
 	}
 
 	@bindThis
 	public createExportMuteJob(user: ThinUser) {
-		return this.add('db', 'exportMuting', {
-			user: { id: user.id },
-			dbJobType: 'exportMuting',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `exportMuting_${user.id}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'exportMuting', user }));
 	}
 
 	@bindThis
 	public createExportBlockingJob(user: ThinUser) {
-		return this.add('db', 'exportBlocking', {
-			user: { id: user.id },
-			dbJobType: 'exportBlocking',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `exportBlocking_${user.id}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'exportBlocking', user }));
 	}
 
 	@bindThis
 	public createExportUserListsJob(user: ThinUser) {
-		return this.add('db', 'exportUserLists', {
-			user: { id: user.id },
-			dbJobType: 'exportUserLists',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `exportUserLists_${user.id}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'exportUserLists', user }));
 	}
 
 	@bindThis
 	public createExportAntennasJob(user: ThinUser) {
-		return this.add('db', 'exportAntennas', {
-			user: { id: user.id },
-			dbJobType: 'exportAntennas',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `exportAntennas_${user.id}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'exportAntennas', user }));
 	}
 
 	@bindThis
 	public createImportFollowingJob(user: ThinUser, fileId: MiDriveFile['id'], withReplies?: boolean) {
-		return this.add('db', 'importFollowing', {
-			user: { id: user.id },
-			fileId: fileId,
-			withReplies,
-			dbJobType: 'importFollowing',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `importFollowing_${user.id}_${fileId}_${withReplies ? 'R' : ''}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'importFollowing', user, fileId, withReplies }, [fileId]));
 	}
 
 	@bindThis
-	public createImportNotesJob(user: ThinUser, fileId: MiDriveFile['id'], type: string | null | undefined) {
-		return this.add('db', 'importNotes', {
-			user: { id: user.id },
-			fileId: fileId,
-			type: type ?? undefined,
-			dbJobType: 'importNotes',
-		}, {
-			removeOnComplete: true,
-			removeOnFail: true,
-			deduplication: {
-				id: `importNotes_${user.id}_${fileId}_${type ?? ''}`,
-			},
-		});
+	public createImportNotesJob(user: ThinUser, fileId: MiDriveFile['id'], source: DbImportNotesJobData['source']) {
+		return this.addOne('db', this.generateDbJobData({ type: 'importNotes', user, fileId, source }, [fileId]));
 	}
 
 	@bindThis
 	public createImportTweetsToDbJob(user: ThinUser, targets: string[], note: MiNote['id'] | null) {
-		const jobs = targets.map(rel => this.generateToDbJobData('importTweetsToDb', { user: { id: user.id }, target: rel, note }));
+		const jobs = targets.map(target => this.generateDbJobData({ type: 'importTweetsToDb', user, target, note }, [target]));
 		return this.addBulk('db', jobs);
 	}
 
 	@bindThis
 	public createImportMastoToDbJob(user: ThinUser, targets: string[], note: MiNote['id'] | null) {
-		const jobs = targets.map(rel => this.generateToDbJobData('importMastoToDb', { user: { id: user.id }, target: rel, note }));
+		const jobs = targets.map(target => this.generateDbJobData({ type: 'importMastoToDb', user, target, note }, [target]));
 		return this.addBulk('db', jobs);
 	}
 
 	@bindThis
 	public createImportPleroToDbJob(user: ThinUser, targets: string[], note: MiNote['id'] | null) {
-		const jobs = targets.map(rel => this.generateToDbJobData('importPleroToDb', { user: { id: user.id }, target: rel, note }));
+		const jobs = targets.map(target => this.generateDbJobData({ type: 'importPleroToDb', user, target, note }, [target]));
 		return this.addBulk('db', jobs);
 	}
 
 	@bindThis
 	public createImportKeyNotesToDbJob(user: ThinUser, targets: string[], note: MiNote['id'] | null) {
-		const jobs = targets.map(rel => this.generateToDbJobData('importKeyNotesToDb', { user: { id: user.id }, target: rel, note }));
+		const jobs = targets.map(target => this.generateDbJobData({ type: 'importKeyNotesToDb', user, target, note }, [target]));
 		return this.addBulk('db', jobs);
 	}
 
 	@bindThis
 	public createImportIGToDbJob(user: ThinUser, targets: string[]) {
-		const jobs = targets.map(rel => this.generateToDbJobData('importIGToDb', { user: { id: user.id }, target: rel }));
+		const jobs = targets.map(target => this.generateDbJobData({ type: 'importIGToDb', user, target }, [target]));
 		return this.addBulk('db', jobs);
 	}
 
 	@bindThis
 	public createImportFBToDbJob(user: ThinUser, targets: string[]) {
-		const jobs = targets.map(rel => this.generateToDbJobData('importFBToDb', { user: { id: user.id }, target: rel }));
+		const jobs = targets.map(target => this.generateDbJobData({ type: 'importFBToDb', user, target }, [target]));
 		return this.addBulk('db', jobs);
 	}
 
 	@bindThis
 	public createImportFollowingToDbJob(user: ThinUser, targets: string[], withReplies?: boolean) {
-		const jobs = targets.map(rel => this.generateToDbJobData('importFollowingToDb', { user: { id: user.id }, target: rel, withReplies }));
+		const jobs = targets.map(target => this.generateDbJobData({ type: 'importFollowingToDb', user, target, withReplies }, [target]));
 		return this.addBulk('db', jobs);
 	}
 
 	@bindThis
 	public createImportMutingJob(user: ThinUser, fileId: MiDriveFile['id']) {
-		return this.add('db', 'importMuting', {
-			user: { id: user.id },
-			fileId: fileId,
-			dbJobType: 'importMuting',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `importMuting_${user.id}_${fileId}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'importMuting', user, fileId }, [fileId]));
 	}
 
 	@bindThis
 	public createImportBlockingJob(user: ThinUser, fileId: MiDriveFile['id']) {
-		return this.add('db', 'importBlocking', {
-			user: { id: user.id },
-			fileId: fileId,
-			dbJobType: 'importBlocking',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `importBlocking_${user.id}_${fileId}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'importBlocking', user, fileId }, [fileId]));
 	}
 
 	@bindThis
 	public createImportBlockingToDbJob(user: ThinUser, targets: string[]) {
-		const jobs = targets.map(rel => this.generateToDbJobData('importBlockingToDb', { user: { id: user.id }, target: rel }));
+		const jobs = targets.map(target => this.generateDbJobData({ type: 'importBlockingToDb', user, target }, [target]));
 		return this.addBulk('db', jobs);
 	}
 
 	@bindThis
-	private generateToDbJobData<T extends 'importFollowingToDb' | 'importBlockingToDb' | 'importTweetsToDb' | 'importIGToDb' | 'importFBToDb' | 'importMastoToDb' | 'importPleroToDb' | 'importKeyNotesToDb', D extends DbJobData<T>>(name: T, data: Omit<D, 'dbJobType'>): {
-		name: string,
-		data: D,
-		opts: Bull.JobsOptions,
-	} {
-		return {
-			name: `${name}/${data.user.id}/${data.target}`,
-			data: {
-				...data,
-				dbJobType: name,
-			} as D,
-			opts: {
-				removeOnComplete: {
-					age: 3600 * 24 * 7, // keep up to 7 days
-					count: 30,
-				},
-				removeOnFail: {
-					age: 3600 * 24 * 7, // keep up to 7 days
-					count: 100,
-				},
-			},
-		};
-	}
-
-	@bindThis
 	public createImportUserListsJob(user: ThinUser, fileId: MiDriveFile['id']) {
-		return this.add('db', 'importUserLists', {
-			user: { id: user.id },
-			fileId: fileId,
-			dbJobType: 'importUserLists',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `importUserLists_${user.id}_${fileId}`,
-			},
-		});
+		return this.addOne('db', this.generateDbJobData({ type: 'importUserLists', user, fileId }, [fileId]));
 	}
 
 	@bindThis
 	public createImportCustomEmojisJob(user: ThinUser, fileId: MiDriveFile['id']) {
-		return this.add('db', 'importCustomEmojis', {
-			user: { id: user.id },
-			fileId: fileId,
-			dbJobType: 'importCustomEmojis',
-		}, {
+		return this.addOne('db', this.generateDbJobData({ type: 'importCustomEmojis', user, fileId }, [fileId]));
+	}
+
+	@bindThis
+	public createImportAntennasJob(user: ThinUser, antennas: ImportAntenna[], fileId: MiDriveFile['id']) {
+		return this.addOne('db', this.generateDbJobData({ type: 'importAntennas', user, fileId, antennas }, [fileId]));
+	}
+
+	@bindThis
+	public createDeleteAccountJob(user: ThinUser, opts: { soft: boolean; }) {
+		return this.addOne('db', this.generateDbJobData({ type: 'deleteAccount', user, ...opts }));
+	}
+
+	@bindThis
+	private generateDbJobData<Data extends DbJobData>(data: Data, keys?: string[]) {
+		// Prepend "standard" keys
+		keys = [data.type, data.user.id, ...(keys ?? [])];
+
+		// Normalize data - we do *not* want to inline an entire user object!
+		data = {
+			...data,
+			user: {
+				id: data.user.id,
+			},
+		};
+
+		// Build rest of the data
+		const name = keys.map(k => k.replaceAll(':', '_')).join('/');
+		const duplication = name.replaceAll('/', '_');
+		const opts = {
 			removeOnComplete: {
 				age: 3600 * 24 * 7, // keep up to 7 days
 				count: 30,
@@ -856,52 +616,10 @@ export class QueueService implements OnModuleInit, OnApplicationBootstrap {
 				count: 100,
 			},
 			deduplication: {
-				id: `importCustomEmojis_${user.id}_${fileId}`,
+				id: duplication,
 			},
-		});
-	}
-
-	@bindThis
-	public createImportAntennasJob(user: ThinUser, antenna: Antenna, fileId: MiDriveFile['id']) {
-		return this.add('db', 'importAntennas', {
-			user: { id: user.id },
-			antenna,
-			fileId,
-			dbJobType: 'importAntennas',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 30,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 7 days
-				count: 100,
-			},
-			deduplication: {
-				id: `importAntennas_${user.id}_${fileId}`,
-			},
-		});
-	}
-
-	@bindThis
-	public createDeleteAccountJob(user: ThinUser, opts: { soft?: boolean; } = {}) {
-		return this.add('db', 'deleteAccount', {
-			user: { id: user.id },
-			soft: opts.soft,
-			dbJobType: 'deleteAccount',
-		}, {
-			removeOnComplete: {
-				age: 3600 * 24 * 7, // keep up to 30 days
-				count: 10_000,
-			},
-			removeOnFail: {
-				age: 3600 * 24 * 7, // keep up to 30 days
-				count: 10_000,
-			},
-			deduplication: {
-				id: `deleteAccount_${user.id}`,
-			},
-		});
+		} satisfies Bull.JobsOptions;
+		return { name, data, opts };
 	}
 
 	@bindThis
@@ -1197,7 +915,7 @@ export class QueueService implements OnModuleInit, OnApplicationBootstrap {
 	}
 
 	@bindThis
-	public getQueueEvents(type: QueueType): Bull.QueueEvents {
+	public getQueueEvents<QT extends QueueType>(type: QT): QueueEvents[QT] {
 		return this.queueEvents[type];
 	}
 

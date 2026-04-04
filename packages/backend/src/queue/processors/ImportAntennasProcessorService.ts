@@ -15,7 +15,7 @@ import { InternalEventService } from '@/global/InternalEventService.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { TimeService } from '@/global/TimeService.js';
 import { QueueLoggerService } from '@/queue/QueueLoggerService.js';
-import type { DBAntennaImportJobData } from '../types.js';
+import type { DbImportAntennasJobData } from '../types.js';
 import type * as Bull from 'bullmq';
 
 const Ajv = _Ajv.default;
@@ -75,7 +75,7 @@ export class ImportAntennasProcessorService {
 	}
 
 	@bindThis
-	public async process(job: Bull.Job<DBAntennaImportJobData>): Promise<void> {
+	public async process(job: Bull.Job<DbImportAntennasJobData>): Promise<void> {
 		const user = await this.usersRepository.findOneBy({ id: job.data.user.id });
 		if (user == null) {
 			this.logger.debug(`Skip: user ${job.data.user.id} does not exist`);
@@ -86,7 +86,9 @@ export class ImportAntennasProcessorService {
 
 		const now = this.timeService.date;
 		try {
-			for (const antenna of job.data.antenna) {
+			// Check for legacy jobs
+			const antennas = 'antenna' in job.data ? job.data.antenna : job.data.antennas;
+			for (const antenna of antennas) {
 				if (antenna.keywords.length === 0 || antenna.keywords[0].every(x => x === '')) continue;
 				if (!validate(antenna)) {
 					this.logger.warn('Antenna validation failed');

@@ -18,7 +18,7 @@ import { NotificationService } from '@/core/NotificationService.js';
 import { CacheService } from '@/core/CacheService.js';
 import { TimeService } from '@/global/TimeService.js';
 import { QueueLoggerService } from '../QueueLoggerService.js';
-import type { DBExportAntennasData } from '../types.js';
+import type { DbExportAntennasJobData } from '../types.js';
 import type * as Bull from 'bullmq';
 
 @Injectable()
@@ -46,7 +46,7 @@ export class ExportAntennasProcessorService {
 	}
 
 	@bindThis
-	public async process(job: Bull.Job<DBExportAntennasData>): Promise<void> {
+	public async process(job: Bull.Job<DbExportAntennasJobData>): Promise<void> {
 		const user = await this.usersRepository.findOneBy({ id: job.data.user.id });
 		if (user == null) {
 			this.logger.debug(`Skip: user ${job.data.user.id} does not exist`);

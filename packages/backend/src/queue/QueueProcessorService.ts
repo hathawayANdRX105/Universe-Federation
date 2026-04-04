@@ -9,12 +9,39 @@ import * as Sentry from '@sentry/node';
 import type { Config } from '@/config.js';
 import type Logger from '@/logger.js';
 import type {
+	Jobs,
 	CleanRemoteFilesJobData,
-	DbJobData,
-	DbJobType,
+	DbDeleteDriveFilesJobData,
+	DbExportAccountDataJobData,
+	DbExportCustomEmojisJobData,
+	DbExportAntennasJobData,
+	DbExportNotesJobData,
+	DbExportClipsJobData,
+	DbExportFavoritesJobData,
+	DbExportFollowingJobData,
+	DbExportMutingJobData,
+	DbExportBlockingJobData,
+	DbExportUserListsJobData,
+	DbImportAntennasJobData,
+	DbImportNotesJobData,
+	DbImportTweetsToDbJobData,
+	DbImportIGToDbJobData,
+	DbImportFBToDbJobData,
+	DbImportMastoToDbJobData,
+	DbImportPleroToDbJobData,
+	DbImportKeyNotesToDbJobData,
+	DbImportFollowingJobData,
+	DbImportFollowingToDbJobData,
+	DbImportMutingJobData,
+	DbImportBlockingJobData,
+	DbImportBlockingToDbJobData,
+	DbImportUserListsJobData,
+	DbImportCustomEmojisJobData,
+	DbDeleteAccountJobData,
 	ObjectStorageFileJobData,
 	ObjectStorageJobData,
 	RelationshipJobData,
+	SystemJobData,
 } from '@/queue/types.js';
 import { DI } from '@/di-symbols.js';
 import { QUEUE, baseWorkerOptions } from '@/queue/const.js';
@@ -175,7 +202,7 @@ export class QueueProcessorService implements BeforeApplicationShutdown {
 
 		//#region system
 		{
-			const processer = async (job: Bull.Job<{ type: string }>) => {
+			const processer = async (job: Bull.Job<SystemJobData>) => {
 				switch (job.data.type) {
 					case 'tickCharts': return await this.tickChartsProcessorService.process();
 					case 'resyncCharts': return await this.resyncChartsProcessorService.process();
@@ -195,11 +222,12 @@ export class QueueProcessorService implements BeforeApplicationShutdown {
 						await this.queueStatsService.tick();
 						return 'ok';
 					}
+					// @ts-expect-error it doesn't realize that we're *trying* to catch unknown values here
 					default: throw new Error(`unrecognized job type ${job.data.type} for system`);
 				}
 			};
 
-			this.systemQueueWorker = new Bull.Worker<{ type: string }>(QUEUE.SYSTEM, async job => {
+			this.systemQueueWorker = new Bull.Worker<SystemJobData>(QUEUE.SYSTEM, async job => {
 				if (this.config.sentryForBackend) {
 					return await Sentry.startSpan({ name: 'Queue: System: ' + job.name }, async () => await processer(job));
 				} else {
@@ -230,37 +258,37 @@ export class QueueProcessorService implements BeforeApplicationShutdown {
 
 		//#region db
 		{
-			const processer = async (job: DbJobType) => {
-				switch (job.data.dbJobType) {
-					case 'deleteDriveFiles': return await this.deleteDriveFilesProcessorService.process(job as Bull.Job<DbJobData<'deleteDriveFiles'>>);
-					case 'exportCustomEmojis': return await this.exportCustomEmojisProcessorService.process(job as Bull.Job<DbJobData<'exportCustomEmojis'>>);
-					case 'exportNotes': return await this.exportNotesProcessorService.process(job as Bull.Job<DbJobData<'exportNotes'>>);
-					case 'exportClips': return await this.exportClipsProcessorService.process(job as Bull.Job<DbJobData<'exportClips'>>);
-					case 'exportFavorites': return await this.exportFavoritesProcessorService.process(job as Bull.Job<DbJobData<'exportFavorites'>>);
-					case 'exportFollowing': return await this.exportFollowingProcessorService.process(job as Bull.Job<DbJobData<'exportFollowing'>>);
-					case 'exportMuting': return await this.exportMutingProcessorService.process(job as Bull.Job<DbJobData<'exportMuting'>>);
-					case 'exportBlocking': return await this.exportBlockingProcessorService.process(job as Bull.Job<DbJobData<'exportBlocking'>>);
-					case 'exportUserLists': return await this.exportUserListsProcessorService.process(job as Bull.Job<DbJobData<'exportUserLists'>>);
-					case 'exportAntennas': return await this.exportAntennasProcessorService.process(job as Bull.Job<DbJobData<'exportAntennas'>>);
-					case 'exportAccountData': return await this.exportAccountDataProcessorService.process(job as Bull.Job<DbJobData<'exportAccountData'>>);
-					case 'importFollowing': return await this.importFollowingProcessorService.process(job as Bull.Job<DbJobData<'importFollowing'>>);
-					case 'importFollowingToDb': return await this.importFollowingProcessorService.processDb(job as Bull.Job<DbJobData<'importFollowingToDb'>>);
-					case 'importMuting': return await this.importMutingProcessorService.process(job as Bull.Job<DbJobData<'importMuting'>>);
-					case 'importBlocking': return await this.importBlockingProcessorService.process(job as Bull.Job<DbJobData<'importBlocking'>>);
-					case 'importBlockingToDb': return await this.importBlockingProcessorService.processDb(job as Bull.Job<DbJobData<'importBlockingToDb'>>);
-					case 'importUserLists': return await this.importUserListsProcessorService.process(job as Bull.Job<DbJobData<'importUserLists'>>);
-					case 'importCustomEmojis': return await this.importCustomEmojisProcessorService.process(job as Bull.Job<DbJobData<'importCustomEmojis'>>);
-					case 'importAntennas': return await this.importAntennasProcessorService.process(job as Bull.Job<DbJobData<'importAntennas'>>);
-					case 'importNotes': return await this.importNotesProcessorService.process(job as Bull.Job<DbJobData<'importNotes'>>);
-					case 'importTweetsToDb': return await this.importNotesProcessorService.processTwitterDb(job as Bull.Job<DbJobData<'importTweetsToDb'>>);
-					case 'importIGToDb': return await this.importNotesProcessorService.processIGDb(job as Bull.Job<DbJobData<'importIGToDb'>>);
-					case 'importFBToDb': return await this.importNotesProcessorService.processFBDb(job as Bull.Job<DbJobData<'importFBToDb'>>);
-					case 'importMastoToDb': return await this.importNotesProcessorService.processMastoToDb(job as Bull.Job<DbJobData<'importMastoToDb'>>);
-					case 'importPleroToDb': return await this.importNotesProcessorService.processPleroToDb(job as Bull.Job<DbJobData<'importPleroToDb'>>);
-					case 'importKeyNotesToDb': return await this.importNotesProcessorService.processKeyNotesToDb(job as Bull.Job<DbJobData<'importKeyNotesToDb'>>);
-					case 'deleteAccount': return await this.deleteAccountProcessorService.process(job as Bull.Job<DbJobData<'deleteAccount'>>);
+			const processer = async (job: Jobs['db']) => {
+				switch (job.data.type) {
+					case 'deleteDriveFiles': return await this.deleteDriveFilesProcessorService.process(job as Bull.Job<DbDeleteDriveFilesJobData>);
+					case 'exportCustomEmojis': return await this.exportCustomEmojisProcessorService.process(job as Bull.Job<DbExportCustomEmojisJobData>);
+					case 'exportNotes': return await this.exportNotesProcessorService.process(job as Bull.Job<DbExportNotesJobData>);
+					case 'exportClips': return await this.exportClipsProcessorService.process(job as Bull.Job<DbExportClipsJobData>);
+					case 'exportFavorites': return await this.exportFavoritesProcessorService.process(job as Bull.Job<DbExportFavoritesJobData>);
+					case 'exportFollowing': return await this.exportFollowingProcessorService.process(job as Bull.Job<DbExportFollowingJobData>);
+					case 'exportMuting': return await this.exportMutingProcessorService.process(job as Bull.Job<DbExportMutingJobData>);
+					case 'exportBlocking': return await this.exportBlockingProcessorService.process(job as Bull.Job<DbExportBlockingJobData>);
+					case 'exportUserLists': return await this.exportUserListsProcessorService.process(job as Bull.Job<DbExportUserListsJobData>);
+					case 'exportAntennas': return await this.exportAntennasProcessorService.process(job as Bull.Job<DbExportAntennasJobData>);
+					case 'exportAccountData': return await this.exportAccountDataProcessorService.process(job as Bull.Job<DbExportAccountDataJobData>);
+					case 'importFollowing': return await this.importFollowingProcessorService.process(job as Bull.Job<DbImportFollowingJobData>);
+					case 'importFollowingToDb': return await this.importFollowingProcessorService.processDb(job as Bull.Job<DbImportFollowingToDbJobData>);
+					case 'importMuting': return await this.importMutingProcessorService.process(job as Bull.Job<DbImportMutingJobData>);
+					case 'importBlocking': return await this.importBlockingProcessorService.process(job as Bull.Job<DbImportBlockingJobData>);
+					case 'importBlockingToDb': return await this.importBlockingProcessorService.processDb(job as Bull.Job<DbImportBlockingToDbJobData>);
+					case 'importUserLists': return await this.importUserListsProcessorService.process(job as Bull.Job<DbImportUserListsJobData>);
+					case 'importCustomEmojis': return await this.importCustomEmojisProcessorService.process(job as Bull.Job<DbImportCustomEmojisJobData>);
+					case 'importAntennas': return await this.importAntennasProcessorService.process(job as Bull.Job<DbImportAntennasJobData>);
+					case 'importNotes': return await this.importNotesProcessorService.process(job as Bull.Job<DbImportNotesJobData>);
+					case 'importTweetsToDb': return await this.importNotesProcessorService.processTwitterDb(job as Bull.Job<DbImportTweetsToDbJobData>);
+					case 'importIGToDb': return await this.importNotesProcessorService.processIGDb(job as Bull.Job<DbImportIGToDbJobData>);
+					case 'importFBToDb': return await this.importNotesProcessorService.processFBDb(job as Bull.Job<DbImportFBToDbJobData>);
+					case 'importMastoToDb': return await this.importNotesProcessorService.processMastoToDb(job as Bull.Job<DbImportMastoToDbJobData>);
+					case 'importPleroToDb': return await this.importNotesProcessorService.processPleroToDb(job as Bull.Job<DbImportPleroToDbJobData>);
+					case 'importKeyNotesToDb': return await this.importNotesProcessorService.processKeyNotesToDb(job as Bull.Job<DbImportKeyNotesToDbJobData>);
+					case 'deleteAccount': return await this.deleteAccountProcessorService.process(job as Bull.Job<DbDeleteAccountJobData>);
 					// @ts-expect-error it doesn't realize that we're *trying* to catch unknown values here
-					default: throw new Error(`unrecognized job type ${job.data.dbJobType} for db job ${job.name}`);
+					default: throw new Error(`unrecognized job type ${job.data.type} for db job ${job.name}`);
 				}
 			};
 
@@ -477,7 +505,8 @@ export class QueueProcessorService implements BeforeApplicationShutdown {
 				switch (job.data.type) {
 					case 'deleteFile': return await this.deleteFileProcessorService.process(job as Bull.Job<ObjectStorageFileJobData>);
 					case 'cleanRemoteFiles': return await this.cleanRemoteFilesProcessorService.process(job as Bull.Job<CleanRemoteFilesJobData>);
-					default: throw new Error(`unrecognized job type ${(job.data as { type: string }).type} for objectStorage`);
+					// @ts-expect-error it doesn't realize that we're *trying* to catch unknown values here
+					default: throw new Error(`unrecognized job type ${job.data.type} for objectStorage`);
 				}
 			};
 

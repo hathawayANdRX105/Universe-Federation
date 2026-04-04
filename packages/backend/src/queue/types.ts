@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import type { Antenna } from '@/server/api/endpoints/i/import-antennas.js';
 import type { MiDriveFile } from '@/models/DriveFile.js';
 import type { MiNote } from '@/models/Note.js';
+import type { MiAntenna } from '@/models/Antenna.js';
 import type { SystemWebhookEventType } from '@/models/SystemWebhook.js';
 import type { MiUser } from '@/models/User.js';
 import type { MiWebhook, WebhookEventTypes } from '@/models/Webhook.js';
@@ -22,9 +22,9 @@ export type QueueType = typeof QUEUE_TYPES[number];
 export type QueueData = {
 	deliver: DeliverJobData;
 	inbox: InboxJobData;
-	system: { type: string };
+	system: SystemJobData;
 	endedPollNotification: EndedPollNotificationJobData;
-	db: DbJobType;
+	db: DbJobData;
 	relationship: RelationshipJobData;
 	objectStorage: ObjectStorageJobData;
 	userWebhookDeliver: UserWebhookDeliverJobData;
@@ -59,6 +59,68 @@ export type DeliverJobData = {
 	isSharedInbox: boolean;
 };
 
+export type SystemJobData =
+	SystemTickChartsJobData |
+	SystemResyncChartsJobData |
+	SystemCleanChartsJobData |
+	SystemAggregateRetentionJobData |
+	SystemCheckExpiredMutingsJobData |
+	SystemBakeBufferedReactionsJobData |
+	SystemCheckModeratorsActivityJobData |
+	SystemCleanJobData |
+	SystemCleanupApLogsJobData |
+	SystemHibernateUsersJobData |
+	SystemTickServerStatsJobData |
+	SystemTickQueueCountsJobData;
+
+export type SystemTickChartsJobData = {
+	type: 'tickCharts';
+};
+
+export type SystemResyncChartsJobData = {
+	type: 'resyncCharts';
+};
+
+export type SystemCleanChartsJobData = {
+	type: 'cleanCharts';
+};
+
+export type SystemAggregateRetentionJobData = {
+	type: 'aggregateRetention';
+};
+
+export type SystemCheckExpiredMutingsJobData = {
+	type: 'checkExpiredMutings';
+};
+
+export type SystemBakeBufferedReactionsJobData = {
+	type: 'bakeBufferedReactions';
+};
+
+export type SystemCheckModeratorsActivityJobData = {
+	type: 'checkModeratorsActivity';
+};
+
+export type SystemCleanJobData = {
+	type: 'clean';
+};
+
+export type SystemCleanupApLogsJobData = {
+	type: 'cleanupApLogs';
+};
+
+export type SystemHibernateUsersJobData = {
+	type: 'hibernateUsers';
+};
+
+export type SystemTickServerStatsJobData = {
+	type: 'tickServerStats';
+};
+
+export type SystemTickQueueCountsJobData = {
+	type: 'tickQueueCounts';
+};
+
 export type InboxJobData = {
 	activity: IActivity;
 	signature: httpSignature.IParsedSignature;
@@ -79,95 +141,246 @@ export type CleanRemoteFilesJobData = {
 	olderThanSeconds: number;
 };
 
-export type DbJobType = DbJobTypes[keyof DbJobMap];
-export type DbJobTypes = {
-	[K in keyof DbJobMap]: Bull.Job<DbJobData<K>>;
-};
+export type DbJobData =
+	DbDeleteDriveFilesJobData |
+	DbExportAccountDataJobData |
+	DbExportCustomEmojisJobData |
+	DbExportAntennasJobData |
+	DbExportNotesJobData |
+	DbExportClipsJobData |
+	DbExportFavoritesJobData |
+	DbExportFollowingJobData |
+	DbExportMutingJobData |
+	DbExportBlockingJobData |
+	DbExportUserListsJobData |
+	DbImportAntennasJobData |
+	DbImportNotesJobData |
+	DbImportTweetsToDbJobData |
+	DbImportIGToDbJobData |
+	DbImportFBToDbJobData |
+	DbImportMastoToDbJobData |
+	DbImportPleroToDbJobData |
+	DbImportKeyNotesToDbJobData |
+	DbImportFollowingJobData |
+	DbImportFollowingToDbJobData |
+	DbImportMutingJobData |
+	DbImportBlockingJobData |
+	DbImportBlockingToDbJobData |
+	DbImportUserListsJobData |
+	DbImportCustomEmojisJobData |
+	DbDeleteAccountJobData;
 
-export type DbJobData<T extends keyof DbJobMap> = DbJobMap[T] & { dbJobType: T };
-
-export type DbJobMap = {
-	deleteDriveFiles: DbJobDataWithUser;
-	exportAccountData: DbJobDataWithUser;
-	exportCustomEmojis: DbJobDataWithUser;
-	exportAntennas: DBExportAntennasData;
-	exportNotes: DbJobDataWithUser;
-	exportClips: DbJobDataWithUser;
-	exportFavorites: DbJobDataWithUser;
-	exportFollowing: DbExportFollowingData;
-	exportMuting: DbJobDataWithUser;
-	exportBlocking: DbJobDataWithUser;
-	exportUserLists: DbJobDataWithUser;
-	importAntennas: DBAntennaImportJobData;
-	importNotes: DbNoteImportJobData;
-	importTweetsToDb: DbNoteWithParentImportToDbJobData;
-	importIGToDb: DbNoteImportToDbJobData;
-	importFBToDb: DbNoteImportToDbJobData;
-	importMastoToDb: DbNoteWithParentImportToDbJobData;
-	importPleroToDb: DbNoteWithParentImportToDbJobData;
-	importKeyNotesToDb: DbNoteWithParentImportToDbJobData;
-	importFollowing: DbUserImportJobData;
-	importFollowingToDb: DbUserImportToDbJobData;
-	importMuting: DbUserImportJobData;
-	importBlocking: DbUserImportJobData;
-	importBlockingToDb: DbUserImportToDbJobData;
-	importUserLists: DbUserImportJobData;
-	importCustomEmojis: DbUserImportJobData;
-	deleteAccount: DbUserDeleteJobData;
-};
-
-export type DbJobDataWithUser = {
+export type DbDeleteDriveFilesJobData = {
+	type: 'deleteDriveFiles';
 	user: ThinUser;
 };
 
-export type DbExportFollowingData = {
+export type DbExportAccountDataJobData = {
+	type: 'exportAccountData';
+	user: ThinUser;
+};
+
+export type DbExportCustomEmojisJobData = {
+	type: 'exportCustomEmojis';
+	user: ThinUser;
+};
+
+export type DbExportAntennasJobData = {
+	type: 'exportAntennas';
+	user: ThinUser;
+};
+
+export type DbExportNotesJobData = {
+	type: 'exportNotes';
+	user: ThinUser;
+};
+
+export type DbExportClipsJobData = {
+	type: 'exportClips';
+	user: ThinUser;
+};
+
+export type DbExportFavoritesJobData = {
+	type: 'exportFavorites';
+	user: ThinUser;
+};
+
+export type DbExportFollowingJobData = {
+	type: 'exportFollowing';
 	user: ThinUser;
 	excludeMuting: boolean;
 	excludeInactive: boolean;
 };
 
-export type DBExportAntennasData = {
-	user: ThinUser
-};
-
-export type DbUserDeleteJobData = {
+export type DbExportMutingJobData = {
+	type: 'exportMuting';
 	user: ThinUser;
-	soft?: boolean;
 };
 
-export type DbUserImportJobData = {
+export type DbExportBlockingJobData = {
+	type: 'exportBlocking';
+	user: ThinUser;
+};
+
+export type DbExportUserListsJobData = {
+	type: 'exportUserLists';
+	user: ThinUser;
+};
+
+export type ImportAntenna = MiAntenna & { userListAccts: string[] | null };
+
+export type DbImportAntennasJobData = {
+	type: 'importAntennas';
+	user: ThinUser;
+	antennas: ImportAntenna[];
+	fileId: MiDriveFile['id'];
+} | {
+	type: 'importAntennas';
+	user: ThinUser;
+	antenna: ImportAntenna[];
+	fileId: MiDriveFile['id'];
+};
+
+export type DbImportNotesJobData =
+	DbNoteImportFromMisskeyJobData |
+	DbNoteImportFromMastodonJobData |
+	DbNoteImportFromPleromaJobData |
+	DbNoteImportFromTwitterJobData |
+	DbNoteImportFromInstagramJobData |
+	DbNoteImportFromFacebookJobData;
+
+export type DbNoteImportFromMisskeyJobData = {
+	type: 'importNotes';
+	source: 'Misskey';
+	user: ThinUser;
+	fileId: MiDriveFile['id'];
+};
+
+export type DbNoteImportFromMastodonJobData = {
+	type: 'importNotes';
+	source: 'Mastodon';
+	user: ThinUser;
+	fileId: MiDriveFile['id'];
+};
+
+export type DbNoteImportFromPleromaJobData = {
+	type: 'importNotes';
+	source: 'Pleroma';
+	user: ThinUser;
+	fileId: MiDriveFile['id'];
+};
+
+export type DbNoteImportFromTwitterJobData = {
+	type: 'importNotes';
+	source: 'Twitter';
+	user: ThinUser;
+	fileId: MiDriveFile['id'];
+};
+
+export type DbNoteImportFromInstagramJobData = {
+	type: 'importNotes';
+	source: 'Instagram';
+	user: ThinUser;
+	fileId: MiDriveFile['id'];
+};
+
+export type DbNoteImportFromFacebookJobData = {
+	type: 'importNotes';
+	source: 'Facebook';
+	user: ThinUser;
+	fileId: MiDriveFile['id'];
+};
+
+export type DbImportTweetsToDbJobData = {
+	type: 'importTweetsToDb';
+	user: ThinUser;
+	target: FIXME;
+	note?: MiNote['id'] | null;
+};
+
+export type DbImportIGToDbJobData = {
+	type: 'importIGToDb';
+	user: ThinUser;
+	target: FIXME;
+	note?: MiNote['id'] | null;
+};
+
+export type DbImportFBToDbJobData = {
+	type: 'importFBToDb';
+	user: ThinUser;
+	target: FIXME;
+	note?: MiNote['id'] | null;
+};
+
+export type DbImportMastoToDbJobData = {
+	type: 'importMastoToDb';
+	user: ThinUser;
+	target: FIXME;
+	note?: MiNote['id'] | null;
+};
+
+export type DbImportPleroToDbJobData = {
+	type: 'importPleroToDb';
+	user: ThinUser;
+	target: FIXME;
+	note?: MiNote['id'] | null;
+};
+
+export type DbImportKeyNotesToDbJobData = {
+	type: 'importKeyNotesToDb';
+	user: ThinUser;
+	target: FIXME;
+	note?: MiNote['id'] | null;
+};
+
+export type DbImportFollowingJobData = {
+	type: 'importFollowing';
 	user: ThinUser;
 	fileId: MiDriveFile['id'];
 	withReplies?: boolean;
 };
 
-export type DbNoteImportJobData = {
-	user: ThinUser;
-	fileId: MiDriveFile['id'];
-	type?: string;
-};
-
-export type DBAntennaImportJobData = {
-	user: ThinUser,
-	antenna: Antenna
-	fileId: MiDriveFile['id'];
-};
-
-export type DbUserImportToDbJobData = {
+export type DbImportFollowingToDbJobData = {
+	type: 'importFollowingToDb';
 	user: ThinUser;
 	target: string;
 	withReplies?: boolean;
 };
 
-export type DbNoteImportToDbJobData = {
+export type DbImportMutingJobData = {
+	type: 'importMuting';
 	user: ThinUser;
-	target: any;
+	fileId: MiDriveFile['id'];
 };
 
-export type DbNoteWithParentImportToDbJobData = {
+export type DbImportBlockingJobData = {
+	type: 'importBlocking';
 	user: ThinUser;
-	target: any;
-	note: MiNote['id'] | null;
+	fileId: MiDriveFile['id'];
+};
+
+export type DbImportBlockingToDbJobData = {
+	type: 'importBlockingToDb';
+	user: ThinUser;
+	target: string;
+};
+
+export type DbImportUserListsJobData = {
+	type: 'importUserLists';
+	user: ThinUser;
+	fileId: MiDriveFile['id'];
+};
+
+export type DbImportCustomEmojisJobData = {
+	type: 'importCustomEmojis';
+	user: ThinUser;
+	fileId: MiDriveFile['id'];
+};
+
+export type DbDeleteAccountJobData = {
+	type: 'deleteAccount';
+	user: ThinUser;
+	soft?: boolean;
 };
 
 export type ObjectStorageJobData = ObjectStorageFileJobData | CleanRemoteFilesJobData;
