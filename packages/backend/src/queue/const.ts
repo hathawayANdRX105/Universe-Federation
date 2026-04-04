@@ -8,6 +8,7 @@ import type { Config } from '@/config.js';
 import type { QueueType } from '@/queue/types.js';
 import type * as Bull from 'bullmq';
 
+// sync with misskey-js src/entities.ts
 export const QUEUE_TYPES = [
 	'deliver',
 	'inbox',
