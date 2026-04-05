@@ -5,7 +5,7 @@
 
 import nodeFs from 'node:fs';
 import nodePath from 'node:path';
-import { execa } from 'execa';
+import { execa, ExecaError } from 'execa';
 
 const [command, ...args] = process.argv.slice(2);
 if (!command) {
@@ -30,14 +30,19 @@ function cleanup() {
 
 ['exit', 'SIGINT', 'SIGUSR1', 'SIGUSR2', 'uncaughtException', 'SIGTERM'].forEach(evt => {
 	process.on(evt, () => {
-		const exitCode = clean ? 0 : -1;
+		// Don't trample an existing non-zero exit code
+		if (!clean) {
+			process.exitCode ||= -1;
+		}
+
 		try {
 			cleanup();
 		} catch (error) {
 			console.error('Error in cleanup:', error);
+			process.exitCode ||= -1;
 		} finally {
-			process.exitCode = exitCode;
-			process.exit(exitCode);
+			// No value will use process.exitCode
+			process.exit();
 		}
 	});
 });
@@ -49,7 +54,7 @@ try {
 	clean = false;
 
 	console.log(`Starting ${command}...`);
-	await execa(
+	const result = await execa(
 		command,
 		args,
 		{
@@ -59,7 +64,15 @@ try {
 	);
 
 	cleanup();
+	process.exit(result.exitCode);
 } catch (error) {
 	console.error(`Error running ${command}:`, error);
-	throw error;
+
+	cleanup();
+
+	if (error instanceof ExecaError) {
+		process.exit(error.exitCode || -1);
+	} else {
+		process.exit(-1);
+	}
 }
