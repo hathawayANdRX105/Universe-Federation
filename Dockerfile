@@ -1,6 +1,6 @@
 # syntax = docker/dockerfile:1.4
 
-ARG NODE_VERSION=22.15.0-alpine3.20
+ARG NODE_VERSION=22-alpine
 
 FROM node:${NODE_VERSION} as build
 
