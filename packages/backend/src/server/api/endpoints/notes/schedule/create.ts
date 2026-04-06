@@ -357,12 +357,13 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				});
 
 				const delay = new Date(schedNoteLocalTime).getTime() - this.timeService.now;
-				await this.scheduleNotePostQueue.add(String(delay), {
+				const jobId = `schedNote_${noteId}`;
+				await this.scheduleNotePostQueue.add(jobId, {
 					scheduleNoteId: noteId,
 				}, {
 					delay,
 					removeOnComplete: true,
-					jobId: `schedNote:${noteId}`,
+					jobId,
 				});
 			}
 
