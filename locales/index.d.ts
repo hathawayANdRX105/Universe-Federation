@@ -8688,6 +8688,14 @@ export interface Locale extends ILocale {
          * 日時の解析に失敗
          */
         "invalid": string;
+        /**
+         * Now
+         */
+        "now": string;
+        /**
+         * Never
+         */
+        "never": string;
     };
     "_timeIn": {
         /**
@@ -8718,6 +8726,14 @@ export interface Locale extends ILocale {
          * {n}年後
          */
         "years": ParameterizedString<"n">;
+        /**
+         * Now
+         */
+        "now": string;
+        /**
+         * Never
+         */
+        "never": string;
     };
     "_time": {
         /**
@@ -13006,6 +13022,10 @@ export interface Locale extends ILocale {
      */
     "scheduledNotes": string;
     /**
+     * Never
+     */
+    "never": string;
+    /**
      * Custom robots.txt
      */
     "robotsTxt": string;
@@ -13703,10 +13723,64 @@ export interface Locale extends ILocale {
      * New root user
      */
     "newRootUser": string;
+    /**
+     * Follow requests from bots require approval
+     */
+    "carefulBot": string;
+    /**
+     * This user has been deleted.
+     */
+    "userDeleted": string;
+    /**
+     * Restart account deletion
+     */
+    "restartDeletion": string;
+    /**
+     * Account deletion was last attempted {date}. If the deletion failed or was incomplete, then you may click this button to restart the process.
+     */
+    "restartDeletionDescription": ParameterizedString<"date">;
+    /**
+     * Are you sure you want to restart this account deletion?
+     */
+    "restartDeletionConfirm": string;
+    /**
+     * Deleted at
+     */
+    "deletedAt": string;
+    /**
+     * Last fetched at
+     */
+    "lastFetchedAt": string;
+    /**
+     * Last fetched featured at
+     */
+    "lastFetchedFeaturedAt": string;
+    /**
+     * Last fetched outbox at
+     */
+    "lastFetchedOutboxAt": string;
+    /**
+     * Login Dates
+     */
+    "loginDates": string;
+    /**
+     * Root
+     */
+    "root": string;
 }
 export type Locales = {
     [lang: string]: Locale;
 };
-declare const locales: Locales;
+/**
+ * Read all YAML translation files and generate a locales table. */
 export function build(): Locales;
+/**
+ * Locales table generated from all YAML translation files. */
+export const locales: Locales;
+/**
+ * Locales table generated from all YAML translation files. */
 export default locales;
+/**
+ * Hash-derived version identifier for the current locales table.
+ * Generated automatically with each build. */
+export const localesVersion: string;
