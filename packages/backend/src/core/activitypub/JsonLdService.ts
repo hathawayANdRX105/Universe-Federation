@@ -11,16 +11,11 @@ import { bindThis } from '@/decorators.js';
 import Logger from '@/logger.js';
 import { LoggerService } from '@/core/LoggerService.js';
 import { StatusError } from '@/misc/status-error.js';
+import { IdentifiableError } from '@/misc/identifiable-error.js';
 import { CONTEXT, PRELOADED_CONTEXTS } from './misc/contexts.js';
 import { validateContentTypeSetAsJsonLD } from './misc/validator.js';
 import type { ContextDefinition, JsonLdDocument } from 'jsonld';
 import type { JsonLd as JsonLdObject, RemoteDocument } from 'jsonld/jsonld-spec.js';
-
-const suspiciousKeys = new Set([
-	'@included',
-	'@graph',
-	'@reverse',
-]);
 
 // https://stackoverflow.com/a/66252656
 type RemoveIndex<T> = {
@@ -56,8 +51,25 @@ export function isSigned<T extends Document>(doc: T): doc is Signed<T> {
 
 // RsaSignature2017 implementation is based on https://github.com/transmute-industries/RsaSignature2017
 
-@Injectable()
-export class JsonLdService {
+export class JsonLdError extends IdentifiableError {
+	constructor(id: string, message?: string) {
+		super(id, message);
+	}
+}
+
+export class JsonLdForbiddenDriectiveError extends JsonLdError {
+	constructor(public directive: string) {
+		super('0297f79b-0ed9-4b6c-875f-b0a82ff96781', `${directive} is forbidden by Misskey in ActivityPub documents`);
+	}
+}
+
+export class JsonLd {
+	private static forbiddenDirectives = new Set([
+		'@included',
+		'@graph',
+		'@reverse',
+	]);
+
 	private readonly logger: Logger;
 
 	constructor(
@@ -151,26 +163,24 @@ export class JsonLdService {
 	}
 
 	@bindThis
-	public isSuspicious(data: Document): string | undefined {
-		if (Array.isArray(data)) {
-			for (const node of data) {
-				const result = this.isSuspicious(node);
-				if (result) return result;
-			}
-		} else {
-			for (const [key, value] of Object.entries(data)) {
-				if (key in suspiciousKeys) {
-					return `${key} in ActivityPub data is suspicious`;
-				}
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	public checkForForbiddenDirectives(value: any): void {
+		if (typeof value === 'object') {
+			if (Array.isArray(value)) {
+				for (const item of value) this.checkForForbiddenDirectives(item);
+			} else {
+				const object = value;
+				for (const [key, value] of Object.entries(object)) {
+					if (key in JsonLd.forbiddenDirectives) {
+						throw new JsonLdForbiddenDriectiveError(key);
+					}
 
-				if (typeof value === 'object' && value !== null) {
-					const result = this.isSuspicious(value);
-					if (result) return result;
+					if (typeof value === 'object' && value !== null) {
+						this.checkForForbiddenDirectives(value);
+					}
 				}
 			}
 		}
-
-		return;
 	}
 
 	@bindThis
@@ -230,3 +240,18 @@ export class JsonLdService {
 		return hash.digest('hex');
 	}
 }
+
+@Injectable()
+export class JsonLdService {
+	constructor(
+		private httpRequestService: HttpRequestService,
+		private loggerService: LoggerService,
+	) {
+	}
+
+	@bindThis
+	public use(): JsonLd {
+		return new JsonLd(this.httpRequestService, this.loggerService);
+	}
+}
+
