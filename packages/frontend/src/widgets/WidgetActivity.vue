@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <MkContainer :showHeader="widgetProps.showHeader" :naked="widgetProps.transparent" data-cy-mkw-activity class="mkw-activity">
-	<template #icon><i class="ti ti-chart-line"></i></template>
+	<template #icon><span class="mkw-activity-icon-h">h</span></template>
 	<template #header>{{ i18n.ts._widgets.activity }}</template>
 	<template #func="{ buttonStyleClass }"><button class="_button" :class="buttonStyleClass" @click="toggleView()"><i class="ti ti-selector"></i></button></template>
 
@@ -102,3 +102,14 @@ defineExpose<WidgetComponentExpose>({
 	id: props.widget ? props.widget.id : null,
 });
 </script>
+
+<style lang="scss" scoped>
+.mkw-activity-icon-h {
+	display: inline-grid;
+	place-items: center;
+	width: 1em;
+	height: 1em;
+	font-weight: 700;
+	line-height: 1;
+}
+</style>

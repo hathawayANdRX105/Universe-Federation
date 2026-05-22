@@ -4,37 +4,43 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<svg :viewBox="`0 0 ${ viewBoxX } ${ viewBoxY }`" :class="$style.root" @mousedown.prevent="onMousedown">
-	<polyline
-		:points="pointsNote"
-		fill="none"
-		stroke-width="1"
-		stroke="#41ddde"
+<svg :viewBox="`0 0 ${viewBoxX} ${viewBoxY}`" :class="$style.root" role="img">
+	<line
+		v-for="line in gridLines"
+		:key="line"
+		:x1="plot.x"
+		:y1="line"
+		:x2="plot.x + plot.width"
+		:y2="line"
+		:class="$style.grid"
 	/>
-	<polyline
-		:points="pointsReply"
-		fill="none"
-		stroke-width="1"
-		stroke="#f7796c"
-	/>
-	<polyline
-		:points="pointsRenote"
-		fill="none"
-		stroke-width="1"
-		stroke="#a1de41"
-	/>
-	<polyline
-		:points="pointsTotal"
-		fill="none"
-		stroke-width="1"
-		stroke="#555"
-		stroke-dasharray="2 2"
+
+	<g :class="$style.bars">
+		<template v-for="bar in bars" :key="bar.index">
+			<rect
+				v-for="segment in bar.segments"
+				:key="segment.key"
+				:x="bar.x"
+				:y="segment.y"
+				:width="bar.width"
+				:height="segment.height"
+				:rx="bar.radius"
+				:fill="segment.color"
+			/>
+		</template>
+	</g>
+
+	<path
+		v-if="trendPath"
+		:d="trendPath"
+		:class="$style.trend"
 	/>
 </svg>
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { computed } from 'vue';
+
 const props = defineProps<{
 	activity: {
 		total: number;
@@ -44,64 +50,105 @@ const props = defineProps<{
 	}[]
 }>();
 
-const viewBoxX = ref(147);
-const viewBoxY = ref(60);
-const zoom = ref(1);
-const pos = ref(0);
-const pointsNote = ref<string>();
-const pointsReply = ref<string>();
-const pointsRenote = ref<string>();
-const pointsTotal = ref<string>();
+const viewBoxX = 168;
+const viewBoxY = 68;
+const plot = {
+	x: 6,
+	y: 8,
+	width: 156,
+	height: 48,
+};
 
-function dragListen(fn) {
-	window.addEventListener('mousemove', fn);
-	window.addEventListener('mouseleave', dragClear.bind(null, fn));
-	window.addEventListener('mouseup', dragClear.bind(null, fn));
-}
+const colors = {
+	notes: '#41ddde',
+	replies: '#ff7a70',
+	renotes: '#a1de41',
+};
 
-function dragClear(fn) {
-	window.removeEventListener('mousemove', fn);
-	window.removeEventListener('mouseleave', dragClear);
-	window.removeEventListener('mouseup', dragClear);
-}
+const visibleActivity = computed(() => props.activity.slice().reverse().slice(-70));
+const peak = computed(() => Math.max(1, ...visibleActivity.value.map(d => d.total)));
+const gridLines = computed(() => [0.25, 0.5, 0.75].map(rate => plot.y + (plot.height * rate)));
 
-function onMousedown(ev) {
-	const clickX = ev.clientX;
-	const clickY = ev.clientY;
-	const baseZoom = zoom.value;
-	const basePos = pos.value;
+const bars = computed(() => {
+	const activity = visibleActivity.value;
+	const step = plot.width / Math.max(activity.length, 1);
+	const width = Math.max(1, Math.min(2.4, step * 0.72));
 
-	// 動かした時
-	dragListen(me => {
-		let moveLeft = me.clientX - clickX;
-		let moveTop = me.clientY - clickY;
+	return activity.map((d, index) => {
+		let cursor = plot.y + plot.height;
+		const x = plot.x + (index * step) + ((step - width) / 2);
+		const parts = [
+			{ key: 'notes', value: d.notes, color: colors.notes },
+			{ key: 'replies', value: d.replies, color: colors.replies },
+			{ key: 'renotes', value: d.renotes, color: colors.renotes },
+		];
 
-		zoom.value = Math.max(1, baseZoom + (-moveTop / 20));
-		pos.value = Math.min(0, basePos + moveLeft);
-		if (pos.value < -(((props.activity.length - 1) * zoom.value) - viewBoxX.value)) pos.value = -(((props.activity.length - 1) * zoom.value) - viewBoxX.value);
+		const segments = parts
+			.map(part => {
+				const height = Math.max(0, (part.value / peak.value) * plot.height);
+				cursor -= height;
+				return {
+					key: `${index}-${part.key}`,
+					y: cursor,
+					height,
+					color: part.color,
+				};
+			})
+			.filter(segment => segment.height > 0.45);
 
-		render();
+		return {
+			index,
+			x,
+			width,
+			radius: Math.min(width / 2, 1.2),
+			segments,
+		};
 	});
-}
+});
 
-function render() {
-	const peak = Math.max(...props.activity.map(d => d.total));
-	if (peak !== 0) {
-		const activity = props.activity.slice().reverse();
-		pointsNote.value = activity.map((d, i) => `${(i * zoom.value) + pos.value},${(1 - (d.notes / peak)) * viewBoxY.value}`).join(' ');
-		pointsReply.value = activity.map((d, i) => `${(i * zoom.value) + pos.value},${(1 - (d.replies / peak)) * viewBoxY.value}`).join(' ');
-		pointsRenote.value = activity.map((d, i) => `${(i * zoom.value) + pos.value},${(1 - (d.renotes / peak)) * viewBoxY.value}`).join(' ');
-		pointsTotal.value = activity.map((d, i) => `${(i * zoom.value) + pos.value},${(1 - (d.total / peak)) * viewBoxY.value}`).join(' ');
-	}
-}
+const trendPath = computed(() => {
+	const activity = visibleActivity.value;
+	if (activity.length === 0) return '';
+
+	const step = plot.width / Math.max(activity.length, 1);
+	const smoothingWindow = 5;
+
+	return activity.map((_, index) => {
+		const from = Math.max(0, index - smoothingWindow + 1);
+		const chunk = activity.slice(from, index + 1);
+		const average = chunk.reduce((sum, value) => sum + value.total, 0) / chunk.length;
+		const x = plot.x + (index * step) + (step / 2);
+		const y = plot.y + plot.height - ((average / peak.value) * plot.height);
+		return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+	}).join(' ');
+});
 </script>
 
 <style lang="scss" module>
 .root {
 	display: block;
-	padding: 16px;
 	width: 100%;
+	padding: 14px 12px 12px;
 	box-sizing: border-box;
-	cursor: all-scroll;
+	overflow: visible;
+}
+
+.grid {
+	stroke: currentColor;
+	stroke-width: 0.4;
+	opacity: 0.12;
+}
+
+.bars {
+	opacity: 0.92;
+}
+
+.trend {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.4;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	opacity: 0.48;
 }
 </style>
