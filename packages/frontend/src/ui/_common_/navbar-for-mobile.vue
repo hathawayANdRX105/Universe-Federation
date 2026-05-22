@@ -234,23 +234,6 @@ function more() {
 	&.active {
 		color: var(--MI_THEME-navActive);
 	}
-
-	&:hover, &.active {
-		&::before {
-			content: "";
-			display: block;
-			width: calc(100% - 24px);
-			height: 100%;
-			margin: auto;
-			position: absolute;
-			top: 0;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			border-radius: var(--MI-radius-ellipse);
-			background: var(--MI_THEME-accentedBg);
-		}
-	}
 }
 
 .itemIcon {

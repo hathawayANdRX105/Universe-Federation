@@ -31,7 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { defineAsyncComponent, provide, onMounted, computed, ref } from 'vue';
+import { defineAsyncComponent, provide, onUnmounted, computed, ref } from 'vue';
 import { instanceName } from '@@/js/config.js';
 import { isLink } from '@@/js/is-link.js';
 import XCommon from './_common_/common.vue';
@@ -58,13 +58,19 @@ const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announce
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
 
 const DESKTOP_THRESHOLD = 1100;
-const MOBILE_THRESHOLD = 500;
+const MOBILE_THRESHOLD = 700;
 
-// デスクトップでウィンドウを狭くしたときモバイルUIが表示されて欲しいことはあるので deviceKind === 'desktop' の判定は行わない
 const isDesktop = ref(window.innerWidth >= DESKTOP_THRESHOLD);
-const isMobile = ref(deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD);
-window.addEventListener('resize', () => {
-	isMobile.value = deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD;
+const isMobile = ref(window.innerWidth <= MOBILE_THRESHOLD);
+
+function updateLayoutMode() {
+	isDesktop.value = window.innerWidth >= DESKTOP_THRESHOLD;
+	isMobile.value = window.innerWidth <= MOBILE_THRESHOLD;
+}
+
+window.addEventListener('resize', updateLayoutMode, { passive: true });
+onUnmounted(() => {
+	window.removeEventListener('resize', updateLayoutMode);
 });
 
 const pageMetadata = ref<null | PageMetadata>(null);
@@ -98,14 +104,6 @@ if (window.innerWidth > 1024) {
 		window.location.reload();
 	}
 }
-
-onMounted(() => {
-	if (!isDesktop.value) {
-		window.addEventListener('resize', () => {
-			if (window.innerWidth >= DESKTOP_THRESHOLD) isDesktop.value = true;
-		}, { passive: true });
-	}
-});
 
 const onContextmenu = (ev) => {
 	if (isLink(ev.target)) return;

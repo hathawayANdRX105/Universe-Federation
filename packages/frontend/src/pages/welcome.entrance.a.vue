@@ -100,6 +100,10 @@ misskeyApiGet('federation/instances', {
 	height: 100vh;
 	background: var(--MI_THEME-accent);
 	clip-path: polygon(0% 0%, 45% 0%, 20% 100%, 0% 100%);
+
+	@media (max-width: 900px) {
+		display: none;
+	}
 }
 .shape2 {
 	position: fixed;
@@ -110,6 +114,10 @@ misskeyApiGet('federation/instances', {
 	background: var(--MI_THEME-accent);
 	clip-path: polygon(0% 0%, 25% 0%, 35% 100%, 0% 100%);
 	opacity: 0.5;
+
+	@media (max-width: 900px) {
+		display: none;
+	}
 }
 
 .logoWrapper {
@@ -120,6 +128,15 @@ misskeyApiGet('federation/instances', {
 	color: #fff;
 	user-select: none;
 	pointer-events: none;
+
+	@media (max-width: 900px) {
+		position: relative;
+		top: auto;
+		left: auto;
+		padding: 28px 24px 0;
+		color: var(--MI_THEME-fg);
+		text-align: center;
+	}
 }
 
 .poweredBy {
@@ -137,12 +154,17 @@ misskeyApiGet('federation/instances', {
 
 .contents {
 	position: relative;
-	width: min(430px, calc(100% - 32px));
+	width: min(760px, calc(100% - 48px));
 	margin-left: 128px;
 	padding: 100px 0 100px 0;
 
 	@media (max-width: 1200px) {
 		margin: auto;
+	}
+
+	@media (max-width: 900px) {
+		width: min(720px, calc(100% - 32px));
+		padding: 32px 0 64px;
 	}
 }
 
