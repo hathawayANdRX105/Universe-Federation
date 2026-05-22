@@ -2342,6 +2342,12 @@ customHtml:
       })();
     </script>
     <style id="codex-home-floating-post-entry">
+      @media (min-width: 700px) {
+        .codex-home-floating-post-entry {
+          display: none !important;
+        }
+      }
+
       @media (max-width: 1279px) {
         body:has(.pages-timeline-tl-jptQ) [class^="mobile-footer-menu-root-"] > [class*="mobile-footer-menu-post-"],
         body:has(.pages-timeline-tl-jptQ) [class*=" mobile-footer-menu-root-"] > [class*="mobile-footer-menu-post-"],
@@ -2352,7 +2358,7 @@ customHtml:
         body.codex-route-home .codex-home-floating-post-entry {
           position: fixed !important;
           right: max(16px, env(safe-area-inset-right, 0px) + 16px) !important;
-          bottom: max(76px, env(safe-area-inset-bottom, 0px) + 76px) !important;
+          bottom: max(20px, env(safe-area-inset-bottom, 0px) + 80px) !important;
           z-index: 1300 !important;
           display: flex !important;
           align-items: center !important;
@@ -2447,7 +2453,7 @@ customHtml:
       body:has(.pages-timeline-tl-jptQ) .codex-home-floating-post-entry {
         position: fixed !important;
         right: max(20px, env(safe-area-inset-right, 0px) + 20px) !important;
-        bottom: max(40px, env(safe-area-inset-bottom, 0px) + 80px) !important;
+        bottom: max(20px, env(safe-area-inset-bottom, 0px) + 80px) !important;
         z-index: 1300 !important;
         display: flex !important;
         align-items: center !important;
@@ -2475,11 +2481,19 @@ customHtml:
       body:has(.pages-timeline-tl-jptQ) .codex-home-floating-post-entry:focus {
         background: #1a8cd8 !important;
       }
+
+      @media (min-width: 700px) {
+        body:has(.pages-timeline-tl-jptQ) .codex-home-floating-post-entry,
+        body.codex-route-home .codex-home-floating-post-entry,
+        .codex-home-floating-post-entry {
+          display: none !important;
+        }
+      }
     </style>
     <script id="codex-home-floating-post-entry-script">
       (() => {
         const ENTRY_ID = 'codex-home-floating-post-entry-button';
-        const MOBILE_QUERY = '(max-width: 1279px)';
+        const MOBILE_QUERY = '(max-width: 699px)';
         const media = window.matchMedia(MOBILE_QUERY);
         let scheduled = false;
 
@@ -2494,8 +2508,13 @@ customHtml:
 
         function syncEntry() {
           scheduled = false;
+          if (!media.matches) {
+            document.getElementById(ENTRY_ID)?.remove();
+            return;
+          }
+
           const hasTimeline = Boolean(document.querySelector('.pages-timeline-tl-jptQ'));
-          const shouldShow = hasTimeline || (media.matches && window.location.pathname === '/');
+          const shouldShow = hasTimeline || window.location.pathname === '/';
           if (!shouldShow) {
             document.getElementById(ENTRY_ID)?.remove();
             return;
