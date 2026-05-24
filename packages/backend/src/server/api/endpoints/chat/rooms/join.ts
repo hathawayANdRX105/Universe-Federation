@@ -37,6 +37,11 @@ export const meta = {
 			code: 'ROOM_FULL',
 			id: 'b4855d16-3863-4600-8301-2a53f2f76541',
 		},
+		joiningDisabled: {
+			message: 'Joining this room is disabled.',
+			code: 'JOINING_DISABLED',
+			id: 'bd6e849a-9870-4dcb-8025-765cf404f6d8',
+		},
 	},
 } as const;
 
@@ -63,6 +68,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					if (err.message === 'invitation required') throw new ApiError(meta.errors.invitationRequired);
 					if (err.message === 'already member') throw new ApiError(meta.errors.alreadyJoined);
 					if (err.message === 'room is full') throw new ApiError(meta.errors.roomFull);
+					if (err.message === 'joining disabled') throw new ApiError(meta.errors.joiningDisabled);
 				}
 				throw new ApiError(meta.errors.noSuchRoom);
 			}

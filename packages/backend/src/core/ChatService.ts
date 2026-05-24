@@ -656,6 +656,10 @@ export class ChatService {
 
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId: inviterId });
 
+		if (room.joinMode === 'closed') {
+			throw new Error('joining disabled');
+		}
+
 		if (await this.isRoomMember(room, inviteeId)) {
 			throw new Error('already member');
 		}
@@ -724,6 +728,10 @@ export class ChatService {
 
 		if (await this.isRoomMember(room, userId)) {
 			throw new Error('already member');
+		}
+
+		if (room.joinMode === 'closed') {
+			throw new Error('joining disabled');
 		}
 
 		const invitation = await this.chatRoomInvitationsRepository.findOneBy({ roomId, userId });

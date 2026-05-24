@@ -7,7 +7,7 @@ import { PrimaryColumn, Entity, Index, JoinColumn, Column, ManyToOne } from 'typ
 import { id } from './util/id.js';
 import { MiUser } from './User.js';
 
-export const chatRoomJoinModes = ['inviteOnly', 'open'] as const;
+export const chatRoomJoinModes = ['inviteOnly', 'open', 'closed'] as const;
 
 export type ChatRoomJoinMode = typeof chatRoomJoinModes[number];
 

@@ -11,12 +11,14 @@ import { ApiError } from '@/server/api/error.js';
 import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
 import { ChatService, MAX_CHAT_ROOM_MEMBER_LIMIT, MIN_CHAT_ROOM_MEMBER_LIMIT } from '@/core/ChatService.js';
 import type { MiMeta } from '@/models/Meta.js';
+import { chatRoomJoinModes } from '@/models/ChatRoom.js';
+import { RoleService } from '@/core/RoleService.js';
 
 export const meta = {
 	tags: ['admin', 'chat'],
 
 	requireCredential: true,
-	requireAdmin: true,
+	requireModerator: true,
 	kind: 'write:admin:meta',
 
 	res: {
@@ -53,6 +55,11 @@ export const meta = {
 			code: 'NO_SUCH_ROOM',
 			id: '8193a263-8d3e-4890-9fd2-cb3e320de4a7',
 		},
+		accessDenied: {
+			message: 'Only administrators can edit room member limit overrides.',
+			code: 'ACCESS_DENIED',
+			id: '2b7f4fa8-1184-4ee3-a725-062edb395164',
+		},
 	},
 } as const;
 
@@ -61,8 +68,9 @@ export const paramDef = {
 	properties: {
 		roomId: { type: 'string', format: 'misskey:id' },
 		memberLimitOverride: { type: 'integer', nullable: true, minimum: MIN_CHAT_ROOM_MEMBER_LIMIT, maximum: MAX_CHAT_ROOM_MEMBER_LIMIT },
+		joinMode: { type: 'string', enum: chatRoomJoinModes },
 	},
-	required: ['roomId', 'memberLimitOverride'],
+	required: ['roomId'],
 } as const;
 
 @Injectable()
@@ -76,6 +84,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 		private chatService: ChatService,
 		private chatEntityService: ChatEntityService,
+		private roleService: RoleService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			const room = await this.chatRoomsRepository.findOne({ where: { id: ps.roomId }, relations: ['owner'] });
@@ -83,7 +92,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
 
-			const updated = await this.chatService.updateRoomMemberLimitOverride(room, ps.memberLimitOverride);
+			let updated = room;
+			if (ps.memberLimitOverride !== undefined) {
+				if (!await this.roleService.isAdministrator(me)) {
+					throw new ApiError(meta.errors.accessDenied);
+				}
+				updated = await this.chatService.updateRoomMemberLimitOverride(updated, ps.memberLimitOverride);
+			}
+			if (ps.joinMode !== undefined) {
+				updated = await this.chatService.updateRoom(updated, { joinMode: ps.joinMode });
+			}
 			const memberCount = await this.chatService.getRoomMembersCount(updated.id);
 			const memberLimit = this.chatService.getEffectiveRoomMemberLimit(updated);
 

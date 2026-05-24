@@ -34,12 +34,13 @@ class ChatRoomChannel extends Channel {
 		if (typeof params.roomId !== 'string') return false;
 		this.roomId = params.roomId;
 
-		const exists = await this.chatRoomsRepository.findOne({
-			select: { id: true },
+		const room = await this.chatRoomsRepository.findOne({
+			select: { id: true, ownerId: true },
 			where: { id: this.roomId },
-		}) != null;
+		});
 
-		if (!exists) return true;
+		if (room == null) return false;
+		if (!await this.chatService.hasPermissionToViewRoomTimeline(this.user!, room)) return false;
 
 		this.subscriber.on(`chatRoomStream:${this.roomId}`, this.onEvent);
 

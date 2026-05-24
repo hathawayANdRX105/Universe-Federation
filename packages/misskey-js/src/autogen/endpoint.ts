@@ -36,12 +36,16 @@ import type {
 	AdminAvatarDecorationsListRequest,
 	AdminAvatarDecorationsListResponse,
 	AdminAvatarDecorationsUpdateRequest,
+	AdminCaptchaCurrentResponse,
+	AdminCaptchaSaveRequest,
+	AdminChatRoomsListRequest,
+	AdminChatRoomsListResponse,
+	AdminChatRoomsMessagesRequest,
+	AdminChatRoomsMessagesResponse,
 	AdminChatRoomsShowRequest,
 	AdminChatRoomsShowResponse,
 	AdminChatRoomsUpdateRequest,
 	AdminChatRoomsUpdateResponse,
-	AdminCaptchaCurrentResponse,
-	AdminCaptchaSaveRequest,
 	AdminCwInstanceRequest,
 	AdminCwNoteRequest,
 	AdminCwUserRequest,
@@ -706,10 +710,12 @@ export type Endpoints = {
 	'admin/avatar-decorations/delete': { req: AdminAvatarDecorationsDeleteRequest; res: EmptyResponse };
 	'admin/avatar-decorations/list': { req: AdminAvatarDecorationsListRequest; res: AdminAvatarDecorationsListResponse };
 	'admin/avatar-decorations/update': { req: AdminAvatarDecorationsUpdateRequest; res: EmptyResponse };
-	'admin/chat/rooms/show': { req: AdminChatRoomsShowRequest; res: AdminChatRoomsShowResponse };
-	'admin/chat/rooms/update': { req: AdminChatRoomsUpdateRequest; res: AdminChatRoomsUpdateResponse };
 	'admin/captcha/current': { req: EmptyRequest; res: AdminCaptchaCurrentResponse };
 	'admin/captcha/save': { req: AdminCaptchaSaveRequest; res: EmptyResponse };
+	'admin/chat/rooms/list': { req: AdminChatRoomsListRequest; res: AdminChatRoomsListResponse };
+	'admin/chat/rooms/messages': { req: AdminChatRoomsMessagesRequest; res: AdminChatRoomsMessagesResponse };
+	'admin/chat/rooms/show': { req: AdminChatRoomsShowRequest; res: AdminChatRoomsShowResponse };
+	'admin/chat/rooms/update': { req: AdminChatRoomsUpdateRequest; res: AdminChatRoomsUpdateResponse };
 	'admin/cw-instance': { req: AdminCwInstanceRequest; res: EmptyResponse };
 	'admin/cw-note': { req: AdminCwNoteRequest; res: EmptyResponse };
 	'admin/cw-user': { req: AdminCwUserRequest; res: EmptyResponse };

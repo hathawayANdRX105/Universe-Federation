@@ -10,40 +10,21 @@ import type { ChatRoomsRepository } from '@/models/_.js';
 import { ApiError } from '@/server/api/error.js';
 import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
 import { ChatService } from '@/core/ChatService.js';
-import type { MiMeta } from '@/models/Meta.js';
 
 export const meta = {
 	tags: ['admin', 'chat'],
 
 	requireCredential: true,
-	requireModerator: true,
+	requireAdmin: true,
 	kind: 'read:admin:meta',
 
 	res: {
-		type: 'object',
+		type: 'array',
 		optional: false, nullable: false,
-		properties: {
-			room: {
-				type: 'object',
-				optional: false, nullable: false,
-				ref: 'ChatRoom',
-			},
-			memberCount: {
-				type: 'integer',
-				optional: false, nullable: false,
-			},
-			defaultMemberLimit: {
-				type: 'integer',
-				optional: false, nullable: false,
-			},
-			memberLimitOverride: {
-				type: 'integer',
-				optional: false, nullable: true,
-			},
-			memberLimit: {
-				type: 'integer',
-				optional: false, nullable: false,
-			},
+		items: {
+			type: 'object',
+			optional: false, nullable: false,
+			ref: 'ChatMessageLiteForRoom',
 		},
 	},
 
@@ -51,7 +32,7 @@ export const meta = {
 		noSuchRoom: {
 			message: 'No such room.',
 			code: 'NO_SUCH_ROOM',
-			id: '1f75ae4d-3bf3-4dbe-a9f4-c37d998c16f0',
+			id: 'b4db30f7-50a5-4d41-8410-9e3439fd71f2',
 		},
 	},
 } as const;
@@ -60,6 +41,9 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		roomId: { type: 'string', format: 'misskey:id' },
+		limit: { type: 'integer', minimum: 1, maximum: 100, default: 30 },
+		sinceId: { type: 'string', format: 'misskey:id' },
+		untilId: { type: 'string', format: 'misskey:id' },
 	},
 	required: ['roomId'],
 } as const;
@@ -70,28 +54,18 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		@Inject(DI.chatRoomsRepository)
 		private chatRoomsRepository: ChatRoomsRepository,
 
-		@Inject(DI.meta)
-		private serverSettings: MiMeta,
-
-		private chatService: ChatService,
 		private chatEntityService: ChatEntityService,
+		private chatService: ChatService,
 	) {
-		super(meta, paramDef, async (ps, me) => {
-			const room = await this.chatRoomsRepository.findOne({ where: { id: ps.roomId }, relations: ['owner'] });
+		super(meta, paramDef, async (ps) => {
+			const room = await this.chatRoomsRepository.findOneBy({ id: ps.roomId });
 			if (room == null) {
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
 
-			const memberCount = await this.chatService.getRoomMembersCount(room.id);
-			const memberLimit = this.chatService.getEffectiveRoomMemberLimit(room);
+			const messages = await this.chatService.roomTimeline(room.id, ps.limit, ps.sinceId, ps.untilId);
 
-			return {
-				room: await this.chatEntityService.packRoom(room, me),
-				memberCount,
-				defaultMemberLimit: this.serverSettings.chatRoomDefaultMemberLimit,
-				memberLimitOverride: room.memberLimitOverride,
-				memberLimit,
-			};
+			return await this.chatEntityService.packMessagesLiteForRoom(messages);
 		});
 	}
 }

@@ -35,7 +35,7 @@ export const packedChatRoomSchema = {
 		joinMode: {
 			type: 'string',
 			optional: false, nullable: false,
-			enum: ['inviteOnly', 'open'],
+			enum: ['inviteOnly', 'open', 'closed'],
 		},
 		memberLimit: {
 			type: 'integer',

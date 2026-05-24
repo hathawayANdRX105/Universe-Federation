@@ -42,6 +42,11 @@ export const meta = {
 			code: 'ROOM_FULL',
 			id: '917bb5fc-0c8a-489a-b9c7-899c3287f36c',
 		},
+		joiningDisabled: {
+			message: 'Joining this room is disabled.',
+			code: 'JOINING_DISABLED',
+			id: '4f26ceee-f4db-44f2-aa08-27858b770692',
+		},
 	},
 } as const;
 
@@ -71,8 +76,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			try {
 				invitation = await this.chatService.createRoomInvitation(me.id, room.id, ps.userId);
 			} catch (err) {
-				if (err instanceof Error && err.message === 'room is full') {
-					throw new ApiError(meta.errors.roomFull);
+				if (err instanceof Error) {
+					if (err.message === 'room is full') throw new ApiError(meta.errors.roomFull);
+					if (err.message === 'joining disabled') throw new ApiError(meta.errors.joiningDisabled);
 				}
 				throw err;
 			}

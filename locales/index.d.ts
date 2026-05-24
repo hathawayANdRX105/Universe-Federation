@@ -5364,6 +5364,92 @@ export interface Locale extends ILocale {
      */
     "chat": string;
     /**
+     * チャット設定
+     */
+    "chatSettings": string;
+    /**
+     * チャット利用可否
+     */
+    "chatAvailability": string;
+    /**
+     * デフォルトのチャットルーム人数上限
+     */
+    "chatRoomDefaultMemberLimit": string;
+    /**
+     * このページの設定保存には管理者権限が必要です。
+     */
+    "chatSettingsAdminRequired": string;
+    /**
+     * ルーム人数上限の上書き
+     */
+    "roomMemberLimitOverride": string;
+    /**
+     * 実際の人数上限
+     */
+    "effectiveRoomMemberLimit": string;
+    /**
+     * 現在のルーム人数
+     */
+    "currentRoomMembers": string;
+    /**
+     * デフォルト上限を使用
+     */
+    "useDefaultLimit": string;
+    /**
+     * ルーム人数上限を保存しました
+     */
+    "roomLimitSaved": string;
+    /**
+     * {min} から {max} までの整数を入力してください。
+     */
+    "inputRangeError": ParameterizedString<"min" | "max">;
+    "_adminChatSettings": {
+        /**
+         * 管理者はすべての設定を管理できます。モデレーターは個別ルームの種類のみ管理でき、全体設定や人数上限は変更できません。読み取り専用のメッセージ表示では、ルーム参加や既読処理は行いません。
+         */
+        "adminOnly": string;
+        /**
+         * 現在のアカウントはモデレーターです。全体のチャット設定と人数上限の変更には管理者権限が必要です。
+         */
+        "moderatorLimited": string;
+        /**
+         * チャットルーム一覧
+         */
+        "rooms": string;
+        /**
+         * ルーム ID、ルーム名、所有者のユーザー名で検索できます
+         */
+        "searchCaption": string;
+        /**
+         * 最後のメッセージ
+         */
+        "lastMessage": string;
+        /**
+         * 詳細 / 管理
+         */
+        "manage": string;
+        /**
+         * ルーム詳細
+         */
+        "roomDetails": string;
+        /**
+         * ルーム種類を保存
+         */
+        "saveRoomJoinMode": string;
+        /**
+         * 読み取り専用メッセージ
+         */
+        "readOnlyMessages": string;
+        /**
+         * 管理者の読み取り専用表示です。ルーム参加、既読処理、メッセージ投稿欄の表示は行いません。
+         */
+        "readOnlyNotice": string;
+        /**
+         * チャットルームを開く
+         */
+        "openChatRoom": string;
+    };
+    /**
      * 旧設定情報を移行
      */
     "migrateOldSettings": string;
@@ -5461,6 +5547,10 @@ export interface Locale extends ILocale {
          */
         "openRoom": string;
         /**
+         * 参加禁止
+         */
+        "closedRoom": string;
+        /**
          * ルームに参加
          */
         "joinRoom": string;
@@ -5477,9 +5567,17 @@ export interface Locale extends ILocale {
          */
         "needInvitationToJoinRoom": string;
         /**
-         * このルームは満員です。
+         * このルームは参加が禁止されています。
          */
-        "roomIsFull": string;
+        "joiningDisabledRoom": string;
+        /**
+         * このチャットルームは上限 {limit} 人に達しています。
+         */
+        "roomIsFull": ParameterizedString<"limit">;
+        /**
+         * このルームの人数上限は管理者のチャット設定で管理されています。
+         */
+        "roomMemberLimitManagedByAdmin": string;
         /**
          * ユーザーを招待してチャットを始めましょう
          */

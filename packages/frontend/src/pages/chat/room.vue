@@ -239,6 +239,8 @@ async function initialize() {
 				messages.value = [];
 				if (room.value.joinMode === 'open') {
 					joinRequiredRoom.value = room.value;
+				} else if (room.value.joinMode === 'closed') {
+					initializeError.value = i18n.ts._chat.joiningDisabledRoom;
 				} else {
 					initializeError.value = i18n.ts._chat.needInvitationToJoinRoom;
 				}
@@ -284,6 +286,9 @@ async function joinRoom() {
 			},
 			'b4855d16-3863-4600-8301-2a53f2f76541': {
 				text: i18n.tsx._chat.roomIsFull({ limit: room.value?.memberLimit ?? '?' }),
+			},
+			'bd6e849a-9870-4dcb-8025-765cf404f6d8': {
+				text: i18n.ts._chat.joiningDisabledRoom,
 			},
 		});
 		await initialize();

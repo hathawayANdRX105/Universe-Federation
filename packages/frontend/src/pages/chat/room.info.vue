@@ -17,6 +17,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<template #label>{{ i18n.ts._chat.roomJoinMode }}</template>
 		<option value="inviteOnly">{{ i18n.ts._chat.inviteOnlyRoom }}</option>
 		<option value="open">{{ i18n.ts._chat.openRoom }}</option>
+		<option value="closed">{{ i18n.ts._chat.closedRoom }}</option>
 	</MkSelect>
 
 	<MkInfo>

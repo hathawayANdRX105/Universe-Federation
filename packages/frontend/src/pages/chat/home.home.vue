@@ -112,6 +112,9 @@ async function createRoom() {
 			}, {
 				label: i18n.ts._chat.openRoom,
 				value: 'open',
+			}, {
+				label: i18n.ts._chat.closedRoom,
+				value: 'closed',
 			}],
 		},
 	});
@@ -121,7 +124,7 @@ async function createRoom() {
 	const room = await misskeyApi('chat/rooms/create', {
 		name: result.name.trim(),
 		description: result.description?.trim() ?? '',
-		joinMode: result.joinMode as 'inviteOnly' | 'open',
+		joinMode: result.joinMode as 'inviteOnly' | 'open' | 'closed',
 	});
 
 	router.push(`/chat/room/${room.id}`);
