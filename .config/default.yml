@@ -623,7 +623,7 @@ customHtml:
         width: 32px !important;
         height: 32px !important;
         flex: 0 0 32px !important;
-        background: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20128%20128'%20role='img'%20aria-label='hhhl'%3E%20%3Cdefs%3E%20%3ClinearGradient%20id='g'%20x1='18'%20y1='16'%20x2='112'%20y2='116'%20gradientUnits='userSpaceOnUse'%3E%20%3Cstop%20offset='0'%20stop-color='%232fb7ff'/%3E%20%3Cstop%20offset='1'%20stop-color='%231976d2'/%3E%20%3C/linearGradient%3E%20%3Cfilter%20id='s'%20x='-20%25'%20y='-20%25'%20width='140%25'%20height='140%25'%3E%20%3CfeDropShadow%20dx='0'%20dy='6'%20stdDeviation='7'%20flood-color='%230b4f8f'%20flood-opacity='0.22'/%3E%20%3C/filter%3E%20%3C/defs%3E%20%3Crect%20width='128'%20height='128'%20rx='28'%20fill='url(%23g)'/%3E%20%3Cpath%20d='M34%2094V28h17v24h26V28h17v66H77V67H51v27H34Z'%20fill='%23fff'%20filter='url(%23s)'/%3E%20%3Cpath%20d='M28%20102h72'%20stroke='%23bfeeff'%20stroke-width='8'%20stroke-linecap='round'%20opacity='0.85'/%3E%20%3C/svg%3E") center / contain no-repeat !important;
+        background: url("/static-assets/icons/512.png") center / contain no-repeat !important;
         -webkit-mask: none !important;
         mask: none !important;
       }
@@ -1170,7 +1170,7 @@ customHtml:
           display: block !important;
           width: 32px !important;
           height: 32px !important;
-          background: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20128%20128'%20role='img'%20aria-label='hhhl'%3E%20%3Cdefs%3E%20%3ClinearGradient%20id='g'%20x1='18'%20y1='16'%20x2='112'%20y2='116'%20gradientUnits='userSpaceOnUse'%3E%20%3Cstop%20offset='0'%20stop-color='%232fb7ff'/%3E%20%3Cstop%20offset='1'%20stop-color='%231976d2'/%3E%20%3C/linearGradient%3E%20%3Cfilter%20id='s'%20x='-20%25'%20y='-20%25'%20width='140%25'%20height='140%25'%3E%20%3CfeDropShadow%20dx='0'%20dy='6'%20stdDeviation='7'%20flood-color='%230b4f8f'%20flood-opacity='0.22'/%3E%20%3C/filter%3E%20%3C/defs%3E%20%3Crect%20width='128'%20height='128'%20rx='28'%20fill='url(%23g)'/%3E%20%3Cpath%20d='M34%2094V28h17v24h26V28h17v66H77V67H51v27H34Z'%20fill='%23fff'%20filter='url(%23s)'/%3E%20%3Cpath%20d='M28%20102h72'%20stroke='%23bfeeff'%20stroke-width='8'%20stroke-linecap='round'%20opacity='0.85'/%3E%20%3C/svg%3E") center / contain no-repeat !important;
+          background: url("/static-assets/icons/512.png") center / contain no-repeat !important;
           -webkit-mask: none !important;
           mask: none !important;
         }
