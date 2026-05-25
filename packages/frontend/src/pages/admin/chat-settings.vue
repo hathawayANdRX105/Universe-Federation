@@ -58,6 +58,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkError v-else-if="roomsError" @retry="reloadRooms"/>
 					<MkResult v-else-if="rooms.length === 0" type="empty"/>
 					<div v-else class="_gaps_s">
+						<div :class="$style.paginationBar">
+							<MkButton rounded :disabled="roomsPageIndex === 0 || roomsLoading" @click="goToPreviousRoomsPage"><i class="ti ti-chevron-left"></i> {{ i18n.ts._ad.back }}</MkButton>
+							<div :class="$style.pageIndicator">{{ i18n.ts.pages }} {{ roomsPageIndex + 1 }}</div>
+							<MkButton rounded primary :disabled="!roomsCanFetchMore || roomsLoading" @click="goToNextRoomsPage">{{ i18n.ts.next }} <i class="ti ti-chevron-right"></i></MkButton>
+						</div>
+
 						<div :class="$style.roomList">
 							<div v-for="item in rooms" :key="item.id" :class="$style.roomRow">
 								<div :class="$style.roomTop">
@@ -84,7 +90,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 								</div>
 							</div>
 						</div>
-						<MkButton v-if="roomsCanFetchMore" rounded primary :wait="roomsMoreFetching" @click="loadMoreRooms"><i class="ti ti-chevron-down"></i> {{ i18n.ts.loadMore }}</MkButton>
 					</div>
 				</div>
 			</MkFolder>
@@ -238,9 +243,10 @@ const roomDetailsEl = useTemplateRef<HTMLElement>('roomDetailsEl');
 const messagesEl = useTemplateRef<HTMLElement>('messagesEl');
 const rooms = ref<AdminChatRoomListItem[]>([]);
 const roomsLoading = ref(false);
-const roomsMoreFetching = ref(false);
 const roomsError = ref(false);
 const roomsCanFetchMore = ref(false);
+const roomsPageIndex = ref(0);
+const roomsPageCursors = ref<(string | null)[]>([null]);
 const messageRoom = ref<AdminChatRoomListItem | null>(null);
 const messages = ref<Misskey.entities.AdminChatRoomsMessagesResponse>([]);
 const messagesLoading = ref(false);
@@ -340,8 +346,8 @@ function updateRoomListItem(updated: AdminChatRoomInfo) {
 	} : item);
 }
 
-function reloadRooms() {
-	loadRooms(true);
+async function reloadRooms() {
+	await loadRooms(0);
 }
 
 function joinModeText(joinMode: Misskey.entities.ChatRoom['joinMode']) {
@@ -364,45 +370,56 @@ async function openMessages(item: AdminChatRoomListItem) {
 	}
 }
 
-async function loadRooms(reset = false) {
-	if (!reset && (!roomsCanFetchMore.value || roomsMoreFetching.value || roomsLoading.value)) return;
+async function loadRooms(pageIndex = roomsPageIndex.value) {
+	if (roomsLoading.value) return;
+	const cursor = roomsPageCursors.value[pageIndex];
+	if (cursor === undefined) return;
 
-	const loading = reset ? roomsLoading : roomsMoreFetching;
 	const requestId = ++roomsLoadRequestId;
-	loading.value = true;
-	if (reset) roomsError.value = false;
+	roomsLoading.value = true;
+	roomsError.value = false;
 
 	try {
 		const loaded = await misskeyApi('admin/chat/rooms/list', {
 			limit: ROOMS_LIMIT + 1,
 			query: roomQuery.value.trim() === '' ? null : roomQuery.value.trim(),
 			joinMode: joinModeFilter.value,
-			...(reset || rooms.value.length === 0 ? {} : {
-				untilId: rooms.value.at(-1)?.id,
+			...(cursor == null ? {} : {
+				untilId: cursor,
 			}),
 		});
 
 		if (requestId !== roomsLoadRequestId) return;
 
 		const page = loaded.slice(0, ROOMS_LIMIT);
-		rooms.value = reset ? page : [...rooms.value, ...page];
+		rooms.value = page;
+		roomsPageIndex.value = pageIndex;
 		roomsCanFetchMore.value = loaded.length > ROOMS_LIMIT;
-	} catch (err) {
-		if (reset) {
-			roomsError.value = true;
-		} else {
-			await os.alert({
-				type: 'error',
-				text: err instanceof Error ? err.message : String(err),
-			});
+		roomsPageCursors.value = roomsPageCursors.value.slice(0, pageIndex + 1);
+		if (roomsCanFetchMore.value && page.length > 0) {
+			roomsPageCursors.value[pageIndex + 1] = page.at(-1)?.id ?? null;
 		}
+	} catch (err) {
+		roomsError.value = true;
 	} finally {
-		if (requestId === roomsLoadRequestId) loading.value = false;
+		if (requestId === roomsLoadRequestId) roomsLoading.value = false;
 	}
 }
 
-async function loadMoreRooms() {
-	await loadRooms(false);
+async function resetRoomsPagination() {
+	roomsPageIndex.value = 0;
+	roomsPageCursors.value = [null];
+	await loadRooms(0);
+}
+
+async function goToPreviousRoomsPage() {
+	if (roomsPageIndex.value === 0) return;
+	await loadRooms(roomsPageIndex.value - 1);
+}
+
+async function goToNextRoomsPage() {
+	if (!roomsCanFetchMore.value) return;
+	await loadRooms(roomsPageIndex.value + 1);
 }
 
 async function loadMessages(reset = false) {
@@ -461,7 +478,7 @@ const headerActions = computed(() => []);
 const headerTabs = computed(() => []);
 
 watch([roomQuery, joinModeFilter], () => {
-	loadRooms(true);
+	resetRoomsPagination();
 }, { immediate: true });
 
 definePage({
@@ -512,6 +529,19 @@ definePage({
 	align-items: flex-end;
 	gap: 12px;
 	flex-wrap: wrap;
+}
+
+.paginationBar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.pageIndicator {
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 90%;
 }
 
 .filterInput {
