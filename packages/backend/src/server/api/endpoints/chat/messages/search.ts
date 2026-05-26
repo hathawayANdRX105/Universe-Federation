@@ -17,6 +17,12 @@ export const meta = {
 
 	kind: 'read:chat',
 
+	limit: {
+		type: 'bucket',
+		size: 10,
+		dripRate: 3000,
+	},
+
 	res: {
 		type: 'array',
 		optional: false, nullable: false,

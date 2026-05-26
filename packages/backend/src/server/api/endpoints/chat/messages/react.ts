@@ -16,6 +16,12 @@ export const meta = {
 
 	kind: 'write:chat',
 
+	limit: {
+		type: 'bucket',
+		size: 20,
+		dripRate: 1000,
+	},
+
 	errors: {
 		noSuchMessage: {
 			message: 'No such message.',

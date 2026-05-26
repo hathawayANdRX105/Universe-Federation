@@ -95,7 +95,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
 
-			if (ps.text && ps.text.length > this.config.maxNoteLength) {
+			const text = ps.text?.trim();
+			if (text && text.length > this.config.maxNoteLength) {
 				throw new ApiError(meta.errors.maxLength);
 			}
 
@@ -121,7 +122,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			// テキストが無いかつ添付ファイルも無かったらエラー
-			if (ps.text == null && file == null) {
+			if ((text == null || text.length === 0) && file == null) {
 				throw new ApiError(meta.errors.contentRequired);
 			}
 
@@ -135,7 +136,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			return await this.chatService.createMessageToRoom(me, room, {
-				text: ps.text,
+				text,
 				file: file,
 				reply,
 				quote,

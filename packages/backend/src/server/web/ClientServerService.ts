@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Inject, Injectable } from '@nestjs/common';
@@ -70,6 +71,11 @@ const swAssets = `${_dirname}/../../../../../built/_sw_dist_/`;
 const frontendViteOut = `${_dirname}/../../../../../built/_frontend_vite_/`;
 const frontendEmbedViteOut = `${_dirname}/../../../../../built/_frontend_embed_vite_/`;
 const tarball = `${_dirname}/../../../../../built/tarball/`;
+
+type FrontendManifestEntry = {
+	file: string;
+	css?: string[];
+};
 
 @Injectable()
 export class ClientServerService {
@@ -163,8 +169,46 @@ export class ClientServerService {
 	}
 
 	@bindThis
+	private getCurrentFrontendRenderConfig(): Config {
+		const manifestPath = `${frontendViteOut}manifest.json`;
+		const embedManifestPath = `${frontendEmbedViteOut}manifest.json`;
+		const frontendManifestExists = fs.existsSync(manifestPath);
+		const frontendEmbedManifestExists = fs.existsSync(embedManifestPath);
+
+		let frontendEntry: FrontendManifestEntry = this.config.frontendEntry;
+		let frontendEmbedEntry: FrontendManifestEntry = this.config.frontendEmbedEntry;
+
+		if (frontendManifestExists) {
+			try {
+				const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as Record<string, FrontendManifestEntry>;
+				frontendEntry = manifest['src/_boot_.ts'] ?? frontendEntry;
+			} catch (err) {
+				// Fall back to the startup-time entry if a rebuild is in progress.
+			}
+		}
+
+		if (frontendEmbedManifestExists) {
+			try {
+				const manifest = JSON.parse(fs.readFileSync(embedManifestPath, 'utf-8')) as Record<string, FrontendManifestEntry>;
+				frontendEmbedEntry = manifest['src/boot.ts'] ?? frontendEmbedEntry;
+			} catch (err) {
+				// Fall back to the startup-time entry if a rebuild is in progress.
+			}
+		}
+
+		return {
+			...this.config,
+			frontendEntry,
+			frontendManifestExists,
+			frontendEmbedEntry,
+			frontendEmbedManifestExists,
+		};
+	}
+
+	@bindThis
 	private async generateCommonPugData(meta: MiMeta) {
 		return {
+			config: this.getCurrentFrontendRenderConfig(),
 			instanceName: meta.name ?? 'hhhl',
 			icon: meta.iconUrl,
 			appleTouchIcon: meta.app512IconUrl,

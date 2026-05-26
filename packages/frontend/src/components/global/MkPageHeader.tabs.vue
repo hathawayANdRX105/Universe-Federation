@@ -194,10 +194,25 @@ onUnmounted(() => {
 	overflow-x: auto;
 	overflow-y: hidden;
 	scrollbar-width: none;
+	color: var(--page-header-tab-fg, inherit);
 
 	&::-webkit-scrollbar {
 		display: none;
 	}
+}
+
+:global(html[data-color-scheme=dark]) {
+	.tabs {
+		--page-header-tab-fg: #fff;
+	}
+}
+
+:global(html[data-color-scheme=dark] [class*="MkPageHeader-tabs-tabs-"]),
+:global(html[data-color-scheme=dark] [class*="MkPageHeader-tabs-tab-"]),
+:global(html[data-color-scheme=dark] [class*="MkPageHeader-tabs-tabInner-"]),
+:global(html[data-color-scheme=dark] [class*="MkPageHeader-tabs-tabIcon-"]),
+:global(html[data-color-scheme=dark] [class*="MkPageHeader-tabs-tabTitle-"]) {
+	color: #fff !important;
 }
 
 .tabsInner {
@@ -213,6 +228,7 @@ onUnmounted(() => {
 	height: 100%;
 	font-weight: normal;
 	opacity: 0.7;
+	color: var(--page-header-tab-fg, inherit);
 
 	&:hover {
 		opacity: 1;
@@ -220,7 +236,7 @@ onUnmounted(() => {
 
 	&.active {
 		opacity: 1;
-		color: var(--MI_THEME-accent);
+		color: var(--page-header-tab-fg, var(--MI_THEME-accent));
 	}
 
 	&.animate {
@@ -231,6 +247,12 @@ onUnmounted(() => {
 .tabInner {
 	display: flex;
 	align-items: center;
+	color: inherit;
+}
+
+.tabIcon,
+.tabTitle {
+	color: inherit;
 }
 
 .tabIcon + .tabTitle {

@@ -114,6 +114,7 @@ onMounted(() => {
 	background: transparent;
 	border: solid 1px transparent;
 	box-shadow: none;
+	color: var(--MI_THEME-fg);
 
 	&:hover {
 		background: var(--MI_THEME-buttonHoverBg);
@@ -194,15 +195,17 @@ onMounted(() => {
 	text-overflow: ellipsis;
 	font-size: 1em;
 	font-weight: bold;
+	color: inherit;
 }
 
 .messageHeaderUsername {
 	margin: 0 8px;
+	color: inherit;
 }
 
 .messageHeaderTime {
 	margin-left: auto;
-	color: var(--MI_THEME-fgTransparentWeak);
+	color: color-mix(in srgb, currentColor 72%, transparent);
 	font-size: 90%;
 }
 
@@ -211,12 +214,23 @@ onMounted(() => {
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	overflow-wrap: break-word;
-	color: var(--MI_THEME-fgTransparentWeak);
+	color: color-mix(in srgb, currentColor 82%, transparent);
 	font-size: 0.95em;
 }
 
 .youSaid {
 	font-weight: bold;
 	margin-right: 0.5em;
+}
+
+:global(html[data-color-scheme=dark]) {
+	.message {
+		color: #fff;
+	}
+
+	.messageHeaderTime,
+	.messageBodyText {
+		color: color-mix(in srgb, #fff 86%, transparent);
+	}
 }
 </style>

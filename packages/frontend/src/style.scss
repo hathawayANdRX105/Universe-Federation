@@ -575,6 +575,21 @@ html[data-color-scheme=dark] ._woodenFrame {
 	--MI_THEME-panel: #192320;
 }
 
+html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-item-"],
+html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-itemIcon-"],
+html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-itemText-"],
+html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-active-"][class*="navbar-item-"] {
+	color: #fff !important;
+}
+
+html[data-color-scheme=dark] [class*="MkPageHeader-tabs-tabs-"],
+html[data-color-scheme=dark] [class*="MkPageHeader-tabs-tab-"],
+html[data-color-scheme=dark] [class*="MkPageHeader-tabs-tabInner-"],
+html[data-color-scheme=dark] [class*="MkPageHeader-tabs-tabIcon-"],
+html[data-color-scheme=dark] [class*="MkPageHeader-tabs-tabTitle-"] {
+	color: #fff !important;
+}
+
 ._woodenFrameH {
 	display: flex;
 	gap: 6px;

@@ -41,6 +41,11 @@ export class AppLockService {
 	public getChartInsertLock(lockKey: string, timeout = 30 * 1000): Promise<Unlock> {
 		return this.lock(`chart-insert:${lockKey}`, timeout);
 	}
+
+	@bindThis
+	public getChatRoomJoinLock(roomId: string, timeout = 10 * 1000): Promise<Unlock> {
+		return this.lock(`chat-room-join:${roomId}`, timeout);
+	}
 }
 
 /**

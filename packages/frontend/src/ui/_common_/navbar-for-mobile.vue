@@ -88,6 +88,13 @@ function more() {
 	flex-direction: column;
 }
 
+:global(html[data-color-scheme=dark]) {
+	.root {
+		--navbar-readable-fg: #fff;
+		--navbar-readable-fg-muted: color-mix(in srgb, #fff 82%, transparent);
+	}
+}
+
 .top {
 	position: sticky;
 	top: 0;
@@ -224,15 +231,19 @@ function more() {
 	width: 100%;
 	text-align: left;
 	box-sizing: border-box;
-	color: var(--MI_THEME-navFg);
+	color: var(--navbar-readable-fg, var(--MI_THEME-navFg));
 
 	&:hover {
 		text-decoration: none;
-		color: light-dark(hsl(from var(--MI_THEME-navFg) h s calc(l - 17)), hsl(from var(--MI_THEME-navFg) h s calc(l + 17)));
+		color: var(--navbar-readable-fg, light-dark(hsl(from var(--MI_THEME-navFg) h s calc(l - 17)), hsl(from var(--MI_THEME-navFg) h s calc(l + 17))));
 	}
 
 	&.active {
-		color: var(--MI_THEME-navActive);
+		color: var(--navbar-readable-fg, var(--MI_THEME-navActive));
+	}
+
+	&:focus {
+		color: var(--navbar-readable-fg, var(--MI_THEME-navActive));
 	}
 }
 

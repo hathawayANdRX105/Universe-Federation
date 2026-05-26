@@ -36,12 +36,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<MkFolder :defaultOpen="true">
 				<template #label>{{ i18n.ts.textColor }}</template>
-				<div class="cwepdizn-colors">
-					<div class="row">
-						<button v-for="color in fgColors" :key="color" class="color char _button" :class="{ active: (theme.props.fg === color.forLight) || (theme.props.fg === color.forDark) }" @click="setFgColor(color)">
-							<div class="preview" :style="{ color: color.forPreview ? color.forPreview : theme.base === 'light' ? '#5f5f5f' : '#dadada' }">A</div>
-						</button>
+				<div class="_gaps_m">
+					<div class="cwepdizn-colors">
+						<div class="row">
+							<button v-for="color in fgColors" :key="color" class="color char _button" :class="{ active: (theme.props.fg === color.forLight) || (theme.props.fg === color.forDark) }" @click="setFgColor(color)">
+								<div class="preview" :style="{ color: color.forPreview ? color.forPreview : theme.base === 'light' ? '#5f5f5f' : '#dadada' }">A</div>
+							</button>
+						</div>
 					</div>
+					<MkColorInput v-model="customFgColor">
+						<template #label>{{ i18n.ts.textColor }}</template>
+					</MkColorInput>
 				</div>
 			</MkFolder>
 
@@ -83,6 +88,7 @@ import { host } from '@@/js/config.js';
 import type { Theme } from '@/theme.js';
 import MkButton from '@/components/MkButton.vue';
 import MkCodeEditor from '@/components/MkCodeEditor.vue';
+import MkColorInput from '@/components/MkColorInput.vue';
 import MkTextarea from '@/components/MkTextarea.vue';
 import MkFolder from '@/components/MkFolder.vue';
 import { $i } from '@/i.js';
@@ -130,6 +136,14 @@ const theme = ref<Partial<Theme>>({
 const description = ref<string | null>(null);
 const themeCode = ref<string | null>(null);
 const changed = ref(false);
+const customFgColor = computed({
+	get: () => theme.value.props.fg ?? null,
+	set: (value) => {
+		if (value != null && value !== '') {
+			theme.value.props.fg = value;
+		}
+	},
+});
 
 useLeaveGuard(changed);
 

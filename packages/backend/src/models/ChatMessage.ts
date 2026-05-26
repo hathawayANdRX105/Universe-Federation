@@ -10,6 +10,7 @@ import { MiDriveFile } from './DriveFile.js';
 import { MiChatRoom } from './ChatRoom.js';
 
 @Entity('chat_message')
+@Index('IDX_chat_message_room_id_desc', { synchronize: false }) // (toRoomId, id desc) WHERE toRoomId IS NOT NULL
 export class MiChatMessage {
 	@PrimaryColumn(id())
 	public id: string;

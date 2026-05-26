@@ -227,16 +227,50 @@ export async function common(createVue: () => Promise<App<Element>>) {
 	}
 	//#endregion
 
+	function ensureDarkReadableOverrides() {
+		const styleId = 'codex-dark-readable-overrides';
+		if (window.document.getElementById(styleId)) return;
+
+		const style = window.document.createElement('style');
+		style.id = styleId;
+		style.textContent = `
+html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-item-"],
+html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"],
+html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-itemText-"],
+html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-active-"][class*="navbar-item-"],
+html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-item-"],
+html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"],
+html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemText-"],
+html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-active-"][class*="navbar-item-"],
+html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabs-"],
+html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tab-"],
+html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabInner-"],
+html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabIcon-"],
+html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabTitle-"],
+html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabs-"],
+html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tab-"],
+html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabInner-"],
+html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabIcon-"],
+html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabTitle-"] {
+	color: #fff !important;
+	-webkit-text-fill-color: #fff !important;
+	opacity: 1 !important;
+}
+`;
+		window.document.head.appendChild(style);
+	}
+
 	// NOTE: この処理は必ずクライアント更新チェック処理より後に来ること(テーマ再構築のため)
-	watch(store.r.darkMode, (darkMode) => {
+	function applyCurrentTheme(darkMode = store.s.darkMode) {
 		applyTheme(darkMode
 			? (prefer.s.darkTheme ?? defaultDarkTheme)
 			: (prefer.s.lightTheme ?? defaultLightTheme),
 		);
 		window.document.documentElement.dataset.colorScheme = darkMode ? 'dark' : 'light';
-	}, { immediate: true });
+		ensureDarkReadableOverrides();
+	}
 
-	window.document.documentElement.dataset.colorScheme = store.s.darkMode ? 'dark' : 'light';
+	watch(store.r.darkMode, applyCurrentTheme, { immediate: true });
 
 	const darkTheme = prefer.model('darkTheme');
 	const lightTheme = prefer.model('lightTheme');
@@ -256,17 +290,20 @@ export async function common(createVue: () => Promise<App<Element>>) {
 	//#region Sync dark mode
 	if (prefer.s.syncDeviceDarkMode) {
 		store.set('darkMode', isDeviceDarkmode());
+		applyCurrentTheme();
 	}
 
 	window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (mql) => {
 		if (prefer.s.syncDeviceDarkMode) {
 			store.set('darkMode', mql.matches);
+			applyCurrentTheme(mql.matches);
 		}
 	});
 
 	watch(prefer.r.syncDeviceDarkMode, (syncDeviceDarkMode) => {
 		if (syncDeviceDarkMode) {
 			store.set('darkMode', isDeviceDarkmode());
+			applyCurrentTheme();
 		}
 	});
 	//#endregion

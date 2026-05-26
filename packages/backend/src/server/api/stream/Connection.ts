@@ -53,6 +53,12 @@ export const MaxChannelsPerConnection = 32;
 export const MaxSubscriptionsPerChannel = 512;
 
 /**
+ * Maximum number of bytes ws is allowed to queue for a single client before
+ * the connection is closed to protect broadcast latency for healthy clients.
+ */
+export const MaxWsBufferedAmount = 16 * 1024 * 1024;
+
+/**
  * Maximum number of milliseconds to wait for close() before terminating immediately.
  * https://github.com/websockets/ws/blob/master/doc/ws.md#new-websocketserveroptions-callback
  */
@@ -353,8 +359,28 @@ export class Connection extends SkEventSource<ConnectionEvents> {
 
 	@bindThis
 	private onRedisMessage(_: string, data: string): void {
-		const { channel, message } = JSON.parse(data) as GlobalEvent<GlobalEventNames>;
-		this.subscriber.emit(channel, message);
+		if (!Connection.shouldParseRedisMessage(data, channel => this.subscriber.listenerCount(channel) > 0)) return;
+
+		const { channel: parsedChannel, message } = JSON.parse(data) as GlobalEvent<GlobalEventNames>;
+		this.subscriber.emit(parsedChannel, message);
+	}
+
+	// Exposed for focused tests without constructing a full websocket connection.
+	public static shouldParseRedisMessage(data: string, hasListener: (channel: GlobalEventNames) => boolean): boolean {
+		const marker = '"channel":"';
+		const markerIndex = data.indexOf(marker);
+		if (markerIndex === -1) return true;
+
+		const channelStart = markerIndex + marker.length;
+		const channelEnd = data.indexOf('"', channelStart);
+		if (channelEnd === -1) return true;
+
+		const channel = data.slice(channelStart, channelEnd) as GlobalEventNames;
+		return hasListener(channel);
+	}
+
+	public static shouldCloseForBackpressure(bufferedAmount: number): boolean {
+		return bufferedAmount > MaxWsBufferedAmount;
 	}
 
 	/**
@@ -624,6 +650,11 @@ export class Connection extends SkEventSource<ConnectionEvents> {
 	public async sendMessageToWs<T extends Record<string, unknown>>(type: string, payload?: T): Promise<void> {
 		// Don't throw, since we might end up here if an async call completes while the connection is closing.
 		if (!this.isActive) return;
+
+		if (Connection.shouldCloseForBackpressure(this.wsConnection.bufferedAmount)) {
+			await this.close(1013, 'WebSocket send buffer exceeded');
+			return;
+		}
 
 		const message = JSON.stringify({
 			type: type,

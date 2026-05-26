@@ -77,10 +77,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:enterFromClass="$style.transition_x_enterFrom"
 					:leaveToClass="$style.transition_x_leaveTo"
 					:moveClass="$style.transition_x_move"
-					:animate="!isRestoringHistoryScroll"
+					:animate="!isRestoringHistoryScroll && !isRoomChat"
 					tag="div" :class="$style.messageList"
 				>
-					<div v-for="item in timeline.toReversed()" :key="item.id" :data-scroll-anchor="item.type === 'item' ? item.id : undefined">
+					<div v-for="item in timeline.toReversed()" :key="item.id" :class="$style.messageItem" :data-scroll-anchor="item.type === 'item' ? item.id : undefined">
 						<XMessage v-if="item.type === 'item'" :message="item.data" :enableReferenceActions="true" @reply="setReplyTarget(item.data)" @quote="setQuoteTarget(item.data)"/>
 						<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
 							<span><i class="ti ti-chevron-up"></i> {{ item.nextText }}</span>
@@ -194,10 +194,12 @@ const timeline = makeDateSeparatedTimelineComputedRef(messages);
 const SCROLL_HEAD_THRESHOLD = 200;
 const SCROLL_HISTORY_THRESHOLD = 480;
 const TIMELINE_LIMIT = 20;
+const MAX_ROOM_MESSAGES = 500;
 const STREAM_CONNECT_TIMEOUT = 5000;
 let removeTimelineScrollListener: (() => void) | null = null;
 let historyFetchArmed = true;
 const isRestoringHistoryScroll = ref(false);
+const isRoomChat = computed(() => props.roomId != null);
 
 function isAtLatest() {
 	if (timelineEl.value == null) return true;
@@ -325,6 +327,11 @@ function sortMessages(items: NormalizedChatMessage[]): NormalizedChatMessage[] {
 	return [...items].sort((a, b) => a.id > b.id ? -1 : a.id < b.id ? 1 : 0);
 }
 
+function trimMessages(items: NormalizedChatMessage[]): NormalizedChatMessage[] {
+	if (!isRoomChat.value || items.length <= MAX_ROOM_MESSAGES) return items;
+	return items.slice(0, MAX_ROOM_MESSAGES);
+}
+
 function mergeMessages(...sources: NormalizedChatMessage[][]): NormalizedChatMessage[] {
 	const map = new Map<string, NormalizedChatMessage>();
 
@@ -334,7 +341,23 @@ function mergeMessages(...sources: NormalizedChatMessage[][]): NormalizedChatMes
 		}
 	}
 
-	return sortMessages([...map.values()]);
+	return trimMessages(sortMessages([...map.values()]));
+}
+
+function prependMessage(message: NormalizedChatMessage) {
+	const existingIndex = messages.value.findIndex(item => item.id === message.id);
+	if (existingIndex !== -1) {
+		messages.value[existingIndex] = message;
+		return;
+	}
+
+	const current = messages.value;
+	if (current.length === 0 || message.id > current[0].id) {
+		messages.value = trimMessages([message, ...current]);
+		return;
+	}
+
+	messages.value = mergeMessages(current, [message]);
 }
 
 function appendFetchedMessages(fetched: Misskey.entities.ChatMessageLite[]) {
@@ -342,7 +365,7 @@ function appendFetchedMessages(fetched: Misskey.entities.ChatMessageLite[]) {
 }
 
 function onSentMessage(message: Misskey.entities.ChatMessageLite) {
-	messages.value = mergeMessages(messages.value, [normalizeMessage(message)]);
+	prependMessage(normalizeMessage(message));
 	replyTarget.value = null;
 	quoteTarget.value = null;
 	nextTick(() => scrollToLatest('instant'));
@@ -547,7 +570,7 @@ function onMessage(message: Misskey.entities.ChatMessageLite) {
 		sound.playMisskeySfx('chatMessage');
 	}
 
-	messages.value = mergeMessages(messages.value, [normalizeMessage(message)]);
+	prependMessage(normalizeMessage(message));
 
 	// TODO: DOM的にバックグラウンドになっていないかどうかも考慮する
 	if (message.fromUserId !== $i.id && !window.document.hidden && isActivated) {
@@ -907,11 +930,25 @@ definePage(computed(() => {
 .timeline {
 	display: grid;
 	gap: 8px;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
 }
 
 .messageList {
 	display: grid;
 	gap: 6px;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	overflow: clip;
+}
+
+.messageItem {
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
 }
 
 .more {
@@ -931,6 +968,7 @@ definePage(computed(() => {
 	overflow-y: scroll;
 	overflow-anchor: none;
 	overscroll-behavior: contain;
+	scrollbar-gutter: stable;
 	display: flex;
 	flex-direction: column-reverse;
 	background:

@@ -33,9 +33,12 @@ import { TimeService } from '@/global/TimeService.js';
 import { CacheService } from '@/core/CacheService.js';
 import { isLocalUser } from '@/models/User.js';
 import { MiMeta } from '@/models/Meta.js';
+import { AppLockService } from '@/core/AppLockService.js';
 
 export const MIN_CHAT_ROOM_MEMBER_LIMIT = 1;
 export const MAX_CHAT_ROOM_MEMBER_LIMIT = 10000;
+export const LARGE_CHAT_ROOM_MEMBER_THRESHOLD = 500;
+const ROOM_MEMBER_COUNT_CACHE_TTL = 60;
 const MAX_REACTIONS_PER_MESSAGE = 100;
 const isCustomEmojiRegexp = /^:([\w+-]+)(?:@\.)?:$/;
 type ChatMessageReference = Pick<MiChatMessage, 'id' | 'toUserId' | 'toRoomId'>;
@@ -54,8 +57,15 @@ function normalizeEmojiString(x: string) {
 	}
 }
 
+function normalizeMessageText(text: string | null | undefined): string | null {
+	const normalized = text?.trim();
+	return normalized && normalized.length > 0 ? normalized : null;
+}
+
 @Injectable()
 export class ChatService {
+	private readonly roomMemberCountLoads = new Map<MiChatRoom['id'], Promise<number>>();
+
 	constructor(
 		@Inject(DI.config)
 		private config: Config,
@@ -103,6 +113,7 @@ export class ChatService {
 		private moderationLogService: ModerationLogService,
 		private readonly timeService: TimeService,
 		private readonly cacheService: CacheService,
+		private readonly appLockService: AppLockService,
 	) {
 	}
 
@@ -197,11 +208,16 @@ export class ChatService {
 			throw new Error('blocked');
 		}
 
+		const text = normalizeMessageText(params.text);
+		if (text == null && params.file == null) {
+			throw new Error('content required');
+		}
+
 		const message = {
 			id: this.idService.gen(),
 			fromUserId: fromUser.id,
 			toUserId: toUser.id,
-			text: params.text ? params.text.trim() : null,
+			text,
 			fileId: params.file ? params.file.id : null,
 			replyId: params.reply?.id ?? null,
 			quoteId: params.quote?.id ?? null,
@@ -263,25 +279,28 @@ export class ChatService {
 		reply?: ChatMessageReference | null;
 		quote?: ChatMessageReference | null;
 	}): Promise<Packed<'ChatMessageLiteForRoom'>> {
-		const memberships = (await this.chatRoomMembershipsRepository.findBy({ roomId: toRoom.id })).map(m => ({
-			userId: m.userId,
-			isMuted: m.isMuted,
-		})).concat({ // ownerはmembershipレコードを作らないため
-			userId: toRoom.ownerId,
-			isMuted: false,
-		});
+		const [membershipsCount, senderMembership] = await Promise.all([
+			this.getRoomMembersCountForMessageFanout(toRoom.id),
+			toRoom.ownerId === fromUser.id ? Promise.resolve({ userId: fromUser.id, isMuted: false }) : this.chatRoomMembershipsRepository.findOne({
+				select: { userId: true, isMuted: true },
+				where: { roomId: toRoom.id, userId: fromUser.id },
+			}),
+		]);
 
-		if (!memberships.some(member => member.userId === fromUser.id)) {
-			throw new Error('you are not a member of the room');
+		if (senderMembership == null) throw new Error('you are not a member of the room');
+
+		const isLargeRoom = membershipsCount > LARGE_CHAT_ROOM_MEMBER_THRESHOLD;
+
+		const text = normalizeMessageText(params.text);
+		if (text == null && params.file == null) {
+			throw new Error('content required');
 		}
-
-		const membershipsOtherThanMe = memberships.filter(member => member.userId !== fromUser.id);
 
 		const message = {
 			id: this.idService.gen(),
 			fromUserId: fromUser.id,
 			toRoomId: toRoom.id,
-			text: params.text ? params.text.trim() : null,
+			text,
 			fileId: params.file ? params.file.id : null,
 			replyId: params.reply?.id ?? null,
 			quoteId: params.quote?.id ?? null,
@@ -294,6 +313,20 @@ export class ChatService {
 		const packedMessage = await this.chatEntityService.packMessageLiteForRoom(inserted);
 
 		this.globalEventService.publishChatRoomStream(toRoom.id, 'message', packedMessage);
+
+		if (isLargeRoom) {
+			await this.redisClient.set(`latestRoomChatMessage:${toRoom.id}`, message.id, 'EX', 60 * 60 * 24 * 30);
+			return packedMessage;
+		}
+
+		const memberships = (await this.chatRoomMembershipsRepository.findBy({ roomId: toRoom.id })).map(m => ({
+			userId: m.userId,
+			isMuted: m.isMuted,
+		})).concat({ // ownerはmembershipレコードを作らないため
+			userId: toRoom.ownerId,
+			isMuted: false,
+		});
+		const membershipsOtherThanMe = memberships.filter(member => member.userId !== fromUser.id);
 
 		const redisPipeline = this.redisClient.pipeline();
 		for (const membership of membershipsOtherThanMe) {
@@ -345,9 +378,13 @@ export class ChatService {
 		readerId: MiUser['id'],
 		roomId: MiChatRoom['id'],
 	): Promise<void> {
+		const latestRoomMessageId = await this.redisClient.get(`latestRoomChatMessage:${roomId}`);
 		const redisPipeline = this.redisClient.pipeline();
 		redisPipeline.del(`newRoomChatMessageExists:${readerId}:${roomId}`);
 		redisPipeline.srem(`newChatMessagesExists:${readerId}`, `room:${roomId}`);
+		if (latestRoomMessageId != null) {
+			redisPipeline.set(`readRoomChatMessage:${readerId}:${roomId}`, latestRoomMessageId, 'EX', 60 * 60 * 24 * 30);
+		}
 		await redisPipeline.exec();
 	}
 
@@ -489,45 +526,33 @@ export class ChatService {
 
 	@bindThis
 	public async roomHistory(meId: MiUser['id'], limit: number): Promise<MiChatMessage[]> {
-		// TODO: 一回のクエリにまとめられるかも
-		const [memberRoomIds, ownedRoomIds] = await Promise.all([
-			this.chatRoomMembershipsRepository.findBy({
-				userId: meId,
-			}).then(xs => xs.map(x => x.roomId)),
-			this.chatRoomsRepository.findBy({
-				ownerId: meId,
-			}).then(xs => xs.map(x => x.id)),
-		]);
+		const memberRoomsQuery = this.chatRoomMembershipsRepository.createQueryBuilder('membership')
+			.select('membership.roomId')
+			.where('membership.userId = :meId', { meId });
 
-		const roomIds = memberRoomIds.concat(ownedRoomIds);
+		const ownedRoomsQuery = this.chatRoomsRepository.createQueryBuilder('room')
+			.select('room.id')
+			.where('room.ownerId = :meId', { meId });
 
-		if (memberRoomIds.length === 0 && ownedRoomIds.length === 0) {
-			return [];
-		}
+		const latestMessageIdsQuery = this.chatMessagesRepository.createQueryBuilder('latest')
+			.distinctOn(['latest.toRoomId'])
+			.select('latest.id')
+			.where(new Brackets(qb => {
+				qb
+					.where(`latest.toRoomId IN (${memberRoomsQuery.getQuery()})`)
+					.orWhere(`latest.toRoomId IN (${ownedRoomsQuery.getQuery()})`);
+			}))
+			.orderBy('latest.toRoomId', 'ASC')
+			.addOrderBy('latest.id', 'DESC')
+			.setParameters(memberRoomsQuery.getParameters())
+			.setParameters(ownedRoomsQuery.getParameters());
 
-		const history: MiChatMessage[] = [];
-
-		for (let i = 0; i < limit; i++) {
-			const found = history.map(m => m.toRoomId!);
-
-			const query = this.chatMessagesRepository.createQueryBuilder('message')
-				.orderBy('message.id', 'DESC')
-				.where('message.toRoomId IN (:...roomIds)', { roomIds });
-
-			if (found.length > 0) {
-				query.andWhere('message.toRoomId NOT IN (:...found)', { found: found });
-			}
-
-			const message = await query.getOne();
-
-			if (message) {
-				history.push(message);
-			} else {
-				break;
-			}
-		}
-
-		return history;
+		return await this.chatMessagesRepository.createQueryBuilder('message')
+			.where(`message.id IN (${latestMessageIdsQuery.getQuery()})`)
+			.orderBy('message.id', 'DESC')
+			.take(limit)
+			.setParameters(latestMessageIdsQuery.getParameters())
+			.getMany();
 	}
 
 	@bindThis
@@ -559,14 +584,18 @@ export class ChatService {
 
 		for (const roomId of roomIds) {
 			redisPipeline.get(`newRoomChatMessageExists:${userId}:${roomId}`);
+			redisPipeline.get(`latestRoomChatMessage:${roomId}`);
+			redisPipeline.get(`readRoomChatMessage:${userId}:${roomId}`);
 		}
 
 		const markers = await redisPipeline.exec();
 		if (markers == null) throw new Error('redis error');
 
 		for (let i = 0; i < roomIds.length; i++) {
-			const marker = markers[i][1];
-			readStateMap[roomIds[i]] = marker == null;
+			const marker = markers[i * 3][1];
+			const latestRoomMessageId = markers[(i * 3) + 1][1];
+			const readRoomMessageId = markers[(i * 3) + 2][1];
+			readStateMap[roomIds[i]] = marker == null && (latestRoomMessageId == null || latestRoomMessageId === readRoomMessageId);
 		}
 
 		return readStateMap;
@@ -615,6 +644,38 @@ export class ChatService {
 	}
 
 	@bindThis
+	private async getRoomMembersCountForMessageFanout(roomId: MiChatRoom['id']) {
+		const cacheKey = `chatRoomMembersCount:${roomId}`;
+		const cached = await this.redisClient.get(cacheKey);
+		if (cached != null) {
+			const parsed = Number.parseInt(cached, 10);
+			if (Number.isSafeInteger(parsed) && parsed >= MIN_CHAT_ROOM_MEMBER_LIMIT) return parsed;
+		}
+
+		const loading = this.roomMemberCountLoads.get(roomId);
+		if (loading) return await loading;
+
+		const load = (async () => {
+			const count = await this.getRoomMembersCount(roomId);
+			await this.redisClient.set(cacheKey, count.toString(), 'EX', ROOM_MEMBER_COUNT_CACHE_TTL);
+			return count;
+		})();
+		this.roomMemberCountLoads.set(roomId, load);
+
+		try {
+			return await load;
+		} finally {
+			this.roomMemberCountLoads.delete(roomId);
+		}
+	}
+
+	@bindThis
+	private async deleteRoomMembersCountCache(roomId: MiChatRoom['id']) {
+		this.roomMemberCountLoads.delete(roomId);
+		await this.redisClient.del(`chatRoomMembersCount:${roomId}`);
+	}
+
+	@bindThis
 	public async hasPermissionToDeleteRoom(me: MiUser, room: MiChatRoom) {
 		if (room.ownerId === me.id) {
 			return true;
@@ -631,6 +692,7 @@ export class ChatService {
 	@bindThis
 	public async deleteRoom(room: MiChatRoom, deleter?: MiUser) {
 		await this.chatRoomsRepository.delete(room.id);
+		await this.deleteRoomMembersCountCache(room.id);
 
 		// Erase any message notifications for this room
 		const redisPipeline = this.redisClient.pipeline();
@@ -748,10 +810,6 @@ export class ChatService {
 	public async joinToRoom(userId: MiUser['id'], roomId: MiChatRoom['id']) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 
-		if (await this.isRoomMember(room, userId)) {
-			throw new Error('already member');
-		}
-
 		if (room.joinMode === 'closed') {
 			throw new Error('joining disabled');
 		}
@@ -761,21 +819,30 @@ export class ChatService {
 			throw new Error('invitation required');
 		}
 
-		const membershipsCount = await this.getRoomMembersCount(roomId);
-		if (membershipsCount >= this.getEffectiveRoomMemberLimit(room)) {
-			throw new Error('room is full');
-		}
+		const unlock = await this.appLockService.getChatRoomJoinLock(roomId);
+		try {
+			if (await this.isRoomMember(room, userId)) {
+				throw new Error('already member');
+			}
 
-		const membership = {
-			id: this.idService.gen(),
-			roomId: roomId,
-			userId: userId,
-		} satisfies Partial<MiChatRoomMembership>;
+			const membershipsCount = await this.getRoomMembersCount(roomId);
+			if (membershipsCount >= this.getEffectiveRoomMemberLimit(room)) {
+				throw new Error('room is full');
+			}
 
-		// TODO: transaction
-		await this.chatRoomMembershipsRepository.insertOne(membership);
-		if (invitation != null) {
-			await this.chatRoomInvitationsRepository.delete(invitation.id);
+			const membership = {
+				id: this.idService.gen(),
+				roomId: roomId,
+				userId: userId,
+			} satisfies Partial<MiChatRoomMembership>;
+
+			await this.chatRoomMembershipsRepository.insertOne(membership);
+			await this.deleteRoomMembersCountCache(roomId);
+			if (invitation != null) {
+				await this.chatRoomInvitationsRepository.delete(invitation.id);
+			}
+		} finally {
+			await unlock();
 		}
 	}
 
@@ -789,6 +856,7 @@ export class ChatService {
 	public async leaveRoom(userId: MiUser['id'], roomId: MiChatRoom['id']) {
 		const membership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
 		await this.chatRoomMembershipsRepository.delete(membership.id);
+		await this.deleteRoomMembersCountCache(roomId);
 	}
 
 	@bindThis
@@ -950,10 +1018,17 @@ export class ChatService {
 
 		await this.chatMessagesRepository.createQueryBuilder().update()
 			.set({
-				reactions: () => `array_append("reactions", '${userId}/${reaction}')`,
+				reactions: () => 'array_append("reactions", :reactionRecord)',
 			})
 			.where('id = :id', { id: message.id })
-			.execute();
+			.andWhere('NOT (:reactionRecord = ANY("reactions"))')
+			.andWhere('cardinality("reactions") < :maxReactions')
+			.setParameter('reactionRecord', `${userId}/${reaction}`)
+			.setParameter('maxReactions', MAX_REACTIONS_PER_MESSAGE)
+			.execute()
+			.then(result => {
+				if (result.affected === 0) throw new Error('reaction not changed');
+			});
 
 		if (room) {
 			this.globalEventService.publishChatRoomStream(room.id, 'react', {
@@ -991,15 +1066,24 @@ export class ChatService {
 		const message = await this.chatMessagesRepository.findOneByOrFail({ id: messageId });
 
 		const room = message.toRoomId ? await this.chatRoomsRepository.findOneByOrFail({ id: message.toRoomId }) : null;
+		if (room) {
+			if (!await this.isRoomMember(room, userId)) {
+				throw new Error('cannot react to others message');
+			}
+		} else if (message.toUserId !== userId) {
+			throw new Error('cannot react to others message');
+		}
 
-		await this.chatMessagesRepository.createQueryBuilder().update()
+		const updated = await this.chatMessagesRepository.createQueryBuilder().update()
 			.set({
-				reactions: () => `array_remove("reactions", '${userId}/${reaction}')`,
+				reactions: () => 'array_remove("reactions", :reactionRecord)',
 			})
 			.where('id = :id', { id: message.id })
+			.andWhere(':reactionRecord = ANY("reactions")')
+			.setParameter('reactionRecord', `${userId}/${reaction}`)
 			.execute();
 
-		// TODO: 実際に削除が行われたときのみイベントを発行する
+		if (updated.affected === 0) return;
 
 		if (room) {
 			this.globalEventService.publishChatRoomStream(room.id, 'unreact', {

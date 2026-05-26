@@ -2991,6 +2991,115 @@ customHtml:
         display: none !important;
       }
     </style>
+    <style id="codex-dark-navbar-readable">
+      html[data-color-scheme="dark"] {
+        --MI_THEME-bg: #000000 !important;
+        --MI_THEME-fg: #f5f8fa !important;
+        --MI_THEME-fgHighlighted: #ffffff !important;
+        --MI_THEME-divider: #2f3336 !important;
+        --MI_THEME-panel: #000000 !important;
+        --MI_THEME-panelHighlight: #16181c !important;
+        --MI_THEME-panelHeaderBg: #000000 !important;
+        --MI_THEME-panelHeaderFg: #f5f8fa !important;
+        --MI_THEME-windowHeader: rgba(0, 0, 0, 0.86) !important;
+        --MI_THEME-popup: #16181c !important;
+        --MI_THEME-header: rgba(0, 0, 0, 0.86) !important;
+        --MI_THEME-navBg: #000000 !important;
+        --MI_THEME-navFg: #f5f8fa !important;
+        --MI_THEME-navActive: #ffffff !important;
+        --MI_THEME-pageHeaderBg: #000000 !important;
+        --MI_THEME-pageHeaderFg: #f5f8fa !important;
+        --MI_THEME-messageBg: #000000 !important;
+        --MI_THEME-deckBg: #000000 !important;
+        --MI_THEME-htmlThemeColor: #000000 !important;
+        color-scheme: dark !important;
+      }
+
+      html[data-color-scheme="dark"] [class^="navbar-root-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-body-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-body-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-top-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-top-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-bottom-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-bottom-"] {
+        background: var(--MI_THEME-navBg) !important;
+        color: var(--MI_THEME-navFg) !important;
+      }
+
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-item-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-item-"] i,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"] i,
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-item-"] span,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"] span,
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-itemIcon-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-itemIcon-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-itemText-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-itemText-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-postIcon-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-postIcon-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-acct-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-acct-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-instance-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-instance-"] {
+        color: var(--MI_THEME-navFg) !important;
+        -webkit-text-stroke-color: currentColor !important;
+      }
+
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-item-"][class*="navbar-active-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"][class*="navbar-active-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-item-"][class*="navbar-active-"] *,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"][class*="navbar-active-"] *,
+      html[data-color-scheme="dark"] [class^="navbar-root-"][class*="navbar-iconOnly-"] [class*="navbar-item-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"][class*="navbar-iconOnly-"] [class*="navbar-item-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"][class*="navbar-iconOnly-"] [class*="navbar-item-"] *,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"][class*="navbar-iconOnly-"] [class*="navbar-item-"] *,
+      html[data-color-scheme="dark"] [class^="navbar-root-"] button[data-cy-open-post-form],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] button[data-cy-open-post-form],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] button[data-cy-open-post-form] *,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] button[data-cy-open-post-form] * {
+        color: var(--MI_THEME-navFg) !important;
+        -webkit-text-stroke-color: currentColor !important;
+      }
+
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class^="navbar-item-"]:not([class*="navbar-active-"]),
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"]:not([class*="navbar-active-"]),
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class^="navbar-item-"]:not([class*="navbar-active-"]) *,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"]:not([class*="navbar-active-"]) *,
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class^="navbar-item-"]:not([class*="navbar-active-"]) [class^="navbar-itemText-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"]:not([class*="navbar-active-"]) [class*="navbar-itemText-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class^="navbar-item-"]:not([class*="navbar-active-"]) [class^="navbar-itemIcon-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"]:not([class*="navbar-active-"]) [class*="navbar-itemIcon-"] {
+        color: var(--MI_THEME-navFg) !important;
+        -webkit-text-stroke: 0 !important;
+      }
+
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class^="navbar-item-"][class*="navbar-active-"] i,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"][class*="navbar-active-"] i,
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class^="navbar-item-"][class*="navbar-active-"] [class^="navbar-itemIcon-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"][class*="navbar-active-"] [class*="navbar-itemIcon-"],
+      html[data-color-scheme="dark"] [class^="navbar-root-"][class*="navbar-iconOnly-"] [class^="navbar-item-"] [class*="navbar-itemIcon-"],
+      html[data-color-scheme="dark"] [class*=" navbar-root-"][class*="navbar-iconOnly-"] [class*="navbar-item-"] [class*="navbar-itemIcon-"] {
+        color: var(--MI_THEME-navFg) !important;
+        -webkit-text-stroke-color: currentColor !important;
+      }
+
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-item-"]:hover,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"]:hover,
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-item-"]:focus,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"]:focus,
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-item-"]:active,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"]:active {
+        background: rgba(239, 243, 244, 0.1) !important;
+        color: #ffffff !important;
+      }
+
+      html[data-color-scheme="dark"] [class^="navbar-root-"] [class*="navbar-item-"]::before,
+      html[data-color-scheme="dark"] [class*=" navbar-root-"] [class*="navbar-item-"]::before {
+        background: rgba(239, 243, 244, 0.1) !important;
+      }
+    </style>
     <script id="codex-disable-initial-tutorial-script">
       (() => {
         const TUTORIAL_MARKERS = [

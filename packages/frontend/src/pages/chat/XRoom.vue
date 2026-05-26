@@ -65,7 +65,17 @@ const props = defineProps<{
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
-	color: var(--MI_THEME-fgTransparentWeak);
+	color: color-mix(in srgb, currentColor 82%, transparent);
 	font-size: 90%;
+}
+
+:global(html[data-color-scheme=dark]) {
+	.root {
+		color: #fff;
+	}
+
+	.description {
+		color: color-mix(in srgb, #fff 86%, transparent);
+	}
 }
 </style>

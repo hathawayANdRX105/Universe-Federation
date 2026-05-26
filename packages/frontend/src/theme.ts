@@ -118,6 +118,8 @@ export function applyTheme(theme: Theme, persist = true) {
 		if (base) _theme.props = Object.assign({}, base.props, _theme.props);
 	}
 
+	normalizeThemeContrast(_theme);
+
 	const props = compile(_theme);
 
 	for (const tag of window.document.head.children) {
@@ -166,6 +168,37 @@ export function applyTheme(theme: Theme, persist = true) {
 
 	// 色計算など再度行えるようにクライアント全体に通知
 	globalEvents.emit('themeChanging');
+}
+
+function normalizeThemeContrast(theme: Theme) {
+	const bg = tinycolor(theme.props.bg ?? (theme.base === 'dark' ? '#000' : '#fff'));
+	const fg = tinycolor(theme.props.fg);
+	const minReadableContrast = theme.base === 'dark' ? 4.5 : 3;
+
+	if (!fg.isValid() || tinycolor.readability(bg, fg) < minReadableContrast) {
+		theme.props.fg = theme.base === 'dark' ? '#dee7e4' : '#5f5f5f';
+	}
+
+	if (theme.base === 'dark') {
+		const panel = tinycolor(theme.props.panel ?? theme.props.bg ?? '#000');
+		const panelFg = tinycolor(theme.props.fg);
+
+		if (!panelFg.isValid() || tinycolor.readability(panel, panelFg) < minReadableContrast) {
+			theme.props.fg = '#dee7e4';
+		}
+	}
+
+	const readableFg = theme.props.fg ?? (theme.base === 'dark' ? '#dee7e4' : '#5f5f5f');
+	const navBg = tinycolor(theme.props.navBg ?? theme.props.panel ?? theme.props.bg ?? (theme.base === 'dark' ? '#000' : '#fff'));
+	const navFg = tinycolor(theme.props.navFg ?? readableFg);
+	const navReadableFg = navBg.isDark() ? '#fff' : readableFg;
+
+	if (navBg.isDark()) {
+		theme.props.navFg = navReadableFg;
+		theme.props.navActive = navReadableFg;
+	} else if (!navFg.isValid() || tinycolor.readability(navBg, navFg) < minReadableContrast) {
+		theme.props.navFg = navReadableFg;
+	}
 }
 
 export function compile(theme: Theme): Record<string, string> {
