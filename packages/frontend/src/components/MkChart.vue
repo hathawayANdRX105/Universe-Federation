@@ -50,7 +50,6 @@ import { onMounted, ref, useTemplateRef, watch } from 'vue';
 import { Chart } from 'chart.js';
 import * as Misskey from 'misskey-js';
 import { misskeyApiGet } from '@/utility/misskey-api.js';
-import { store } from '@/store.js';
 import { useChartTooltip } from '@/use/use-chart-tooltip.js';
 import { chartVLine } from '@/utility/chart-vline.js';
 import { alpha } from '@/utility/color.js';
@@ -156,8 +155,6 @@ const render = () => {
 	if (chartInstance) {
 		chartInstance.destroy();
 	}
-
-	const vLineColor = store.s.darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
 
 	const maxes = chartData.series.map((x, i) => Math.max(...x.data.map(d => d.y)));
 
@@ -291,7 +288,7 @@ const render = () => {
 				} : undefined,
 			},
 		},
-		plugins: [chartVLine(vLineColor), ...(props.detailed && legendEl.value ? [chartLegend(legendEl.value)] : [])],
+		plugins: [chartVLine(), ...(props.detailed && legendEl.value ? [chartLegend(legendEl.value)] : [])],
 	});
 };
 

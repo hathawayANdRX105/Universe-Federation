@@ -39,7 +39,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { globalEvents } from '@/events.js';
+import { getChartThemeColors } from '@/utility/chart-theme.js';
 
 const props = defineProps<{
 	activity: {
@@ -59,11 +61,20 @@ const plot = {
 	height: 48,
 };
 
-const colors = {
-	notes: '#41ddde',
-	replies: '#ff7a70',
-	renotes: '#a1de41',
-};
+const themeVersion = ref(0);
+const themeColors = computed(() => {
+	themeVersion.value;
+	return getChartThemeColors();
+});
+const colors = computed(() => ({
+	notes: themeColors.value.activityNotesColor,
+	replies: themeColors.value.activityRepliesColor,
+	renotes: themeColors.value.activityRenotesColor,
+}));
+
+function refreshTheme(): void {
+	themeVersion.value++;
+}
 
 const visibleActivity = computed(() => props.activity.slice().reverse().slice(-70));
 const peak = computed(() => Math.max(1, ...visibleActivity.value.map(d => d.total)));
@@ -78,9 +89,9 @@ const bars = computed(() => {
 		let cursor = plot.y + plot.height;
 		const x = plot.x + (index * step) + ((step - width) / 2);
 		const parts = [
-			{ key: 'notes', value: d.notes, color: colors.notes },
-			{ key: 'replies', value: d.replies, color: colors.replies },
-			{ key: 'renotes', value: d.renotes, color: colors.renotes },
+			{ key: 'notes', value: d.notes, color: colors.value.notes },
+			{ key: 'replies', value: d.replies, color: colors.value.replies },
+			{ key: 'renotes', value: d.renotes, color: colors.value.renotes },
 		];
 
 		const segments = parts
@@ -122,10 +133,16 @@ const trendPath = computed(() => {
 		return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
 	}).join(' ');
 });
+
+globalEvents.on('themeChanged', refreshTheme);
+onBeforeUnmount(() => {
+	globalEvents.off('themeChanged', refreshTheme);
+});
 </script>
 
 <style lang="scss" module>
 .root {
+	color: var(--MI_THEME-fg);
 	display: block;
 	width: 100%;
 	padding: 14px 12px 12px;

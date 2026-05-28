@@ -496,6 +496,57 @@ onUnmounted(() => {
 	background-attachment: fixed;
 }
 
+@mixin readableUserTitleOnDark {
+	color: #fff;
+	-webkit-text-fill-color: #fff;
+	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 0 8px rgba(0, 0, 0, 0.55);
+
+	> .name {
+		color: #fff;
+		-webkit-text-fill-color: #fff;
+	}
+
+	> .bottom {
+		color: color-mix(in srgb, #fff 88%, transparent);
+		-webkit-text-fill-color: currentColor;
+
+		> * {
+			color: inherit;
+			-webkit-text-fill-color: currentColor;
+			opacity: 1;
+		}
+
+		> .username {
+			color: color-mix(in srgb, #fff 92%, transparent);
+			-webkit-text-fill-color: currentColor;
+
+			:deep(span) {
+				color: inherit !important;
+				-webkit-text-fill-color: currentColor !important;
+				opacity: 1 !important;
+			}
+
+			:deep(span + span) {
+				opacity: 0.82 !important;
+			}
+		}
+	}
+}
+
+:global(html[data-color-scheme=dark]) .ftskorzw,
+:global(html[style*="color-scheme: dark"]) .ftskorzw {
+	> .main {
+		> .profile {
+			> .main {
+				> .banner-container > .title,
+				> .title {
+					@include readableUserTitleOnDark;
+				}
+			}
+		}
+	}
+}
+
 .ftskorzw {
 
 	> .main {
@@ -807,33 +858,7 @@ onUnmounted(() => {
 				> .main {
 					> .banner-container > .title,
 					> .title {
-						color: #fff;
-						text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 0 8px rgba(0, 0, 0, 0.55);
-
-						> .name {
-							color: #fff;
-						}
-
-						> .bottom {
-							color: color-mix(in srgb, #fff 88%, transparent);
-
-							> * {
-								color: inherit;
-								opacity: 1;
-							}
-
-							> .username {
-								color: color-mix(in srgb, #fff 92%, transparent);
-
-								:deep(span) {
-									opacity: 1 !important;
-								}
-
-								:deep(span + span) {
-									opacity: 0.82 !important;
-								}
-							}
-						}
+						@include readableUserTitleOnDark;
 					}
 				}
 			}

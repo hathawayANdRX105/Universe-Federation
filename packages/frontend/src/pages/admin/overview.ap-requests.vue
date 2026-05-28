@@ -27,7 +27,6 @@ import isChromatic from 'chromatic';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { useChartTooltip } from '@/use/use-chart-tooltip.js';
 import { chartVLine } from '@/utility/chart-vline.js';
-import { store } from '@/store.js';
 import { alpha } from '@/utility/color.js';
 import { initChart } from '@/utility/init-chart.js';
 
@@ -68,7 +67,6 @@ onMounted(async () => {
 
 	const raw = await misskeyApi('charts/ap-request', { limit: chartLimit, span: 'day' });
 
-	const vLineColor = store.s.darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
 	const succColor = '#87e000';
 	const failColor = '#ff4400';
 
@@ -176,7 +174,7 @@ onMounted(async () => {
 				gradient,
 			},
 		},
-		plugins: [chartVLine(vLineColor)],
+		plugins: [chartVLine()],
 	});
 
 	new Chart(chartEl2.value, {
@@ -263,7 +261,7 @@ onMounted(async () => {
 				gradient,
 			},
 		},
-		plugins: [chartVLine(vLineColor)],
+		plugins: [chartVLine()],
 	});
 
 	fetching.value = false;
@@ -285,4 +283,3 @@ onMounted(async () => {
 	}
 }
 </style>
-

@@ -17,7 +17,6 @@ import { onMounted, useTemplateRef, ref } from 'vue';
 import { Chart } from 'chart.js';
 import gradient from 'chartjs-plugin-gradient';
 import { misskeyApi } from '@/utility/misskey-api.js';
-import { store } from '@/store.js';
 import { useChartTooltip } from '@/use/use-chart-tooltip.js';
 import { chartVLine } from '@/utility/chart-vline.js';
 import { initChart } from '@/utility/init-chart.js';
@@ -53,8 +52,6 @@ async function renderChart() {
 	};
 
 	const raw = await misskeyApi('charts/active-users', { limit: chartLimit, span: 'day' });
-
-	const vLineColor = store.s.darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
 
 	const colorRead = '#3498db';
 	const colorWrite = '#2ecc71';
@@ -152,7 +149,7 @@ async function renderChart() {
 				gradient,
 			},
 		},
-		plugins: [chartVLine(vLineColor)],
+		plugins: [chartVLine()],
 	});
 
 	fetching.value = false;

@@ -10,7 +10,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { onMounted, useTemplateRef } from 'vue';
 import { Chart } from 'chart.js';
-import { store } from '@/store.js';
 import { useChartTooltip } from '@/use/use-chart-tooltip.js';
 import { chartVLine } from '@/utility/chart-vline.js';
 import { alpha } from '@/utility/color.js';
@@ -67,8 +66,6 @@ const color =
 	'?' as never;
 
 onMounted(() => {
-	const vLineColor = store.s.darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
-
 	chartInstance = new Chart(chartEl.value, {
 		type: 'line',
 		data: {
@@ -128,7 +125,7 @@ onMounted(() => {
 				},
 			},
 		},
-		plugins: [chartVLine(vLineColor)],
+		plugins: [chartVLine()],
 	});
 });
 

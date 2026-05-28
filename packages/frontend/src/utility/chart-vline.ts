@@ -4,8 +4,9 @@
  */
 
 import type { Plugin } from 'chart.js';
+import { getChartThemeColors } from '@/utility/chart-theme.js';
 
-export const chartVLine = (vLineColor: string) => ({
+export const chartVLine = (vLineColor?: string) => ({
 	id: 'vLine',
 	beforeDraw(chart, args, options) {
 		if (chart.tooltip?._active?.length) {
@@ -20,7 +21,7 @@ export const chartVLine = (vLineColor: string) => ({
 			ctx.moveTo(x, bottomY);
 			ctx.lineTo(x, topY);
 			ctx.lineWidth = 1;
-			ctx.strokeStyle = vLineColor;
+			ctx.strokeStyle = vLineColor ?? getChartThemeColors().vLineColor;
 			ctx.stroke();
 			ctx.restore();
 		}

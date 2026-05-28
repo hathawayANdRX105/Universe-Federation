@@ -11,7 +11,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { onMounted, useTemplateRef } from 'vue';
 import { Chart } from 'chart.js';
 import tinycolor from 'tinycolor2';
-import { store } from '@/store.js';
 import { useChartTooltip } from '@/use/use-chart-tooltip.js';
 import { chartVLine } from '@/utility/chart-vline.js';
 import { alpha } from '@/utility/color.js';
@@ -41,8 +40,6 @@ const getDate = (ymd: string) => {
 
 onMounted(async () => {
 	let raw = await misskeyApi('retention', { });
-
-	const vLineColor = store.s.darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
 
 	const accent = tinycolor(getComputedStyle(window.document.documentElement).getPropertyValue('--MI_THEME-accent'));
 	const color = accent.toHex();
@@ -128,7 +125,7 @@ onMounted(async () => {
 				},
 			},
 		},
-		plugins: [chartVLine(vLineColor)],
+		plugins: [chartVLine()],
 	});
 });
 </script>
