@@ -16,6 +16,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				:enterFromClass="$style.transition_x_enterFrom"
 				:leaveToClass="$style.transition_x_leaveTo"
 				:moveClass="$style.transition_x_move"
+				:animate="false"
 				tag="div"
 			>
 				<div v-for="(note, i) in notes" :key="note.id" :class="{ '_gaps': !noGap }">
@@ -29,7 +30,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, watch, onUnmounted, provide, useTemplateRef, TransitionGroup } from 'vue';
+import { computed, watch, onUnmounted, provide, useTemplateRef } from 'vue';
 import * as Misskey from 'misskey-js';
 import type { BasicTimelineType } from '@/timelines.js';
 import type { Paging } from '@/components/MkPagination.vue';
@@ -58,6 +59,9 @@ const props = withDefaults(defineProps<{
 	withSensitive?: boolean;
 	onlyFiles?: boolean;
 	localTimelineMode?: 'chronological' | 'replies' | 'recommended';
+	discoveryMode?: boolean;
+	recommendationSurface?: 'home' | 'explore';
+	recommendationCategory?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'tutorials' | 'resources';
 }>(), {
 	withRenotes: true,
 	withReplies: false,
@@ -65,6 +69,9 @@ const props = withDefaults(defineProps<{
 	onlyFiles: false,
 	withBots: true,
 	localTimelineMode: 'chronological',
+	discoveryMode: false,
+	recommendationSurface: 'home',
+	recommendationCategory: 'forYou',
 });
 
 const emit = defineEmits<{
@@ -77,6 +84,7 @@ provide('tl_withSensitive', computed(() => props.withSensitive));
 provide('inChannel', computed(() => props.src === 'channel'));
 
 type TimelineQueryType = {
+	scope?: 'local' | 'social' | 'global' | 'mixed',
 	antennaId?: string,
 	withRenotes?: boolean,
 	withReplies?: boolean,
@@ -122,6 +130,7 @@ const stream = useStream();
 
 function connectChannel() {
 	const onNote = (note: TimelineNote) => prepend(note);
+	if (props.discoveryMode && ['recommended', 'local', 'social', 'global'].includes(props.src)) return;
 
 	if (props.src === 'antenna') {
 		if (props.antenna == null) return;
@@ -208,11 +217,25 @@ function disconnectChannel() {
 function updatePaginationQuery() {
 	let endpoint: keyof Misskey.Endpoints | null;
 	let query: TimelineQueryType | null;
+	const recommendationScope =
+		props.src === 'recommended' ? 'mixed' :
+		props.discoveryMode && ['local', 'social', 'global'].includes(props.src) ? props.src as 'local' | 'social' | 'global' :
+		null;
 
 	if (props.src === 'antenna') {
 		endpoint = 'antennas/notes';
 		query = {
 			antennaId: props.antenna,
+		};
+	} else if (recommendationScope != null) {
+		endpoint = 'notes/recommended-timeline';
+		query = {
+			scope: recommendationScope,
+			surface: props.recommendationSurface,
+			category: props.recommendationCategory,
+			withRenotes: props.withRenotes,
+			withFiles: props.onlyFiles ? true : undefined,
+			withBots: props.withBots,
 		};
 	} else if (props.src === 'home') {
 		endpoint = 'notes/timeline';
@@ -292,7 +315,7 @@ function updatePaginationQuery() {
 			endpoint: endpoint,
 			limit: 10,
 			params: query,
-			offsetMode: props.src === 'local' && props.localTimelineMode !== 'chronological',
+			offsetMode: recommendationScope != null || (props.src === 'local' && props.localTimelineMode !== 'chronological'),
 		};
 	} else {
 		paginationQuery = null;
@@ -313,7 +336,7 @@ function refreshEndpointAndChannel() {
 
 // デッキのリストカラムでwithRenotesを変更した場合に自動的に更新されるようにさせる
 // IDが切り替わったら切り替え先のTLを表示させたい
-watch(() => [props.list, props.antenna, props.channel, props.role, props.withRenotes, props.withBots, props.withReplies, props.onlyFiles, props.localTimelineMode], refreshEndpointAndChannel);
+watch(() => [props.list, props.antenna, props.channel, props.role, props.withRenotes, props.withBots, props.withReplies, props.onlyFiles, props.localTimelineMode, props.recommendationSurface, props.recommendationCategory], refreshEndpointAndChannel);
 
 // withSensitiveはクライアントで完結する処理のため、単にリロードするだけでOK
 watch(() => props.withSensitive, reloadTimeline);
@@ -413,4 +436,5 @@ defineExpose({
 .ad:empty {
 	display: none;
 }
+
 </style>

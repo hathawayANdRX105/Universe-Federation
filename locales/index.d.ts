@@ -13150,6 +13150,118 @@ export interface Locale extends ILocale {
      */
     "remoteFollowersWarning": string;
     /**
+     * Popular searches
+     */
+    "popularSearches": string;
+    /**
+     * Recent terms
+     */
+    "recentContentTerms": string;
+    /**
+     * Search notes, users, or tags
+     */
+    "timelineSearchPlaceholder": string;
+    /**
+     * No results found for "{query}"
+     */
+    "noSearchResultsFor": ParameterizedString<"query">;
+    /**
+     * Try another keyword, choose a trending term below, or return to recommendations.
+     */
+    "searchEmptySuggestion": string;
+    /**
+     * Change query
+     */
+    "changeSearchQuery": string;
+    /**
+     * Back to recommendations
+     */
+    "returnToRecommended": string;
+    /**
+     * No {category} content yet
+     */
+    "exploreCategoryEmpty": ParameterizedString<"category">;
+    /**
+     * This category does not have enough content yet. Return to recommendations or try a search.
+     */
+    "exploreCategoryEmptyDescription": string;
+    /**
+     * For you
+     */
+    "homeTimelineForYou": string;
+    /**
+     * Following
+     */
+    "homeTimelineFollowing": string;
+    /**
+     * Show {n} posts
+     */
+    "showNPosts": ParameterizedString<"n">;
+    /**
+     * What is happening?
+     */
+    "whatsHappening": string;
+    /**
+     * Subscribe to premium
+     */
+    "subscribePremium": string;
+    /**
+     * Remove ads, see deeper analytics, and unlock more features.
+     */
+    "subscribePremiumDescription": string;
+    /**
+     * Subscribe
+     */
+    "subscribe": string;
+    /**
+     * Today's News
+     */
+    "todayNews": string;
+    /**
+     * What's happening
+     */
+    "whatsHappeningNow": string;
+    /**
+     * Who to follow
+     */
+    "whoToFollow": string;
+    /**
+     * Hot discussions
+     */
+    "hotDiscussions": string;
+    /**
+     * Recommended channels
+     */
+    "recommendedChannels": string;
+    /**
+     * Tutorials and resources
+     */
+    "tutorialsAndResources": string;
+    /**
+     * {notes} notes · {users} users
+     */
+    "channelStats": ParameterizedString<"notes" | "users">;
+    /**
+     * {replies} replies · {renotes} renotes
+     */
+    "noteStats": ParameterizedString<"replies" | "renotes">;
+    /**
+     * Trending
+     */
+    "exploreTrending": string;
+    /**
+     * Messages
+     */
+    "exploreMessages": string;
+    /**
+     * Sports
+     */
+    "exploreSports": string;
+    /**
+     * Entertainment
+     */
+    "exploreEntertainment": string;
+    /**
      * Schedule a note
      */
     "schedulePost": string;

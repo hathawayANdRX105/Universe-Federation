@@ -248,6 +248,10 @@ export const ROUTE_DEF = [{
 	path: '/explore',
 	component: page(() => import('@/pages/explore.vue')),
 	hash: 'initialTab',
+	query: {
+		query: 'query',
+		tab: 'initialTab',
+	},
 }, {
 	path: '/following-feed',
 	component: page(() => import('@/pages/following-feed.vue')),
