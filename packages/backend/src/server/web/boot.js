@@ -157,44 +157,57 @@
 	//#region Theme
 	const theme = localStorage.getItem('theme');
 	const themeFontFaceName = 'sharkey-theme-font-face';
+	const colorScheme = localStorage.getItem('colorScheme');
+	if (colorScheme === 'dark' || colorScheme === 'light') {
+		document.documentElement.dataset.colorScheme = colorScheme;
+		document.documentElement.style.setProperty('color-scheme', colorScheme, 'important');
+	} else {
+		document.documentElement.removeAttribute('data-color-scheme');
+		document.documentElement.style.removeProperty('color-scheme');
+	}
 	if (theme) {
 		let existingFontFace;
 		document.fonts.forEach((v) => { if (v.family === themeFontFaceName) existingFontFace = v;});
 		if (existingFontFace) document.fonts.delete(existingFontFace);
 
-		const themeProps = JSON.parse(theme);
-		const fontFaceSrc = themeProps.fontFaceSrc;
-		const fontFaceOpts = themeProps.fontFaceOpts || {};
-		if (fontFaceSrc) {
-			const fontFace = new FontFace(
-				themeFontFaceName,
-				fontFaceSrc, fontFaceOpts || {},
-			);
-			document.fonts.add(fontFace);
-			fontFace.load().catch(
-				(failure) => {
-					console.log(failure);
-				},
-			);
-		}
-		for (const [k, v] of Object.entries(themeProps)) {
-			if (k.startsWith('font')) continue;
-			document.documentElement.style.setProperty(`--MI_THEME-${k}`, v.toString(), 'important');
+		try {
+			const themeProps = JSON.parse(theme);
+			const fontFaceSrc = themeProps.fontFaceSrc;
+			const fontFaceOpts = themeProps.fontFaceOpts || {};
+			if (fontFaceSrc) {
+				const fontFace = new FontFace(
+					themeFontFaceName,
+					fontFaceSrc, fontFaceOpts || {},
+				);
+				document.fonts.add(fontFace);
+				fontFace.load().catch(
+					(failure) => {
+						console.log(failure);
+					},
+				);
+			}
+			for (const [k, v] of Object.entries(themeProps)) {
+				if (k.startsWith('font')) continue;
+				document.documentElement.style.setProperty(`--MI_THEME-${k}`, v.toString(), 'important');
 
-			// HTMLの theme-color 適用
-			if (k === 'htmlThemeColor') {
-				for (const tag of document.head.children) {
-					if (tag.tagName === 'META' && tag.getAttribute('name') === 'theme-color') {
-						tag.setAttribute('content', v);
-						break;
+				// HTMLの theme-color 適用
+				if (k === 'htmlThemeColor') {
+					for (const tag of document.head.children) {
+						if (tag.tagName === 'META' && tag.getAttribute('name') === 'theme-color') {
+							tag.setAttribute('content', v);
+							break;
+						}
 					}
 				}
 			}
+		} catch (err) {
+			console.warn('Failed to restore cached theme. Clearing stale theme cache.', err);
+			localStorage.removeItem('theme');
+			localStorage.removeItem('themeId');
+			localStorage.removeItem('colorScheme');
+			document.documentElement.removeAttribute('data-color-scheme');
+			document.documentElement.style.removeProperty('color-scheme');
 		}
-	}
-	const colorScheme = localStorage.getItem('colorScheme');
-	if (colorScheme) {
-		document.documentElement.style.setProperty('color-scheme', colorScheme, 'important');
 	}
 	//#endregion
 

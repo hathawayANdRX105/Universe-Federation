@@ -578,11 +578,7 @@ html[data-color-scheme=dark] ._woodenFrame {
 html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-item-"],
 html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-itemIcon-"],
 html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-itemText-"],
-html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-active-"][class*="navbar-item-"],
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-item-"],
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"],
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemText-"],
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-active-"][class*="navbar-item-"] {
+html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-active-"][class*="navbar-item-"] {
 	color: #fff !important;
 	-webkit-text-fill-color: #fff !important;
 	opacity: 1 !important;
@@ -590,10 +586,7 @@ html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-acti
 
 html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-itemIcon-"]::before,
 html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-itemIcon-"]::after,
-html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-itemIcon-"] *,
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"]::before,
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"]::after,
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"] * {
+html[data-color-scheme=dark] [class*="navbar-middle-"] [class*="navbar-itemIcon-"] * {
 	color: #fff !important;
 	-webkit-text-fill-color: #fff !important;
 	opacity: 1 !important;
@@ -602,10 +595,7 @@ html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-item
 
 html[data-color-scheme=dark] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-item-"],
 html[data-color-scheme=dark] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"],
-html[data-color-scheme=dark] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemText-"],
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-item-"],
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"],
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemText-"] {
+html[data-color-scheme=dark] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemText-"] {
 	color: #fff !important;
 	-webkit-text-fill-color: #fff !important;
 	opacity: 1 !important;
@@ -613,10 +603,7 @@ html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="
 
 html[data-color-scheme=dark] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"]::before,
 html[data-color-scheme=dark] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"]::after,
-html[data-color-scheme=dark] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"] *,
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"]::before,
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"]::after,
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"] * {
+html[data-color-scheme=dark] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"] * {
 	color: #fff !important;
 	-webkit-text-fill-color: #fff !important;
 	opacity: 1 !important;
@@ -652,10 +639,7 @@ html[data-color-scheme=dark] [data-chat-room-header] [class*="room-localTabs-"] 
 
 html[data-color-scheme=dark] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-item-"],
 html[data-color-scheme=dark] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-active-"],
-html[data-color-scheme=dark] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-item-"] *,
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-item-"],
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-active-"],
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-item-"] * {
+html[data-color-scheme=dark] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-item-"] * {
 	color: #fff !important;
 	-webkit-text-fill-color: #fff !important;
 	opacity: 1 !important;
@@ -665,12 +649,7 @@ html[data-color-scheme=dark] [class*="navbar-root-"][class*="navbar-root-"] [cla
 html[data-color-scheme=dark] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-itemIcon-"][class*="navbar-itemIcon-"]::before,
 html[data-color-scheme=dark] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-itemIcon-"][class*="navbar-itemIcon-"]::after,
 html[data-color-scheme=dark] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] i[class*="ph-"]::before,
-html[data-color-scheme=dark] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] i[class*="ti-"]::before,
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-itemIcon-"][class*="navbar-itemIcon-"],
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-itemIcon-"][class*="navbar-itemIcon-"]::before,
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-itemIcon-"][class*="navbar-itemIcon-"]::after,
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] i[class*="ph-"]::before,
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] i[class*="ti-"]::before {
+html[data-color-scheme=dark] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] i[class*="ti-"]::before {
 	color: #fff !important;
 	-webkit-text-fill-color: #fff !important;
 	fill: #fff !important;

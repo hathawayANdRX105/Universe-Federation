@@ -29,11 +29,18 @@ export function extractHashtagsFromText(text: string | null | undefined): string
 	return uniqueBy(hashtagNodes.map(node => node.props.hashtag), normalizeHashtagForSearch);
 }
 
-export function appendMissingHashtags(text: string | null, hashtagInput: string): string | null {
+function buildExistingTagSet(text: string | null | undefined, extraExistingTags: string[] = []): Set<string> {
+	return new Set([
+		...extractHashtagsFromText(text),
+		...extraExistingTags,
+	].map(normalizeHashtagForSearch));
+}
+
+export function appendMissingHashtags(text: string | null, hashtagInput: string, extraExistingTags: string[] = []): string | null {
 	const inputTags = collectHashtagsFromInput(hashtagInput);
 	if (inputTags.length === 0) return text;
 
-	const existingTags = new Set(extractHashtagsFromText(text).map(normalizeHashtagForSearch));
+	const existingTags = buildExistingTagSet(text, extraExistingTags);
 	const missingTags = inputTags.filter(tag => !existingTags.has(normalizeHashtagForSearch(tag)));
 	if (missingTags.length === 0) return text;
 

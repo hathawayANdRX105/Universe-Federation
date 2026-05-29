@@ -149,20 +149,24 @@ export async function common(createVue: () => Promise<App<Element>>) {
 	}
 
 	function updateVisualViewportVars() {
-		if (!window.visualViewport) return;
-
 		const viewport = window.visualViewport;
-		const bottomInset = Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop));
+		const rawViewportHeight = viewport?.height;
+		const viewportHeight = rawViewportHeight != null && Number.isFinite(rawViewportHeight) && rawViewportHeight > 0
+			? rawViewportHeight
+			: window.innerHeight;
+		const bottomInset = viewport
+			? Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop))
+			: 0;
 
 		window.document.documentElement.style.setProperty('--MI-visualViewportBottom', `${bottomInset}px`);
-		window.document.documentElement.style.setProperty('--MI-visualViewportHeight', `${Math.round(viewport.height)}px`);
+		window.document.documentElement.style.setProperty('--MI-visualViewportHeight', `${Math.round(viewportHeight)}px`);
 	}
 
+	updateVisualViewportVars();
+	window.addEventListener('resize', updateVisualViewportVars, { passive: true });
 	if (window.visualViewport) {
-		updateVisualViewportVars();
 		window.visualViewport.addEventListener('resize', updateVisualViewportVars, { passive: true });
 		window.visualViewport.addEventListener('scroll', updateVisualViewportVars, { passive: true });
-		window.addEventListener('resize', updateVisualViewportVars, { passive: true });
 	}
 
 	function applyDisplayPreferenceVars() {
@@ -238,28 +242,15 @@ html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-item-"]
 html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"],
 html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-itemText-"],
 html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-active-"][class*="navbar-item-"],
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-item-"],
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"],
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemText-"],
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-active-"][class*="navbar-item-"],
 html[data-color-scheme="dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-item-"],
 html[data-color-scheme="dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"],
 html[data-color-scheme="dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemText-"],
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-item-"],
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"],
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemText-"],
 html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabs-"],
 html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabsInner-"],
 html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tab-"],
 html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabInner-"],
 html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabIcon-"],
-html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabTitle-"],
-html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabs-"],
-html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabsInner-"],
-html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tab-"],
-html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabInner-"],
-html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabIcon-"],
-html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabTitle-"] {
+html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabTitle-"] {
 	color: #fff !important;
 	-webkit-text-fill-color: #fff !important;
 	opacity: 1 !important;
@@ -268,23 +259,16 @@ html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabTitle-"] {
 html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"]::before,
 html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"]::after,
 html[data-color-scheme="dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"] *,
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"]::before,
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"]::after,
-html[style*="color-scheme: dark"] [class*="navbar-middle-"] [class*="navbar-itemIcon-"] *,
 html[data-color-scheme="dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"]::before,
 html[data-color-scheme="dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"]::after,
-html[data-color-scheme="dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"] *,
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"]::before,
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"]::after,
-html[style*="color-scheme: dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"] * {
+html[data-color-scheme="dark"] [class*="navbar-for-mobile-middle-"] [class*="navbar-for-mobile-itemIcon-"] * {
 	color: #fff !important;
 	-webkit-text-fill-color: #fff !important;
 	opacity: 1 !important;
 	text-shadow: 0 0 0 #fff;
 }
 
-html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabs-"],
-html[style*="color-scheme: dark"] [class*="MkPageHeader-tabs-tabs-"] {
+html[data-color-scheme="dark"] [class*="MkPageHeader-tabs-tabs-"] {
 	background: color-mix(in srgb, var(--MI_THEME-bg) 94%, #000) !important;
 }
 
@@ -292,29 +276,19 @@ html[data-color-scheme="dark"] [data-page-header],
 html[data-color-scheme="dark"] [class*="MkPageHeader-root-"],
 html[data-color-scheme="dark"] [class*="MkPageHeader-upper-"],
 html[data-color-scheme="dark"] [class*="MkPageHeader-lower-"],
-html[data-color-scheme="dark"] [data-chat-room-header],
-html[style*="color-scheme: dark"] [data-page-header],
-html[style*="color-scheme: dark"] [class*="MkPageHeader-root-"],
-html[style*="color-scheme: dark"] [class*="MkPageHeader-upper-"],
-html[style*="color-scheme: dark"] [class*="MkPageHeader-lower-"],
-html[style*="color-scheme: dark"] [data-chat-room-header] {
+html[data-color-scheme="dark"] [data-chat-room-header] {
 	background: color-mix(in srgb, var(--MI_THEME-bg) 94%, #000) !important;
 	color: var(--MI_THEME-fg) !important;
 }
 
 html[data-color-scheme="dark"] [data-page-header-tabs],
-html[data-color-scheme="dark"] [data-chat-room-header] [class*="room-localTabs-"],
-html[style*="color-scheme: dark"] [data-page-header-tabs],
-html[style*="color-scheme: dark"] [data-chat-room-header] [class*="room-localTabs-"] {
+html[data-color-scheme="dark"] [data-chat-room-header] [class*="room-localTabs-"] {
 	background: color-mix(in srgb, var(--MI_THEME-bg) 94%, #000) !important;
 }
 
 html[data-color-scheme="dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-item-"],
 html[data-color-scheme="dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-active-"],
-html[data-color-scheme="dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-item-"] *,
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-item-"],
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-active-"],
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-item-"] * {
+html[data-color-scheme="dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-item-"][class*="navbar-item-"] * {
 	color: #fff !important;
 	-webkit-text-fill-color: #fff !important;
 	opacity: 1 !important;
@@ -324,12 +298,7 @@ html[data-color-scheme="dark"] [class*="navbar-root-"][class*="navbar-root-"] [c
 html[data-color-scheme="dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-itemIcon-"][class*="navbar-itemIcon-"]::before,
 html[data-color-scheme="dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-itemIcon-"][class*="navbar-itemIcon-"]::after,
 html[data-color-scheme="dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] i[class*="ph-"]::before,
-html[data-color-scheme="dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] i[class*="ti-"]::before,
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-itemIcon-"][class*="navbar-itemIcon-"],
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-itemIcon-"][class*="navbar-itemIcon-"]::before,
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] [class*="navbar-itemIcon-"][class*="navbar-itemIcon-"]::after,
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] i[class*="ph-"]::before,
-html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] i[class*="ti-"]::before {
+html[data-color-scheme="dark"] [class*="navbar-root-"][class*="navbar-root-"] [class*="navbar-middle-"][class*="navbar-middle-"] i[class*="ti-"]::before {
 	color: #fff !important;
 	-webkit-text-fill-color: #fff !important;
 	fill: #fff !important;
@@ -342,13 +311,73 @@ html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"]
 	}
 
 	// NOTE: この処理は必ずクライアント更新チェック処理より後に来ること(テーマ再構築のため)
+	function colorSchemeForDarkMode(darkMode: boolean): 'dark' | 'light' {
+		return darkMode ? 'dark' : 'light';
+	}
+
+	function themeForDarkMode(darkMode: boolean) {
+		const expectedColorScheme = colorSchemeForDarkMode(darkMode);
+		const fallbackTheme = darkMode ? defaultDarkTheme : defaultLightTheme;
+		const selectedTheme = darkMode ? prefer.s.darkTheme : prefer.s.lightTheme;
+
+		if (selectedTheme?.base != null && selectedTheme.base !== expectedColorScheme) {
+			console.warn('Configured theme base conflicted with darkMode. Falling back to default theme.', {
+				darkMode,
+				expectedColorScheme,
+				themeId: selectedTheme.id,
+				themeBase: selectedTheme.base,
+			});
+			return fallbackTheme;
+		}
+
+		return selectedTheme ?? fallbackTheme;
+	}
+
 	function applyCurrentTheme(darkMode = store.s.darkMode) {
-		applyTheme(darkMode
-			? (prefer.s.darkTheme ?? defaultDarkTheme)
-			: (prefer.s.lightTheme ?? defaultLightTheme),
-		);
-		window.document.documentElement.dataset.colorScheme = darkMode ? 'dark' : 'light';
+		const expectedColorScheme = colorSchemeForDarkMode(darkMode);
+		const theme = themeForDarkMode(darkMode);
+		const persistedColorScheme = miLocalStorage.getItem('colorScheme');
+		const persistedThemeId = miLocalStorage.getItem('themeId');
+
+		if (
+			(persistedColorScheme != null && persistedColorScheme !== expectedColorScheme) ||
+			(persistedThemeId != null && persistedThemeId !== theme.id)
+		) {
+			miLocalStorage.removeItem('theme');
+			miLocalStorage.removeItem('themeId');
+			miLocalStorage.removeItem('colorScheme');
+		}
+
+		applyTheme(theme);
+		window.document.documentElement.dataset.colorScheme = expectedColorScheme;
+		window.document.documentElement.style.setProperty('color-scheme', expectedColorScheme, 'important');
 		ensureDarkReadableOverrides();
+	}
+
+	function ensureThemeStateMatchesStore() {
+		const expectedColorScheme = colorSchemeForDarkMode(store.s.darkMode);
+		const expectedTheme = themeForDarkMode(store.s.darkMode);
+		const currentColorScheme = window.document.documentElement.dataset.colorScheme;
+		const persistedColorScheme = miLocalStorage.getItem('colorScheme');
+		const persistedThemeId = miLocalStorage.getItem('themeId');
+
+		if (
+			currentColorScheme === expectedColorScheme &&
+			persistedColorScheme === expectedColorScheme &&
+			persistedThemeId === expectedTheme.id
+		) return;
+
+		console.warn('Theme color scheme state was inconsistent. Re-applying current theme.', {
+			darkMode: store.s.darkMode,
+			currentColorScheme,
+			persistedColorScheme,
+			persistedThemeId,
+			expectedThemeId: expectedTheme.id,
+		});
+		miLocalStorage.removeItem('theme');
+		miLocalStorage.removeItem('themeId');
+		miLocalStorage.removeItem('colorScheme');
+		applyCurrentTheme(store.s.darkMode);
 	}
 
 	watch(store.r.darkMode, applyCurrentTheme, { immediate: true });
@@ -358,13 +387,13 @@ html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"]
 
 	watch(darkTheme, (theme) => {
 		if (store.s.darkMode) {
-			applyTheme(theme ?? defaultDarkTheme);
+			applyCurrentTheme(true);
 		}
 	});
 
 	watch(lightTheme, (theme) => {
 		if (!store.s.darkMode) {
-			applyTheme(theme ?? defaultLightTheme);
+			applyCurrentTheme(false);
 		}
 	});
 
@@ -389,11 +418,8 @@ html[style*="color-scheme: dark"] [class*="navbar-root-"][class*="navbar-root-"]
 	});
 	//#endregion
 
-	if (prefer.s.darkTheme && store.s.darkMode) {
-		if (miLocalStorage.getItem('themeId') !== prefer.s.darkTheme.id) applyTheme(prefer.s.darkTheme);
-	} else if (prefer.s.lightTheme && !store.s.darkMode) {
-		if (miLocalStorage.getItem('themeId') !== prefer.s.lightTheme.id) applyTheme(prefer.s.lightTheme);
-	}
+	ensureThemeStateMatchesStore();
+	window.requestAnimationFrame(ensureThemeStateMatchesStore);
 
 	fetchInstanceMetaPromise.then(() => {
 		// TODO: instance.defaultLightTheme/instance.defaultDarkThemeが不正な形式だった場合のケア

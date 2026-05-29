@@ -72,6 +72,14 @@ describe('chart theme colors', () => {
 		expect(getChartThemeColors().activityNotesColor).toBe('#41ddde');
 	});
 
+	test('trusts data color scheme over stale color-scheme style', () => {
+		document.documentElement.dataset.colorScheme = 'light';
+		document.documentElement.style.setProperty('color-scheme', 'dark');
+		document.documentElement.style.setProperty('--MI_THEME-fg', 'rgb(17, 24, 39)');
+
+		expect(getChartThemeColors().textColor).toBe('rgb(17, 24, 39)');
+	});
+
 	test('uses configured light accent for mini chart line', () => {
 		document.documentElement.dataset.colorScheme = 'light';
 		document.documentElement.style.setProperty('--MI_THEME-accent', 'rgb(34, 197, 94)');

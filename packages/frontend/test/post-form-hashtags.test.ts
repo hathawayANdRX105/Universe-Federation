@@ -23,6 +23,10 @@ describe('post form hashtags', () => {
 		assert.strictEqual(appendMissingHashtags('hello #Ｂｕｇ', 'bug'), 'hello #Ｂｕｇ');
 	});
 
+	test('uses extra existing tags when editing existing notes', () => {
+		assert.strictEqual(appendMissingHashtags('hello', '#bug #BUG fix', ['Ｂｕｇ']), 'hello #fix');
+	});
+
 	test('keeps the existing newline append behavior', () => {
 		assert.strictEqual(appendMissingHashtags('hello\n', '#bug'), 'hello\n#bug');
 	});

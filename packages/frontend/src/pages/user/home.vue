@@ -533,8 +533,7 @@ onUnmounted(() => {
 	}
 }
 
-:global(html[data-color-scheme=dark]) .ftskorzw,
-:global(html[style*="color-scheme: dark"]) .ftskorzw {
+:global(html[data-color-scheme=dark]) .ftskorzw {
 	> .main {
 		> .profile {
 			> .main {

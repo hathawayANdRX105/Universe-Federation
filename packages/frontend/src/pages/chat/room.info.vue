@@ -13,12 +13,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<template #label>{{ i18n.ts.description }}</template>
 	</MkTextarea>
 
-	<MkSelect v-model="joinMode_" :disabled="!isOwner">
+	<MkSelect v-if="isOwner" v-model="joinMode_">
 		<template #label>{{ i18n.ts._chat.roomJoinMode }}</template>
 		<option value="inviteOnly">{{ i18n.ts._chat.inviteOnlyRoom }}</option>
 		<option value="open">{{ i18n.ts._chat.openRoom }}</option>
 		<option value="closed">{{ i18n.ts._chat.closedRoom }}</option>
 	</MkSelect>
+	<div v-else :class="$style.readonlyField">
+		<div :class="$style.readonlyLabel">{{ i18n.ts._chat.roomJoinMode }}</div>
+		<div :class="$style.readonlyValue">{{ joinModeText }}</div>
+	</div>
 
 	<MkInfo>
 		{{ i18n.ts.effectiveRoomMemberLimit }}: {{ room.memberLimit }}
@@ -71,6 +75,17 @@ const isOwner = computed(() => {
 const name_ = ref(props.room.name);
 const description_ = ref(props.room.description);
 const joinMode_ = ref(props.room.joinMode);
+const joinModeText = computed(() => {
+	switch (joinMode_.value) {
+		case 'open':
+			return i18n.ts._chat.openRoom;
+		case 'closed':
+			return i18n.ts._chat.closedRoom;
+		case 'inviteOnly':
+		default:
+			return i18n.ts._chat.inviteOnlyRoom;
+	}
+});
 
 watch(() => props.room, () => {
 	name_.value = props.room.name;
@@ -132,5 +147,25 @@ watch(isMuted, async () => {
 	&:hover {
 		text-decoration: none;
 	}
+}
+
+.readonlyField {
+	display: block;
+}
+
+.readonlyLabel {
+	font-size: 0.85em;
+	padding: 0 0 8px 0;
+	user-select: none;
+}
+
+.readonlyValue {
+	min-height: 36px;
+	padding: 8px 12px;
+	color: var(--MI_THEME-fg);
+	background: color(from var(--MI_THEME-panel) srgb r g b / 0.7);
+	border: solid 1px color(from var(--MI_THEME-fg) srgb r g b / 0.12);
+	border-radius: var(--MI-radius-sm);
+	box-sizing: border-box;
 }
 </style>

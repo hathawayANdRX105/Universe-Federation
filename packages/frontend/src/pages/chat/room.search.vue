@@ -149,19 +149,25 @@ function openContext(message: Misskey.entities.ChatMessage) {
 <style lang="scss" module>
 .root {
 	height: 100%;
+	max-height: min(100%, var(--MI-visualViewportHeight, 100dvh));
 	min-height: 0;
+	flex: 1 1 auto;
+	overflow-x: hidden;
 	overflow-y: auto;
 	-webkit-overflow-scrolling: touch;
 	touch-action: pan-y;
 	overscroll-behavior: contain;
 	box-sizing: border-box;
 	background: var(--MI_THEME-bg);
+	contain: layout style;
+	scrollbar-gutter: stable;
 }
 
 .inner {
 	width: 100%;
 	max-width: min(700px, calc(100% - 24px));
 	min-height: 100%;
+	height: max-content;
 	margin: 0 auto;
 	padding: 16px 0 max(24px, env(safe-area-inset-bottom));
 	box-sizing: border-box;
@@ -180,6 +186,7 @@ function openContext(message: Misskey.entities.ChatMessage) {
 }
 
 .results {
+	min-height: 0;
 	padding-bottom: 8px;
 }
 

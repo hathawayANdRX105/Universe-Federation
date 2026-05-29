@@ -30,6 +30,12 @@ export const meta = {
 			code: 'NO_SUCH_ROOM',
 			id: 'fcdb0f92-bda6-47f9-bd05-343e0e020932',
 		},
+
+		accessDenied: {
+			message: 'Only the room owner can update room settings.',
+			code: 'ACCESS_DENIED',
+			id: '8e9f5f5b-9f7d-4f8d-bc8f-2d0d6ed3cfe4',
+		},
 	},
 } as const;
 
@@ -56,6 +62,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const room = await this.chatService.findMyRoomById(me.id, ps.roomId);
 			if (room == null) {
 				throw new ApiError(meta.errors.noSuchRoom);
+			}
+
+			if (room.ownerId !== me.id) {
+				throw new ApiError(meta.errors.accessDenied);
 			}
 
 			const updated = await this.chatService.updateRoom(room, {

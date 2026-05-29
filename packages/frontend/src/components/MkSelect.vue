@@ -8,12 +8,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div :class="$style.label" @click="focus"><slot name="label"></slot></div>
 	<div
 		ref="container"
-		tabindex="0"
-		:class="[$style.input, { [$style.inline]: inline, [$style.disabled]: disabled, [$style.focused]: focused || opening }]"
-		@focus="focused = true"
+		:tabindex="isInteractive ? 0 : -1"
+		:class="[$style.input, { [$style.inline]: inline, [$style.disabled]: disabled || readonly, [$style.focused]: isInteractive && (focused || opening) }]"
+		@focus="focused = isInteractive"
 		@blur="focused = false"
 		@mousedown.prevent="show"
-		@keydown.space.enter="show"
+		@keydown.space.enter.prevent="show"
 	>
 		<div ref="prefixEl" :class="$style.prefix"><slot name="prefix"></slot></div>
 		<div
@@ -92,12 +92,16 @@ const inputEl = ref<HTMLObjectElement | null>(null);
 const prefixEl = ref<HTMLElement | null>(null);
 const suffixEl = ref<HTMLElement | null>(null);
 const container = ref<HTMLElement | null>(null);
+const isInteractive = computed(() => !props.disabled && !props.readonly);
 const height =
 	props.small ? 33 :
 	props.large ? 39 :
 	36;
 
-const focus = () => container.value?.focus();
+const focus = () => {
+	if (!isInteractive.value) return;
+	container.value?.focus();
+};
 
 // このコンポーネントが作成された時、非表示状態である場合がある
 // 非表示状態だと要素の幅などは0になってしまうので、定期的に計算する
@@ -176,6 +180,7 @@ watch([modelValue, () => props.items], () => {
 }, { immediate: true, deep: true });
 
 function show() {
+	if (!isInteractive.value) return;
 	if (opening.value) return;
 	focus();
 

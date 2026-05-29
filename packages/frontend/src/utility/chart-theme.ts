@@ -18,10 +18,13 @@ export type ChartThemeColors = {
 
 function isDarkColorScheme(): boolean {
 	const html = window.document.documentElement;
+	if (html.dataset.colorScheme === 'dark') return true;
+	if (html.dataset.colorScheme === 'light') return false;
+
 	const computedStyle = getComputedStyle(html);
 	const colorScheme = computedStyle.colorScheme || html.style.getPropertyValue('color-scheme');
 
-	return html.dataset.colorScheme === 'dark' || colorScheme.split(/\s+/).includes('dark');
+	return colorScheme.split(/\s+/).includes('dark');
 }
 
 function getCssVariable(name: string, fallback: string): string {
