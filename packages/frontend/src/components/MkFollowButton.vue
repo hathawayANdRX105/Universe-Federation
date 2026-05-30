@@ -187,13 +187,13 @@ onBeforeUnmount(() => {
 	position: relative;
 	display: inline-block;
 	font-weight: bold;
-	color: var(--MI_THEME-fgOnWhite);
+	color: var(--MI_THEME-accent);
 	border: solid 1px var(--MI_THEME-accent);
 	padding: 0;
 	height: 31px;
 	font-size: 16px;
 	border-radius: var(--MI-radius-xl);
-	background: #fff;
+	background: var(--MI_THEME-bg);
 
 	&.full {
 		padding: 0 8px 0 12px;

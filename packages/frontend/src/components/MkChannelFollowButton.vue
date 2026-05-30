@@ -75,7 +75,7 @@ async function onClick() {
 	height: 31px;
 	font-size: 16px;
 	border-radius: var(--MI-radius-xl);
-	background: #fff;
+	background: var(--MI_THEME-bg);
 
 	&.full {
 		padding: 0 8px 0 12px;

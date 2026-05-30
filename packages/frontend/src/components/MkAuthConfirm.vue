@@ -316,7 +316,7 @@ defineExpose({
 .icon {
 	border-radius: 50%;
 	border: 1px solid var(--MI_THEME-divider);
-	background-color: #fff;
+	background-color: var(--MI_THEME-bg);
 	object-fit: contain;
 }
 

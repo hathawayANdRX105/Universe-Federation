@@ -193,13 +193,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 		<template v-if="log.type === 'updateServerSettings'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'updateUserNote'">
 			<div>{{ i18n.ts.user }}: {{ log.info.userId }}</div>
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="log.info.before ?? ''" :newString="log.info.after ?? ''" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="log.info.before ?? ''" :newString="log.info.after ?? ''" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'suspend'">
@@ -211,19 +211,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<template v-else-if="log.type === 'setMandatoryCW'">
 			<div>{{ i18n.ts.user }}: <MkA :to="`/admin/user/${log.info.userId}`" class="_link">@{{ log.info.userUsername }}{{ log.info.userHost ? '@' + log.info.userHost : '' }}</MkA></div>
 			<div :class="$style.diff">
-				<CodeDiff :context="0" :hideHeader="true" :oldString="log.info.oldCW ?? ''" :newString="log.info.newCW ?? ''" maxHeight="150px"/>
+				<CodeDiff :context="0" :hideHeader="true" :theme="diffTheme" :oldString="log.info.oldCW ?? ''" :newString="log.info.newCW ?? ''" maxHeight="150px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'setMandatoryCWForNote'">
 			<div>{{ i18n.ts.user }}: <MkA :to="`/admin/user/${log.info.noteUserId}`" class="_link">@{{ log.info.noteUserUsername }}{{ log.info.noteUserHost ? '@' + log.info.noteUserHost : '' }}</MkA></div>
 			<div>{{ i18n.ts.note }}: <MkA :to="`/notes/${log.info.noteId}`" class="_link">{{ log.info.noteId }}</MkA></div>
 			<div :class="$style.diff">
-				<CodeDiff :context="0" :hideHeader="true" :oldString="log.info.oldCW ?? ''" :newString="log.info.newCW ?? ''" maxHeight="150px"/>
+				<CodeDiff :context="0" :hideHeader="true" :theme="diffTheme" :oldString="log.info.oldCW ?? ''" :newString="log.info.newCW ?? ''" maxHeight="150px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'setMandatoryCWForInstance'">
 			<div :class="$style.diff">
-				<CodeDiff :context="0" :hideHeader="true" :oldString="log.info.oldCW ?? ''" :newString="log.info.newCW ?? ''" maxHeight="150px"/>
+				<CodeDiff :context="0" :hideHeader="true" :theme="diffTheme" :oldString="log.info.oldCW ?? ''" :newString="log.info.newCW ?? ''" maxHeight="150px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'unsuspend'">
@@ -240,7 +240,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</template>
 		<template v-else-if="log.type === 'updateRole'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'assignRole'">
@@ -254,47 +254,47 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<template v-else-if="log.type === 'updateCustomEmoji'">
 			<div>{{ i18n.ts.emoji }}: {{ log.info.emojiId }}</div>
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'updateAd'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'updateGlobalAnnouncement'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'updateUserAnnouncement'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'updateAvatarDecoration'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'updateRemoteInstanceNote'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="log.info.before ?? ''" :newString="log.info.after ?? ''" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="log.info.before ?? ''" :newString="log.info.after ?? ''" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'updateSystemWebhook'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'updateAbuseReportNotificationRecipient'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'updateAbuseReportNote'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="log.info.before ?? ''" :newString="log.info.after ?? ''" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="log.info.before ?? ''" :newString="log.info.after ?? ''" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'clearUserFiles'">
@@ -340,7 +340,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</template>
 		<template v-else-if="log.type === 'updateProxyAccountDescription'">
 			<div :class="$style.diff">
-				<CodeDiff :context="5" :hideHeader="true" :oldString="log.info.before ?? ''" :newString="log.info.after ?? ''" maxHeight="300px"/>
+				<CodeDiff :context="5" :hideHeader="true" :theme="diffTheme" :oldString="log.info.before ?? ''" :newString="log.info.after ?? ''" maxHeight="300px"/>
 			</div>
 		</template>
 		<template v-else-if="log.type === 'setRoot'">
@@ -365,6 +365,7 @@ import * as Misskey from 'misskey-js';
 import { CodeDiff } from 'v-code-diff';
 import JSON5 from 'json5';
 import { i18n } from '@/i18n.js';
+import { store } from '@/store.js';
 import MkFolder from '@/components/MkFolder.vue';
 import SkFetchNote from '@/components/SkFetchNote.vue';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
@@ -373,12 +374,14 @@ import { url } from '@@/js/config.js';
 const props = defineProps<{
 	log: Misskey.entities.ModerationLog;
 }>();
+
+const diffTheme = store.s.darkMode ? 'dark' : 'light';
 </script>
 
 <style lang="scss" module>
 .diff {
-	background: #fff;
-	color: #000;
+	background: var(--MI_THEME-bg);
+	color: var(--MI_THEME-fg);
 	border-radius: var(--MI-radius-sm);
 	overflow: clip;
 }

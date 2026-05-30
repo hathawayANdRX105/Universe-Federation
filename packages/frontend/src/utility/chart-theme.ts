@@ -33,15 +33,18 @@ function getCssVariable(name: string, fallback: string): string {
 }
 
 export function getChartThemeColors(): ChartThemeColors {
+	const textColor = getCssVariable('--MI_THEME-fg', isDarkColorScheme() ? '#ffffff' : '#222222');
+	const dividerColor = getCssVariable('--MI_THEME-divider', isDarkColorScheme() ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.1)');
+
 	if (isDarkColorScheme()) {
 		return {
-			textColor: '#ffffff',
-			gridColor: 'rgba(255, 255, 255, 0.16)',
-			borderColor: 'rgba(255, 255, 255, 0.16)',
+			textColor,
+			gridColor: dividerColor,
+			borderColor: dividerColor,
 			vLineColor: 'rgba(255, 255, 255, 0.28)',
-			miniChartLineColor: '#ffffff',
-			miniChartGridColor: 'rgba(255, 255, 255, 0.2)',
-			activityNotesColor: '#ffffff',
+			miniChartLineColor: textColor,
+			miniChartGridColor: dividerColor,
+			activityNotesColor: textColor,
 			activityRepliesColor: 'rgba(255, 255, 255, 0.78)',
 			activityRenotesColor: 'rgba(255, 255, 255, 0.58)',
 			activityWeekendColor: 'rgba(255, 255, 255, 0.9)',
@@ -49,9 +52,9 @@ export function getChartThemeColors(): ChartThemeColors {
 	}
 
 	return {
-		textColor: getCssVariable('--MI_THEME-fg', '#222222'),
-		gridColor: 'rgba(0, 0, 0, 0.1)',
-		borderColor: 'rgba(0, 0, 0, 0.1)',
+		textColor,
+		gridColor: dividerColor,
+		borderColor: dividerColor,
 		vLineColor: 'rgba(0, 0, 0, 0.2)',
 		miniChartLineColor: getCssVariable('--MI_THEME-accent', '#86b300'),
 		miniChartGridColor: 'rgba(0, 0, 0, 0.16)',
