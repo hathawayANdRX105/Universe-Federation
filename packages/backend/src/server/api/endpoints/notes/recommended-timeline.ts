@@ -38,6 +38,17 @@ const COLD_START_BOOST = 26; // strength of the cold-start boost at zero exposur
 const RATE_WEIGHT = 28; // weight applied to engagement rate in the final score
 const STARVED_RATE_THRESHOLD = 0.05; // below this rate after a fair shot, a note is treated as low-value (灌水)
 const FRESH_POOL_MULTIPLIER = 10;
+// A note that has been surfaced this many times has had a "fair shot": if it still
+// has near-zero engagement after this, it is demoted (灌水 settles out) — long before
+// it reaches COLD_START_POOL, which on a small instance most notes never reach.
+const FAIR_SHOT_EXPOSURE = 40;
+// Author-level anti-flood: accounts that post a lot but earn almost no engagement per
+// post are spammers (e.g. grok/doubao/WindSurf — none flagged isBot, so withBots can't
+// catch them). Their notes get a frequency-scaled penalty so they can't dominate by volume.
+const AUTHOR_FLOOD_MIN_POSTS = 15; // below this post count an author is never treated as a flooder
+const AUTHOR_FLOOD_RATE_THRESHOLD = 0.4; // engagement-per-post below this + high volume = flood
+const AUTHOR_FLOOD_MAX_PENALTY = 30; // cap on the per-note flood penalty
+const AUTHOR_WINDOW = 1000 * 60 * 60 * 24 * 14; // window for measuring author posting frequency
 
 export const meta = {
 	tags: ['notes'],
@@ -222,22 +233,36 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			let candidates: Awaited<ReturnType<typeof query.getMany>>;
 			if (sort === 'latestReply') {
-				candidates = await query
-					.addSelect(`
-						COALESCE((
-							SELECT reply_sort.id
-							FROM note reply_sort
-							WHERE reply_sort."replyId" = note.id
-								AND reply_sort.visibility = 'public'
-							ORDER BY reply_sort.id DESC
-							LIMIT 1
-						), note.id)
-					`, 'latest_reply_sort_id')
-					.orderBy('latest_reply_sort_id', 'DESC')
-					.addOrderBy('note.id', 'DESC')
+				// "Latest replies": order strictly by most-recent-reply time.
+				// getMany() does NOT preserve the SQL ORDER BY when the query has
+				// leftJoinAndSelect relations (TypeORM hydration reorders rows), so we
+				// fetch the candidate window, then compute each note's sort key with a
+				// dedicated bulk query (newest public reply id, or the note's own id when
+				// it has no replies) and sort in JS — deterministic, no raw-alias guessing.
+				const fetched = await query
+					.orderBy('note.id', 'DESC')
 					.offset(ps.offset)
 					.limit(recommendationLimit)
 					.getMany();
+				const sortKeyById = new Map<string, string>(fetched.map(n => [n.id, n.id]));
+				if (fetched.length > 0) {
+					// Raw parameterised query with explicit column aliases — avoids any
+					// ambiguity in how the query builder names aggregate raw columns.
+					const replyRows = await this.notesRepository.query(
+						'SELECT "replyId" AS reply_id, MAX("id") AS max_id FROM note WHERE "replyId" = ANY($1) AND visibility = \'public\' GROUP BY "replyId"',
+						[fetched.map(n => n.id)],
+					) as { reply_id: string; max_id: string }[];
+					for (const row of replyRows) {
+						// sort key = newest reply id when it's newer than the note's own id
+						const own = sortKeyById.get(row.reply_id) ?? row.reply_id;
+						sortKeyById.set(row.reply_id, row.max_id > own ? row.max_id : own);
+					}
+				}
+				candidates = [...fetched].sort((a, b) => {
+					const ka = sortKeyById.get(a.id) ?? a.id;
+					const kb = sortKeyById.get(b.id) ?? b.id;
+					return ka < kb ? 1 : ka > kb ? -1 : 0;
+				});
 			} else {
 				// Two-path candidate set: the top-scored notes PLUS the freshest notes,
 				// merged by id. The fresh path guarantees zero-engagement new posts enter
@@ -261,9 +286,23 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				candidates = [...merged.values()];
 			}
 
-			const signals = await this.recommendationService.getUserSignals(me?.id ?? null, candidates);
-			const effectiveRankMode = category === 'trending' ? 'trending' : rankMode;
-			const notes = this.diversify(this.rankCandidates(candidates, signals, category, sort, effectiveRankMode), ps.limit);
+			let notes: typeof candidates;
+			if (sort === 'latestReply') {
+				// "Latest replies" must stay in strict most-recent-reply-first order.
+				// candidates already come back ordered by latest_reply_sort_id DESC, so we
+				// skip the recommendation re-ranking entirely (which would otherwise reorder
+				// by engagement/cold-start score) and just run diversify — it walks the input
+				// order greedily, so it preserves recency while still applying the per-author
+				// (≤2), per-channel (≤2) and duplicate-text caps.
+				notes = this.diversify(candidates, ps.limit);
+			} else {
+				const [signals, authorFlood] = await Promise.all([
+					this.recommendationService.getUserSignals(me?.id ?? null, candidates),
+					this.getAuthorFloodScores(candidates),
+				]);
+				const effectiveRankMode = category === 'trending' ? 'trending' : rankMode;
+				notes = this.diversify(this.rankCandidates(candidates, signals, authorFlood, category, sort, effectiveRankMode), ps.limit);
+			}
 			// Record delivery so engagement can be divided by exposure next time round.
 			this.recommendationService.recordExposure(notes.map(note => note.id));
 			return await this.noteEntityService.packMany(notes, me);
@@ -346,9 +385,50 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		}
 	}
 
+	/**
+	 * Per-author flood penalty: for every author appearing in the candidate set,
+	 * count their posts and total weighted engagement over the recent window, then
+	 * derive a penalty for high-volume / low-engagement-per-post accounts. This
+	 * catches spam accounts that are NOT flagged isBot (so withBots can't filter
+	 * them) but flood the instance with near-zero-value posts. Computed in one
+	 * grouped query over the candidate authors.
+	 */
+	private async getAuthorFloodScores(notes: { userId: string }[]): Promise<Map<string, number>> {
+		const penalties = new Map<string, number>();
+		const authorIds = [...new Set(notes.map(note => note.userId))];
+		if (authorIds.length === 0) return penalties;
+
+		const windowSinceId = this.idService.gen(this.timeService.now - AUTHOR_WINDOW);
+		const rows = await this.notesRepository.createQueryBuilder('note')
+			.select('note.userId', 'userId')
+			.addSelect('COUNT(*)', 'posts')
+			.addSelect(`SUM(
+				COALESCE((SELECT SUM((value)::int) FROM jsonb_each_text(note.reactions)), 0)
+				+ note."renoteCount" * 2
+				+ note."repliesCount" * 2
+				+ note."clippedCount" * 3
+			)`, 'engage')
+			.where('note.userId IN (:...authorIds)', { authorIds })
+			.andWhere('note.id > :windowSinceId', { windowSinceId })
+			.groupBy('note.userId')
+			.getRawMany<{ userId: string; posts: string; engage: string | null }>();
+
+		for (const row of rows) {
+			const posts = Number(row.posts);
+			if (posts < AUTHOR_FLOOD_MIN_POSTS) continue;
+			const engage = Number(row.engage ?? 0);
+			const engagementRate = engage / Math.max(posts, 1);
+			if (engagementRate >= AUTHOR_FLOOD_RATE_THRESHOLD) continue;
+			// The more they post past the threshold, the harder they are demoted (capped).
+			penalties.set(row.userId, Math.min(AUTHOR_FLOOD_MAX_PENALTY, (posts - (AUTHOR_FLOOD_MIN_POSTS - 1)) * 1.5));
+		}
+		return penalties;
+	}
+
 	private rankCandidates<T extends { id: string; userId: string; text: string | null; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; tags?: string[]; channelId?: string | null }>(
 		notes: T[],
 		signals: Awaited<ReturnType<RecommendationService['getUserSignals']>>,
+		authorFlood: Map<string, number>,
 		category: RecommendationCategory,
 		sort: RecommendationSort,
 		rankMode: RecommendationRankMode,
@@ -370,34 +450,57 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				// engagement from a small audience can outrank an old post with many
 				// reactions but huge exposure. This is the core anti-"rich-get-richer" lever.
 				const engagementRate = (engagementValue + hotScore * 0.9) / Math.max(exposureCount, EXPOSURE_FLOOR);
+				// Quality gate for the traffic pool: obvious 灌水 (short text with no media,
+				// or already heavily flagged by getLowValuePenalty) only gets a fraction of
+				// the cold-start boost, so it can't crowd out genuine new posts.
+				const lowValuePenalty = this.getLowValuePenalty(note);
+				const compactLen = (note.text ?? '').replace(/\s+/g, '').length;
+				const hasMedia = (note.fileIds?.length ?? 0) > 0;
+				const qualifiesForPool = lowValuePenalty < 18 && (compactLen >= 10 || hasMedia);
 				// Traffic-pool guarantee: under-exposed notes get a decaying boost so
-				// every new post is delivered to an initial audience before ranking
+				// every genuine new post is delivered to an initial audience before ranking
 				// settles. Fades to 0 once the note has been surfaced COLD_START_POOL times.
+				// Pure 灌水 still gets a small (0.15) shot to prove engagement, but no more.
 				const coldStartBoost = exposureCount < COLD_START_POOL
-					? COLD_START_BOOST * (1 - exposureCount / COLD_START_POOL)
+					? COLD_START_BOOST * (1 - exposureCount / COLD_START_POOL) * (qualifiesForPool ? 1 : 0.15)
 					: 0;
+				// Personalised interest from the user's behaviour profile. Weights are
+				// a touch higher than before so the feed leans more "for-you" / behaviour
+				// driven (TikTok-style) now that profiles are well populated — the
+				// traffic-pool cold-start boost below still guarantees new posts surface.
 				const interestScore =
-					Math.min(Number(signal?.authorScore ?? 0), 26) * 0.42 +
-					Math.min(Number(signal?.channelScore ?? 0), 32) * 0.58 +
-					Math.min(Number(signal?.keywordScore ?? 0), 38) * 0.72 +
-					Math.min(Number(signal?.eventScore ?? 0), 24) * 0.34;
+					Math.min(Number(signal?.authorScore ?? 0), 28) * 0.5 +
+					Math.min(Number(signal?.channelScore ?? 0), 34) * 0.66 +
+					Math.min(Number(signal?.keywordScore ?? 0), 40) * 0.82 +
+					Math.min(Number(signal?.eventScore ?? 0), 26) * 0.4;
 				const socialScore = (signal?.socialAuthorScore ?? 0) + (signal?.socialChannelScore ?? 0);
 				const negativeScore =
 					Math.min(Number(signal?.negativeAuthorScore ?? 0), 18) * 1.15 +
 					Math.min(Number(signal?.negativeKeywordScore ?? 0), 18) * 0.8;
-				const seenPenalty = signal?.seen ? -28 : 0;
+				// Soft "already seen" demotion instead of a hard −28 cliff. A hard cliff
+				// buried every good post the moment it was shown once (users have 200-370
+				// notes in their seen set), so quality content could never resurface. Now:
+				// a light base penalty, reduced further for high-engagement notes — so a
+				// genuinely popular post the user glanced at can still come back, while
+				// low-value seen posts stay suppressed. (`seen` is boolean today; this keeps
+				// the demotion meaningful but no longer absolute.)
+				const seenPenalty = signal?.seen ? -14 + Math.min(engagementValue, 12) * 0.6 : 0;
 				const exploreBoost = (signal?.explorationScore ?? 0) * (rankMode === 'trending' ? 2.2 : 8.5);
 				const recencyTieBreak = Math.max(0, notes.length - index) / Math.max(notes.length, 1);
 				const personalizedScore = rankMode === 'trending' ? 0 : interestScore + socialScore;
-				// Demote notes that have already had a fair shot (plenty of exposure) but
+				// Demote notes that have already had a fair shot (FAIR_SHOT_EXPOSURE) but
 				// almost no engagement — this is where 灌水/low-value posts naturally settle,
-				// without relying on hardcoded keyword blacklists.
-				const lowValuePenalty = this.getLowValuePenalty(note);
-				const starvedPenalty = exposureCount > COLD_START_POOL && engagementRate < STARVED_RATE_THRESHOLD ? -22 : 0;
+				// without relying on hardcoded keyword blacklists. The penalty grows the
+				// longer a note keeps failing to earn engagement.
+				const starvedPenalty = exposureCount > FAIR_SHOT_EXPOSURE && engagementRate < STARVED_RATE_THRESHOLD
+					? -22 - Math.min(exposureCount, COLD_START_POOL) * 0.12
+					: 0;
+				// Author-level anti-flood: high-volume / low-engagement spam accounts.
+				const floodPenalty = authorFlood.get(note.userId) ?? 0;
 				const latestReplyBoost = sort === 'latestReply' ? recencyTieBreak * 8 : 0;
 				return {
 					note,
-					score: engagementRate * RATE_WEIGHT + coldStartBoost + personalizedScore + seenPenalty + exploreBoost + latestReplyBoost + recencyTieBreak + starvedPenalty - negativeScore - lowValuePenalty,
+					score: engagementRate * RATE_WEIGHT + coldStartBoost + personalizedScore + seenPenalty + exploreBoost + latestReplyBoost + recencyTieBreak + starvedPenalty - negativeScore - lowValuePenalty - floodPenalty,
 					exploreScore: signal?.explorationScore ?? 0,
 				};
 			})
