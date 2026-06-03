@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div class="_pageContainer" :class="$style.root">
-	<KeepAlive :max="cacheLimit">
+	<KeepAlive v-if="isCacheable" :max="prefer.s.numberOfPageCache">
 		<Suspense :timeout="0">
 			<component :is="currentPageComponent" :key="key" v-bind="Object.fromEntries(currentPageProps)"/>
 
@@ -14,6 +14,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</template>
 		</Suspense>
 	</KeepAlive>
+	<Suspense v-else :timeout="0">
+		<component :is="currentPageComponent" :key="key" v-bind="Object.fromEntries(currentPageProps)"/>
+
+		<template #fallback>
+			<MkLoading/>
+		</template>
+	</Suspense>
 </div>
 </template>
 
@@ -28,7 +35,7 @@ import { DI } from '@/di.js';
 import { deepEqual } from '@/utility/deep-equal.js';
 import { assertFrontendAssetsCurrent, queueDisplayStateRestore } from '@/utility/frontend-consistency.js';
 
-const UNCACHED_ROUTES = new Set(['/', '/explore', '/my/notifications']);
+const UNCACHED_ROUTES = new Set(['/', '/explore', '/my/notifications', '/search']);
 
 const props = defineProps<{
 	router?: Router;
@@ -51,7 +58,7 @@ const currentPageComponent = shallowRef('component' in current.route ? current.r
 const currentPageProps = ref(current.props);
 const currentRoutePath = ref(current.route.path);
 const key = ref(router.getCurrentFullPath());
-const cacheLimit = computed(() => UNCACHED_ROUTES.has(currentRoutePath.value) ? 0 : prefer.s.numberOfPageCache);
+const isCacheable = computed(() => !UNCACHED_ROUTES.has(currentRoutePath.value));
 
 router.useListener('change', ({ resolved }) => {
 	if (resolved == null || 'redirect' in resolved.route) return;

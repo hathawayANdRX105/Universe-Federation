@@ -28,24 +28,51 @@ export class RegistryApiService {
 	@bindThis
 	public async set(userId: MiUser['id'], domain: string | null, scope: string[], key: string, value: any) {
 		// TODO: 作成できるキーの数を制限する
+		const now = this.timeService.date;
 
-		await this.registryItemsRepository.createQueryBuilder('item')
-			.insert()
-			.values({
-				id: this.idService.gen(),
-				updatedAt: this.timeService.date,
-				userId: userId,
-				domain: domain,
-				scope: scope,
-				key: key,
-				value: value,
-			})
-			.orUpdate(
-				['updatedAt', 'value'],
-				['userId', 'key', 'scope', 'domain'],
-				{ upsertType: 'on-conflict-do-update' }
-			)
-			.execute();
+		if (domain == null) {
+			const result = await this.registryItemsRepository.createQueryBuilder()
+				.update()
+				.set({
+					updatedAt: now,
+					value: value,
+				})
+				.where('"userId" = :userId', { userId: userId })
+				.andWhere('domain IS NULL')
+				.andWhere('key = :key', { key: key })
+				.andWhere('scope = :scope', { scope: scope })
+				.execute();
+
+			if ((result.affected ?? 0) === 0) {
+				await this.registryItemsRepository.insert({
+					id: this.idService.gen(),
+					updatedAt: now,
+					userId: userId,
+					domain: domain,
+					scope: scope,
+					key: key,
+					value: value,
+				});
+			}
+		} else {
+			await this.registryItemsRepository.createQueryBuilder('item')
+				.insert()
+				.values({
+					id: this.idService.gen(),
+					updatedAt: now,
+					userId: userId,
+					domain: domain,
+					scope: scope,
+					key: key,
+					value: value,
+				})
+				.orUpdate(
+					['updatedAt', 'value'],
+					['userId', 'key', 'scope', 'domain'],
+					{ upsertType: 'on-conflict-do-update' }
+				)
+				.execute();
+		}
 
 		if (domain == null) {
 			// TODO: サードパーティアプリが傍受出来てしまうのでどうにかする
@@ -63,7 +90,9 @@ export class RegistryApiService {
 			.where(domain == null ? 'item.domain IS NULL' : 'item.domain = :domain', { domain: domain })
 			.andWhere('item.userId = :userId', { userId: userId })
 			.andWhere('item.key = :key', { key: key })
-			.andWhere('item.scope = :scope', { scope: scope });
+			.andWhere('item.scope = :scope', { scope: scope })
+			.orderBy('item.updatedAt', 'DESC')
+			.addOrderBy('item.id', 'DESC');
 
 		const item = await query.getOne();
 
@@ -76,6 +105,8 @@ export class RegistryApiService {
 		query.where(domain == null ? 'item.domain IS NULL' : 'item.domain = :domain', { domain: domain });
 		query.andWhere('item.userId = :userId', { userId: userId });
 		query.andWhere('item.scope = :scope', { scope: scope });
+		query.orderBy('item.updatedAt', 'ASC');
+		query.addOrderBy('item.id', 'ASC');
 
 		const items = await query.getMany();
 

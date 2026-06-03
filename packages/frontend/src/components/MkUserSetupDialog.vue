@@ -128,7 +128,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, useTemplateRef, watch, nextTick, defineAsyncComponent } from 'vue';
+import { ref, useTemplateRef, nextTick, defineAsyncComponent } from 'vue';
 import { host } from '@@/js/config.js';
 import MkModalWindow from '@/components/MkModalWindow.vue';
 import MkButton from '@/components/MkButton.vue';
@@ -149,10 +149,6 @@ const emit = defineEmits<{
 const dialog = useTemplateRef('dialog');
 
 const page = ref(store.s.accountSetupWizard);
-
-watch(page, () => {
-	store.set('accountSetupWizard', page.value);
-});
 
 async function close(skip: boolean) {
 	if (skip) {
