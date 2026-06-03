@@ -67,7 +67,7 @@ async function createRemoteNote(user: misskey.entities.SignupResponse, params: {
 		visibleUserIds: [],
 		mentions: [],
 		uri: `https://${user.host}/notes/${randomString()}`,
-	});
+	} as any);
 
 	await notes.insert(note);
 
@@ -104,7 +104,7 @@ async function createLocalNote(user: misskey.entities.SignupResponse, params: {
 		channelId: null,
 		visibleUserIds: [],
 		mentions: [],
-	});
+	} as any);
 
 	await notes.insert(note);
 
@@ -549,6 +549,36 @@ describe('Timelines', () => {
 			const res = await api('notes/timeline', { limit: 100 }, alice);
 
 			assert.strictEqual(res.body.some(note => note.id === bobNote.id), false);
+		});
+
+		test.concurrent('includeFollowedChannels: false でフォロー中チャンネルの未フォローユーザー投稿が含まれない', async () => {
+			const [alice, bob] = await Promise.all([signup(), signup()]);
+
+			const channel = await api('channels/create', { name: 'channel' }, bob).then(x => x.body);
+			await api('channels/follow', { channelId: channel.id }, alice);
+			await setTimeout(1000);
+			const bobNote = await post(bob, { text: 'hi', channelId: channel.id });
+
+			await waitForPushToTl();
+
+			const res = await api('notes/timeline', { limit: 100, includeFollowedChannels: false }, alice);
+
+			assert.strictEqual(res.body.some(note => note.id === bobNote.id), false);
+		});
+
+		test.concurrent('includeFollowedChannels: true ではフォロー中チャンネル投稿が含まれる', async () => {
+			const [alice, bob] = await Promise.all([signup(), signup()]);
+
+			const channel = await api('channels/create', { name: 'channel' }, bob).then(x => x.body);
+			await api('channels/follow', { channelId: channel.id }, alice);
+			await setTimeout(1000);
+			const bobNote = await post(bob, { text: 'hi', channelId: channel.id });
+
+			await waitForPushToTl();
+
+			const res = await api('notes/timeline', { limit: 100 }, alice);
+
+			assert.strictEqual(res.body.some(note => note.id === bobNote.id), true);
 		});
 
 		test.concurrent('自分の visibility: specified なノートが含まれる', async () => {

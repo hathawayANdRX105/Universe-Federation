@@ -64,6 +64,7 @@ const props = withDefaults(defineProps<{
 	recommendationCategory?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'tutorials' | 'resources';
 	recommendationSort?: 'personalized' | 'latestReply';
 	recommendationRankMode?: 'personalized' | 'trending';
+	includeFollowedChannels?: boolean;
 }>(), {
 	withRenotes: true,
 	withReplies: false,
@@ -76,6 +77,7 @@ const props = withDefaults(defineProps<{
 	recommendationCategory: 'forYou',
 	recommendationSort: 'personalized',
 	recommendationRankMode: 'personalized',
+	includeFollowedChannels: true,
 });
 
 const emit = defineEmits<{
@@ -89,11 +91,16 @@ provide('inChannel', computed(() => props.src === 'channel'));
 
 type TimelineQueryType = {
 	scope?: 'local' | 'social' | 'global' | 'mixed',
+	surface?: 'home' | 'explore',
+	category?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'tutorials' | 'resources',
+	sort?: 'personalized' | 'latestReply',
+	rankMode?: 'personalized' | 'trending',
 	antennaId?: string,
 	withRenotes?: boolean,
 	withReplies?: boolean,
 	withFiles?: boolean,
 	withBots?: boolean,
+	includeFollowedChannels?: boolean,
 	visibility?: string,
 	timelineMode?: 'chronological' | 'replies' | 'recommended',
 	listId?: string,
@@ -146,6 +153,7 @@ function connectChannel() {
 			withRenotes: props.withRenotes,
 			withFiles: props.onlyFiles ? true : undefined,
 			withBots: props.withBots,
+			includeFollowedChannels: props.includeFollowedChannels,
 		});
 		connection2 = stream.useChannel('main');
 	} else if (props.src === 'local') {
@@ -249,6 +257,7 @@ function updatePaginationQuery() {
 			withRenotes: props.withRenotes,
 			withFiles: props.onlyFiles ? true : undefined,
 			withBots: props.withBots,
+			includeFollowedChannels: props.includeFollowedChannels,
 		};
 	} else if (props.src === 'local') {
 		endpoint = 'notes/local-timeline';
@@ -342,7 +351,7 @@ function refreshEndpointAndChannel() {
 
 // デッキのリストカラムでwithRenotesを変更した場合に自動的に更新されるようにさせる
 // IDが切り替わったら切り替え先のTLを表示させたい
-watch(() => [props.list, props.antenna, props.channel, props.role, props.withRenotes, props.withBots, props.withReplies, props.onlyFiles, props.localTimelineMode, props.recommendationSurface, props.recommendationCategory, props.recommendationSort, props.recommendationRankMode], refreshEndpointAndChannel);
+watch(() => [props.list, props.antenna, props.channel, props.role, props.withRenotes, props.withBots, props.withReplies, props.onlyFiles, props.localTimelineMode, props.recommendationSurface, props.recommendationCategory, props.recommendationSort, props.recommendationRankMode, props.includeFollowedChannels], refreshEndpointAndChannel);
 
 // withSensitiveはクライアントで完結する処理のため、単にリロードするだけでOK
 watch(() => props.withSensitive, reloadTimeline);

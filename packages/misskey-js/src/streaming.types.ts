@@ -72,6 +72,7 @@ export type Channels = {
 			withRenotes?: boolean;
 			withFiles?: boolean;
 			withBots?: boolean;
+			includeFollowedChannels?: boolean;
 		};
 		events: {
 			note: (payload: Note) => void;

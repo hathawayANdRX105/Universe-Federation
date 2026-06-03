@@ -31,17 +31,22 @@ const CANDIDATE_WINDOW = 1000 * 60 * 60 * 24 * 14;
 const LOW_VALUE_TAGS = ['签到', '打卡', '水贴'];
 const QUALITY_TAGS = ['教程', 'ai', 'AI', '资源', '公告', 'Bug', 'bug'];
 const EXPLORE_SLOT_RATIO = 0.26;
-// Traffic-pool / engagement-rate tuning.
-const EXPOSURE_FLOOR = 12; // min divisor so a note still in its initial pool doesn't blow up its rate
-const COLD_START_POOL = 120; // exposures below this still receive a guaranteed-delivery boost
-const COLD_START_BOOST = 26; // strength of the cold-start boost at zero exposure (decays to 0 at COLD_START_POOL)
-const RATE_WEIGHT = 28; // weight applied to engagement rate in the final score
-const STARVED_RATE_THRESHOLD = 0.05; // below this rate after a fair shot, a note is treated as low-value (灌水)
+// Time-decayed hotness model (replaces the old exposure-divided engagement rate,
+// which collapsed to ~0 because the global exposure counter inflated ~100x faster
+// than engagement on a busy instance — burying genuinely hot new posts).
+const HOT_HALF_LIFE_HOURS = 18; // engagement+hotness decays by half every 18h → fresh content leads
+const HOTNESS_WEIGHT = 30; // weight of the time-decayed hotness in the final score
+const COLD_START_HOURS = 12; // posts younger than this get a guaranteed-delivery boost (age-based, not exposure-based)
+const COLD_START_BOOST = 26; // strength of the cold-start boost at age 0 (decays to 0 at COLD_START_HOURS)
 const FRESH_POOL_MULTIPLIER = 10;
-// A note that has been surfaced this many times has had a "fair shot": if it still
-// has near-zero engagement after this, it is demoted (灌水 settles out) — long before
-// it reaches COLD_START_POOL, which on a small instance most notes never reach.
-const FAIR_SHOT_EXPOSURE = 40;
+// De-duplication: a note delivered to this user within this many minutes is
+// demoted; the penalty fades linearly to 0 as it approaches the window edge,
+// so good content returns later (time-recovering de-dup, per user request).
+const DEDUP_WINDOW_MINUTES = 360; // 6h: within this, a just-seen note is suppressed
+const DEDUP_MAX_PENALTY = 90; // strength of the demotion for a just-now-delivered note (must outweigh hotness so the feed visibly rotates)
+// Random jitter to break ties / add variation between refreshes (kept small so it
+// only reorders near-equal scores, never lets junk leap to the top).
+const JITTER_AMPLITUDE = 6;
 // Author-level anti-flood: accounts that post a lot but earn almost no engagement per
 // post are spammers (e.g. grok/doubao/WindSurf — none flagged isBot, so withBots can't
 // catch them). Their notes get a frequency-scaled penalty so they can't dominate by volume.
@@ -275,14 +280,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				const freshQuery = query.clone()
 					.orderBy('note.id', 'DESC')
 					.limit(Math.min(Math.ceil(ps.limit * FRESH_POOL_MULTIPLIER), 220));
-				const underExposedQuery = query.clone()
-					.orderBy('note.id', 'DESC')
-					.limit(Math.min(Math.ceil(ps.limit * 12), 260));
-				const [scored, fresh, underExposed] = await Promise.all([scoredQuery.getMany(), freshQuery.getMany(), underExposedQuery.getMany()]);
+				const [scored, fresh] = await Promise.all([scoredQuery.getMany(), freshQuery.getMany()]);
 				const merged = new Map<string, typeof scored[number]>();
 				for (const note of scored) merged.set(note.id, note);
 				for (const note of fresh) merged.set(note.id, note);
-				for (const note of underExposed) merged.set(note.id, note);
 				candidates = [...merged.values()];
 			}
 
@@ -296,15 +297,19 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				// (≤2), per-channel (≤2) and duplicate-text caps.
 				notes = this.diversify(candidates, ps.limit);
 			} else {
+				const now = this.timeService.now;
+				// Per-request seed: varies the exploration shuffle between refreshes so
+				// the feed isn't identical each time (combined with offset for paging).
+				const requestSeed = (Math.floor(now / (1000 * 30)) + ps.offset) % 100000;
 				const [signals, authorFlood] = await Promise.all([
-					this.recommendationService.getUserSignals(me?.id ?? null, candidates),
+					this.recommendationService.getUserSignals(me?.id ?? null, candidates, now, requestSeed),
 					this.getAuthorFloodScores(candidates),
 				]);
 				const effectiveRankMode = category === 'trending' ? 'trending' : rankMode;
-				notes = this.diversify(this.rankCandidates(candidates, signals, authorFlood, category, sort, effectiveRankMode), ps.limit);
+				notes = this.diversify(this.rankCandidates(candidates, signals, authorFlood, category, sort, effectiveRankMode, now), ps.limit);
 			}
-			// Record delivery so engagement can be divided by exposure next time round.
-			this.recommendationService.recordExposure(notes.map(note => note.id));
+			// Record delivery per-user so the next request can de-duplicate (time-recovering).
+			this.recommendationService.recordDelivery(me?.id ?? null, notes.map(note => note.id), this.timeService.now);
 			return await this.noteEntityService.packMany(notes, me);
 		});
 	}
@@ -432,12 +437,13 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		category: RecommendationCategory,
 		sort: RecommendationSort,
 		rankMode: RecommendationRankMode,
+		now: number,
 	): T[] {
 		return notes
 			.map((note, index) => {
 				const signal = signals.get(note.id);
 				const reactionCount = Object.values(note.reactions ?? {}).reduce((acc, value) => acc + Number(value), 0);
-				// Absolute engagement value (capped) — the numerator of the rate.
+				// Absolute engagement value (capped).
 				const engagementValue =
 					Math.min(reactionCount, 40) * 0.6 +
 					Math.min(note.renoteCount ?? 0, 30) * 0.8 +
@@ -445,29 +451,26 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					Math.min(note.clippedCount ?? 0, 20) * 1.1 +
 					((note.fileIds?.length ?? 0) > 0 ? 2.5 : 0);
 				const hotScore = Math.min(Number(signal?.hotScore ?? 0), 42);
-				const exposureCount = Math.max(0, signal?.exposureCount ?? 0);
-				// Engagement RATE, not absolute counts: a fresh post with a little
-				// engagement from a small audience can outrank an old post with many
-				// reactions but huge exposure. This is the core anti-"rich-get-richer" lever.
-				const engagementRate = (engagementValue + hotScore * 0.9) / Math.max(exposureCount, EXPOSURE_FLOOR);
-				// Quality gate for the traffic pool: obvious 灌水 (short text with no media,
-				// or already heavily flagged by getLowValuePenalty) only gets a fraction of
-				// the cold-start boost, so it can't crowd out genuine new posts.
+				// Age-based time decay. The global exposure counter is no longer used as
+				// a divisor (it inflated ~100x faster than engagement and collapsed every
+				// rate to ~0). Instead, a note's hotness = its real engagement + behaviour
+				// hotness, decayed by age so fresh content leads and old content yields.
+				const ageHours = Math.max(0, (now - this.idService.parse(note.id).date.getTime()) / (1000 * 60 * 60));
+				const freshnessDecay = Math.exp(-ageHours / HOT_HALF_LIFE_HOURS);
+				const hotnessScore = (engagementValue + hotScore) * freshnessDecay;
+				// Quality gate: obvious 灌水 (short text w/o media, or flagged by
+				// getLowValuePenalty) only gets a fraction of the cold-start boost.
 				const lowValuePenalty = this.getLowValuePenalty(note);
 				const compactLen = (note.text ?? '').replace(/\s+/g, '').length;
 				const hasMedia = (note.fileIds?.length ?? 0) > 0;
 				const qualifiesForPool = lowValuePenalty < 18 && (compactLen >= 10 || hasMedia);
-				// Traffic-pool guarantee: under-exposed notes get a decaying boost so
-				// every genuine new post is delivered to an initial audience before ranking
-				// settles. Fades to 0 once the note has been surfaced COLD_START_POOL times.
-				// Pure 灌水 still gets a small (0.15) shot to prove engagement, but no more.
-				const coldStartBoost = exposureCount < COLD_START_POOL
-					? COLD_START_BOOST * (1 - exposureCount / COLD_START_POOL) * (qualifiesForPool ? 1 : 0.15)
+				// Traffic-pool guarantee, now AGE-based (exposure is unreliable): every
+				// genuine new post (< COLD_START_HOURS old) gets a decaying delivery boost
+				// so it reaches an initial audience. Pure 灌水 gets only 0.15x.
+				const coldStartBoost = ageHours < COLD_START_HOURS
+					? COLD_START_BOOST * (1 - ageHours / COLD_START_HOURS) * (qualifiesForPool ? 1 : 0.15)
 					: 0;
-				// Personalised interest from the user's behaviour profile. Weights are
-				// a touch higher than before so the feed leans more "for-you" / behaviour
-				// driven (TikTok-style) now that profiles are well populated — the
-				// traffic-pool cold-start boost below still guarantees new posts surface.
+				// Personalised interest from the user's behaviour profile (TikTok-style).
 				const interestScore =
 					Math.min(Number(signal?.authorScore ?? 0), 28) * 0.5 +
 					Math.min(Number(signal?.channelScore ?? 0), 34) * 0.66 +
@@ -477,30 +480,27 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				const negativeScore =
 					Math.min(Number(signal?.negativeAuthorScore ?? 0), 18) * 1.15 +
 					Math.min(Number(signal?.negativeKeywordScore ?? 0), 18) * 0.8;
-				// Soft "already seen" demotion instead of a hard −28 cliff. A hard cliff
-				// buried every good post the moment it was shown once (users have 200-370
-				// notes in their seen set), so quality content could never resurface. Now:
-				// a light base penalty, reduced further for high-engagement notes — so a
-				// genuinely popular post the user glanced at can still come back, while
-				// low-value seen posts stay suppressed. (`seen` is boolean today; this keeps
-				// the demotion meaningful but no longer absolute.)
-				const seenPenalty = signal?.seen ? -14 + Math.min(engagementValue, 12) * 0.6 : 0;
+				// Time-recovering de-duplication: a note this user was shown recently is
+				// demoted, and the demotion fades linearly to 0 across DEDUP_WINDOW_MINUTES
+				// — so the feed doesn't repeat, yet good content can return much later.
+				const deliveredMinutesAgo = signal?.deliveredMinutesAgo ?? null;
+				const dedupPenalty = (deliveredMinutesAgo != null && deliveredMinutesAgo < DEDUP_WINDOW_MINUTES)
+					? DEDUP_MAX_PENALTY * (1 - deliveredMinutesAgo / DEDUP_WINDOW_MINUTES)
+					: 0;
+				// Legacy seen flag (frontend impression) — keep a light demotion on top.
+				const seenPenalty = signal?.seen ? -10 + Math.min(engagementValue, 12) * 0.5 : 0;
 				const exploreBoost = (signal?.explorationScore ?? 0) * (rankMode === 'trending' ? 2.2 : 8.5);
+				// Small per-request jitter (hash-based via explorationScore) to break ties
+				// and add visible variation between refreshes.
+				const jitter = ((signal?.explorationScore ?? 0) - 0.5) * 2 * JITTER_AMPLITUDE;
 				const recencyTieBreak = Math.max(0, notes.length - index) / Math.max(notes.length, 1);
 				const personalizedScore = rankMode === 'trending' ? 0 : interestScore + socialScore;
-				// Demote notes that have already had a fair shot (FAIR_SHOT_EXPOSURE) but
-				// almost no engagement — this is where 灌水/low-value posts naturally settle,
-				// without relying on hardcoded keyword blacklists. The penalty grows the
-				// longer a note keeps failing to earn engagement.
-				const starvedPenalty = exposureCount > FAIR_SHOT_EXPOSURE && engagementRate < STARVED_RATE_THRESHOLD
-					? -22 - Math.min(exposureCount, COLD_START_POOL) * 0.12
-					: 0;
 				// Author-level anti-flood: high-volume / low-engagement spam accounts.
 				const floodPenalty = authorFlood.get(note.userId) ?? 0;
 				const latestReplyBoost = sort === 'latestReply' ? recencyTieBreak * 8 : 0;
 				return {
 					note,
-					score: engagementRate * RATE_WEIGHT + coldStartBoost + personalizedScore + seenPenalty + exploreBoost + latestReplyBoost + recencyTieBreak + starvedPenalty - negativeScore - lowValuePenalty - floodPenalty,
+					score: hotnessScore * HOTNESS_WEIGHT / 42 + coldStartBoost + personalizedScore + seenPenalty + exploreBoost + jitter + latestReplyBoost + recencyTieBreak - dedupPenalty - negativeScore - lowValuePenalty - floodPenalty,
 					exploreScore: signal?.explorationScore ?? 0,
 				};
 			})
@@ -514,7 +514,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		const channelCounts = new Map<string, number>();
 		const seenText = new Set<string>();
 		const exploreSlots = Math.max(1, Math.floor(limit * EXPLORE_SLOT_RATIO));
-		const explorationPool = notes.slice(Math.min(limit, notes.length));
 
 		for (const note of notes) {
 			const authorCount = authorCounts.get(note.userId) ?? 0;

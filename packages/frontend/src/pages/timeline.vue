@@ -52,6 +52,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				recommendationSurface="home"
 				recommendationCategory="forYou"
 				:recommendationSort="homeTab === 'latestReplies' ? 'latestReply' : 'personalized'"
+				:includeFollowedChannels="homeTab !== 'following'"
 				:sound="homeTab === 'following'"
 				@queue="queueUpdated"
 			/>
@@ -197,6 +198,7 @@ const timelineKey = computed(() => [
 	onlyFiles.value,
 	withSensitive.value,
 	homeTab.value === 'latestReplies' ? 'latestReply' : 'personalized',
+	homeTab.value === 'following' ? 'strictFollowing' : 'withFollowedChannels',
 ].join(':'));
 
 const trendRows = computed(() => {
@@ -664,10 +666,36 @@ definePage(() => ({
 	padding: 16px 18px;
 }
 
-// X has no per-note colour stripe: the channel colorBar is an inline-styled
-// <div style="background:…"> sitting at the top-left of the note. Hide it.
-.xFeed :deep(article div[style*="background"]) {
+// X has no per-note colour stripe. Hide only the explicit note colour bar;
+// broad inline-background selectors can hide avatars or author chrome.
+.xFeed :deep([data-note-color-bar]) {
 	display: none;
+}
+
+.xFeed :deep([data-note-author-avatar]) {
+	display: block !important;
+	visibility: visible !important;
+	opacity: 1 !important;
+	background: color-mix(in srgb, var(--MI_THEME-fg) 7%, var(--MI_THEME-panel));
+	box-shadow: 0 0 0 1px var(--MI_THEME-divider);
+}
+
+.xFeed :deep([data-note-author-name]) {
+	color: var(--MI_THEME-fg) !important;
+	-webkit-text-fill-color: var(--MI_THEME-fg) !important;
+	opacity: 1 !important;
+}
+
+.xFeed :deep([data-note-author-acct]) {
+	color: color-mix(in srgb, var(--MI_THEME-fg) 68%, transparent) !important;
+	-webkit-text-fill-color: color-mix(in srgb, var(--MI_THEME-fg) 68%, transparent) !important;
+	opacity: 1 !important;
+}
+
+.xFeed :deep([data-note-author-name] *),
+.xFeed :deep([data-note-author-acct] *) {
+	color: inherit !important;
+	-webkit-text-fill-color: currentColor !important;
 }
 
 // Spread the action bar like X: a single full-width row whose buttons are

@@ -52,6 +52,7 @@ export const paramDef = {
 		withFiles: { type: 'boolean', default: false },
 		withRenotes: { type: 'boolean', default: true },
 		withBots: { type: 'boolean', default: true },
+		includeFollowedChannels: { type: 'boolean', default: true },
 	},
 	required: [],
 } as const;
@@ -87,12 +88,13 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					untilId,
 					sinceId,
 					limit: ps.limit,
-					withFiles: ps.withFiles,
-					withRenotes: ps.withRenotes,
-					withBots: ps.withBots,
-				}, me);
-				return await this.noteEntityService.packMany(timeline, me);
-			}
+						withFiles: ps.withFiles,
+						withRenotes: ps.withRenotes,
+						withBots: ps.withBots,
+						includeFollowedChannels: ps.includeFollowedChannels,
+					}, me);
+					return await this.noteEntityService.packMany(timeline, me);
+				}
 
 			const timeline = this.fanoutTimelineEndpointService.timeline({
 				untilId,
@@ -102,6 +104,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				me,
 				useDbFallback: this.serverSettings.enableFanoutTimelineDbFallback,
 				redisTimelines: ps.withFiles ? [`homeTimelineWithFiles:${me.id}`] : [`homeTimeline:${me.id}`],
+				noteFilter: ps.includeFollowedChannels ? undefined : (note, _populated, visData) => {
+					if (note.userId === me.id) return true;
+					if (note.channelId != null) return false;
+					return visData.userRelations.get(note.userId)?.isFollowing === true;
+				},
 				excludePureRenotes: !ps.withRenotes,
 				excludeBots: !ps.withBots,
 				dbFallback: async (untilId, sinceId, limit) => await this.getFromDb({
@@ -111,6 +118,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					withFiles: ps.withFiles,
 					withRenotes: ps.withRenotes,
 					withBots: ps.withBots,
+					includeFollowedChannels: ps.includeFollowedChannels,
 				}, me),
 			});
 
@@ -118,17 +126,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		});
 	}
 
-	private async getFromDb(ps: { untilId: string | null; sinceId: string | null; limit: number; withFiles: boolean; withRenotes: boolean; withBots: boolean; }, me: MiLocalUser) {
+	private async getFromDb(ps: { untilId: string | null; sinceId: string | null; limit: number; withFiles: boolean; withRenotes: boolean; withBots: boolean; includeFollowedChannels: boolean; }, me: MiLocalUser) {
 		//#region Construct query
 		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), ps.sinceId, ps.untilId)
-			// in a channel I follow OR my own post OR by a user I follow
-			.andWhere(new Brackets(qb => this.queryService
-				.orFollowingChannel(qb, ':meId', 'note.channelId')
-				.orWhere(':meId = note.userId')
-				.orWhere(new Brackets(qb2 => this.queryService
-					.andFollowingUser(qb2, ':meId', 'note.userId')
-					.andWhere('note.channelId IS NULL'))),
-			))
 			.setParameters({ meId: me.id })
 			.innerJoinAndSelect('note.user', 'user')
 			.leftJoinAndSelect('note.reply', 'reply')
@@ -136,6 +136,18 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.leftJoinAndSelect('reply.user', 'replyUser')
 			.leftJoinAndSelect('renote.user', 'renoteUser')
 			.limit(ps.limit);
+
+		query.andWhere(new Brackets(qb => {
+			if (ps.includeFollowedChannels) {
+				// in a channel I follow OR my own post OR by a user I follow
+				this.queryService.orFollowingChannel(qb, ':meId', 'note.channelId');
+			}
+
+			qb.orWhere(':meId = note.userId');
+			qb.orWhere(new Brackets(qb2 => this.queryService
+				.andFollowingUser(qb2, ':meId', 'note.userId')
+				.andWhere('note.channelId IS NULL')));
+		}));
 
 		this.queryService.generateExcludedRepliesQueryForNotes(query, me);
 		this.queryService.generateVisibilityQuery(query, me);

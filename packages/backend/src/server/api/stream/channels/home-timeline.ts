@@ -20,6 +20,7 @@ class HomeTimelineChannel extends NoteChannel {
 	private withRenotes: boolean;
 	private withFiles: boolean;
 	private withBots: boolean;
+	private includeFollowedChannels: boolean;
 
 	constructor(
 		id: string,
@@ -36,6 +37,7 @@ class HomeTimelineChannel extends NoteChannel {
 		this.withRenotes = !!(params.withRenotes ?? true);
 		this.withFiles = !!(params.withFiles ?? false);
 		this.withBots = params.withBots !== false;
+		this.includeFollowedChannels = params.includeFollowedChannels !== false;
 
 		this.subscriber.on('notesStream', this.onNote);
 	}
@@ -49,6 +51,7 @@ class HomeTimelineChannel extends NoteChannel {
 		if (!this.withRenotes && isPackedPureRenote(note)) return;
 		if (!this.withBots && note.user.isBot) return;
 		if (note.channelId) {
+			if (!this.includeFollowedChannels) return;
 			if (!this.followingChannels?.has(note.channelId)) return;
 		} else {
 			// その投稿のユーザーをフォローしていなかったら弾く

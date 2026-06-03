@@ -33,12 +33,21 @@ export type RecommendationSignal = {
 	exposureCount: number;
 	seen: boolean;
 	explorationScore: number;
+	// Minutes since this note was last delivered to THIS user in a recommended
+	// response (null = never delivered in the retained window). Drives the
+	// time-recovering de-duplication: recently delivered → strong demotion that
+	// fades as the note ages out, so good content can return much later.
+	deliveredMinutesAgo: number | null;
 };
 
 const INTEREST_TTL = 1000 * 60 * 60 * 24 * 30;
 const SEEN_TTL_SECONDS = 60 * 60 * 24 * 14;
 const EVENT_TTL_SECONDS = 60 * 60 * 24 * 7;
 const EXPOSURE_TTL_SECONDS = 60 * 60 * 24 * 7;
+// Per-user "already delivered" set retention. After this, a note may be
+// recommended to the same user again (time-recovering de-dup).
+const DELIVERED_TTL_SECONDS = 60 * 60 * 12;
+const DELIVERED_MAX_ITEMS = 600;
 const MAX_PROFILE_ITEMS = 160;
 const EXPOSURE_KEY = 'recommendation:exposure:notes';
 const HOT_KEY = 'recommendation:hot:notes';
@@ -109,33 +118,54 @@ export class RecommendationService {
 	}
 
 	/**
-	 * Record that a batch of notes was served in a recommended response.
-	 * This is the "delivery" side of the traffic pool: every note that gets
-	 * surfaced accrues exposure, so ranking can divide engagement by exposure
-	 * (engagement rate) instead of rewarding absolute counts. Fire-and-forget.
+	 * Record that a batch of notes was delivered to a user in a recommended
+	 * response. This drives per-user de-duplication: we stamp each note in a
+	 * per-user "delivered" zset (score = delivery time), so the next request can
+	 * demote things this user just saw — a demotion that fades as the stamp ages
+	 * out of the retention window, letting good content return much later.
+	 *
+	 * We deliberately DO NOT keep using a global cumulative exposure counter as a
+	 * ranking divisor: on a busy instance it inflates ~100x faster than real
+	 * engagement (double-counted across every delivery + impression), which
+	 * collapsed every note's engagement-rate to ~0 and buried genuinely hot new
+	 * posts. Ranking now uses time-decayed hotness instead (see rankCandidates).
+	 * Fire-and-forget.
 	 */
 	@bindThis
-	public recordExposure(noteIds: string[]): void {
+	public recordDelivery(userId: string | null, noteIds: string[], now: number): void {
 		if (noteIds.length === 0) return;
 		const pipeline = this.redisClient.pipeline();
+		// Lightweight global tally kept for stats/debugging only (NOT a rate divisor).
 		for (const noteId of noteIds) {
 			pipeline.zincrby(EXPOSURE_KEY, 1, noteId);
 		}
 		pipeline.expire(EXPOSURE_KEY, EXPOSURE_TTL_SECONDS, 'NX');
+		if (userId != null) {
+			const deliveredKey = `recommendation:delivered:${userId}`;
+			for (const noteId of noteIds) {
+				pipeline.zadd(deliveredKey, now, noteId);
+			}
+			pipeline.expire(deliveredKey, DELIVERED_TTL_SECONDS);
+			// Trim oldest entries so the set can't grow unbounded.
+			pipeline.zremrangebyrank(deliveredKey, 0, -(DELIVERED_MAX_ITEMS + 1));
+		}
 		pipeline.exec().catch(() => { /* best-effort, never block the response */ });
 	}
 
 	@bindThis
-	public async getUserSignals(userId: string | null, notes: MiNote[]): Promise<Map<string, RecommendationSignal>> {
+	public async getUserSignals(userId: string | null, notes: MiNote[], now = 0, seed = 0): Promise<Map<string, RecommendationSignal>> {
 		const result = new Map<string, RecommendationSignal>();
 		if (notes.length === 0) return result;
 
+		const nowMs = now > 0 ? now : 0;
 		const ids = notes.map(note => note.id);
 		const [hotScores, exposureScores] = await Promise.all([
 			this.redisClient.zmscore(HOT_KEY, ...ids),
 			this.redisClient.zmscore(EXPOSURE_KEY, ...ids),
 		]);
 		if (userId == null) {
+			// Anonymous: per-request variation comes from a seed mixed into the
+			// exploration hash; vary the bucket by note id only (no user/delivery).
 			for (let i = 0; i < notes.length; i++) {
 				result.set(notes[i].id, {
 					authorScore: '0',
@@ -149,11 +179,15 @@ export class RecommendationService {
 					hotScore: String(hotScores[i] ?? '0'),
 					exposureCount: Number(exposureScores[i] ?? 0),
 					seen: false,
-					explorationScore: this.getExplorationScore(notes[i].id, userId),
+					explorationScore: this.getExplorationScore(notes[i].id, userId, seed),
+					deliveredMinutesAgo: null,
 				});
 			}
 			return result;
 		}
+
+		// Per-user delivery timestamps for time-recovering de-duplication.
+		const deliveredScores = await this.redisClient.zmscore(`recommendation:delivered:${userId}`, ...ids);
 
 		const [followingAuthorIds, followingChannelIds, mutedAuthorIds] = await Promise.all([
 			this.getFollowingAuthorIds(userId),
@@ -161,34 +195,44 @@ export class RecommendationService {
 			this.getMutedAuthorIds(userId),
 		]);
 		const pipeline = this.redisClient.pipeline();
+		const primaryKeywords = notes.map(note => this.getPrimaryKeyword(note) ?? '');
 		for (let i = 0; i < notes.length; i++) {
 			const note = notes[i];
 			pipeline.zscore(`recommendation:profile:${userId}:authors`, note.userId);
 			pipeline.zscore(`recommendation:profile:${userId}:channels`, note.channelId ?? '');
-			pipeline.zscore(`recommendation:profile:${userId}:keywords`, this.getPrimaryKeyword(note) ?? '');
+			pipeline.zscore(`recommendation:profile:${userId}:keywords`, primaryKeywords[i]);
 			pipeline.zscore(`recommendation:profile:${userId}:events`, note.id);
 			pipeline.zscore(`recommendation:negative:${userId}:authors`, note.userId);
-			pipeline.zscore(`recommendation:negative:${userId}:keywords`, this.getPrimaryKeyword(note) ?? '');
+			pipeline.zscore(`recommendation:negative:${userId}:keywords`, primaryKeywords[i]);
 			pipeline.exists(`recommendation:seen:${userId}:${note.id}`);
 		}
 		const rows = await pipeline.exec();
 		for (let i = 0; i < notes.length; i++) {
-			result.set(notes[i].id, {
+			const note = notes[i];
+			result.set(note.id, {
 				authorScore: String(rows?.[i * 7]?.[1] ?? '0'),
 				channelScore: String(rows?.[i * 7 + 1]?.[1] ?? '0'),
 				keywordScore: String(rows?.[i * 7 + 2]?.[1] ?? '0'),
 				eventScore: String(rows?.[i * 7 + 3]?.[1] ?? '0'),
-				socialAuthorScore: followingAuthorIds.has(notes[i].userId) ? 12 : mutedAuthorIds.has(notes[i].userId) ? -36 : 0,
-				socialChannelScore: notes[i].channelId != null && followingChannelIds.has(notes[i].channelId) ? 10 : 0,
+				socialAuthorScore: followingAuthorIds.has(note.userId) ? 12 : mutedAuthorIds.has(note.userId) ? -36 : 0,
+				socialChannelScore: note.channelId != null && followingChannelIds.has(note.channelId) ? 10 : 0,
 				negativeAuthorScore: String(rows?.[i * 7 + 4]?.[1] ?? '0'),
 				negativeKeywordScore: String(rows?.[i * 7 + 5]?.[1] ?? '0'),
 				hotScore: String(hotScores[i] ?? '0'),
 				exposureCount: Number(exposureScores[i] ?? 0),
 				seen: Number(rows?.[i * 7 + 6]?.[1] ?? 0) > 0,
-				explorationScore: this.getExplorationScore(notes[i].id, userId),
+				explorationScore: this.getExplorationScore(note.id, userId, seed),
+				deliveredMinutesAgo: this.minutesSince(deliveredScores[i], nowMs),
 			});
 		}
 		return result;
+	}
+
+	private minutesSince(stamp: string | number | null | undefined, nowMs: number): number | null {
+		if (stamp == null || nowMs <= 0) return null;
+		const t = Number(stamp);
+		if (!Number.isFinite(t) || t <= 0) return null;
+		return Math.max(0, (nowMs - t) / (1000 * 60));
 	}
 
 	private addInterestUpdates(pipeline: Redis.ChainableCommander, userId: string, note: MiNote, score: number, event: RecommendationEventType): void {
@@ -252,7 +296,7 @@ export class RecommendationService {
 
 	private extractKeywords(note: MiNote): string[] {
 		const terms = new Set<string>();
-		for (const tag of note.tags ?? []) {
+		for (const tag of note.tags) {
 			const normalized = this.normalizeTerm(tag);
 			if (normalized != null) terms.add(normalized);
 		}
@@ -276,8 +320,13 @@ export class RecommendationService {
 		return term;
 	}
 
-	private getExplorationScore(noteId: string, userId: string | null): number {
-		const key = `${noteId}:${userId ?? 'anon'}:${Math.floor(this.timeService.now / (1000 * 60 * 60))}`;
+	private getExplorationScore(noteId: string, userId: string | null, seed = 0): number {
+		// Per-request shuffle: mix in a caller-supplied seed and a fine (5-min)
+		// time bucket so consecutive refreshes reorder the exploration picks,
+		// instead of being identical for a whole hour (the old behaviour that
+		// made the feed feel static/repetitive).
+		const bucket = Math.floor(this.timeService.now / (1000 * 60 * 5));
+		const key = `${noteId}:${userId ?? 'anon'}:${bucket}:${seed}`;
 		let hash = 2166136261;
 		for (let i = 0; i < key.length; i++) {
 			hash ^= key.charCodeAt(i);
