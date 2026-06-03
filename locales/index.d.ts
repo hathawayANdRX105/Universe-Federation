@@ -5679,6 +5679,14 @@ export interface Locale extends ILocale {
          */
         "searchMessages": string;
         /**
+         * 送信者
+         */
+        "sender": string;
+        /**
+         * すべての送信者
+         */
+        "allSenders": string;
+        /**
          * ホーム
          */
         "home": string;
@@ -5698,6 +5706,74 @@ export interface Locale extends ILocale {
          * ルームを削除
          */
         "deleteRoom": string;
+        /**
+         * 管理
+         */
+        "management": string;
+        /**
+         * 管理者とモデレーターのみ、このルームのメッセージ履歴と自動削除ルールを管理できます。
+         */
+        "managementDescription": string;
+        /**
+         * メッセージ統計
+         */
+        "messageStats": string;
+        /**
+         * 最古のメッセージ
+         */
+        "oldestMessage": string;
+        /**
+         * 最新のメッセージ
+         */
+        "newestMessage": string;
+        /**
+         * このメッセージを削除
+         */
+        "deleteThisMessage": string;
+        /**
+         * このメッセージを削除しますか？オンライン中のすべてのメンバーからすぐに見えなくなります。
+         */
+        "deleteThisMessageConfirm": string;
+        /**
+         * このユーザーのこのルーム内のメッセージを削除
+         */
+        "deleteUserMessagesInRoom": string;
+        /**
+         * このユーザーのこのルーム内のすべてのメッセージを削除しますか？個人チャットや他のルームのメッセージは削除されません。この操作は取り消せません。
+         */
+        "deleteUserMessagesInRoomConfirm": string;
+        /**
+         * すべてのメッセージを削除
+         */
+        "deleteAllMessages": string;
+        /**
+         * 削除後、メンバーはこのルームのメッセージ履歴を表示できなくなります。
+         */
+        "deleteAllMessagesDescription": string;
+        /**
+         * このルームのすべてのメッセージを削除しますか？この操作は取り消せません。
+         */
+        "deleteAllMessagesConfirm": string;
+        /**
+         * メッセージの自動削除
+         */
+        "autoDeleteMessages": string;
+        /**
+         * 自動削除を有効にする
+         */
+        "enableAutoDeleteMessages": string;
+        /**
+         * 有効にすると、設定した日数より古いルームメッセージをサーバーが定期的に削除します。
+         */
+        "autoDeleteMessagesDescription": string;
+        /**
+         * 保持日数
+         */
+        "autoDeleteDays": string;
+        /**
+         * 1日から3650日まで設定できます。オフにすると無期限に保持されます。
+         */
+        "autoDeleteDaysCaption": string;
         /**
          * このサーバー、またはこのアカウントでチャットは有効化されていません。
          */
