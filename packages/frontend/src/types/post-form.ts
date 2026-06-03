@@ -5,10 +5,12 @@
 
 import type * as Misskey from 'misskey-js';
 
+export type PostFormChannel = Pick<Misskey.entities.Channel, 'id' | 'name' | 'color'>;
+
 export interface PostFormProps {
 	reply?: Misskey.entities.Note;
 	renote?: Misskey.entities.Note;
-	channel?: Misskey.entities.Channel; // TODO
+	channel?: PostFormChannel;
 	mention?: Misskey.entities.User;
 	specified?: Misskey.entities.UserDetailed;
 	initialText?: string;

@@ -9,18 +9,18 @@ Header for a note in the Sharkey style, displaying info such as username and cre
 <header v-if="!classic" :class="$style.root">
 	<div :class="$style.section">
 		<div style="display: flex;">
-			<div v-if="mock" :class="$style.name">
-				<MkUserName :user="note.user"/>
+			<div v-if="mock" data-note-author-name :class="$style.name">
+				<MkUserName :user="note.user" forceReadable/>
 			</div>
-			<MkA v-else v-user-preview="note.user.id" :class="$style.name" :to="userPage(note.user)">
-				<MkUserName :user="note.user"/>
+			<MkA v-else v-user-preview="note.user.id" data-note-author-name :class="$style.name" :to="userPage(note.user)">
+				<MkUserName :user="note.user" forceReadable/>
 			</MkA>
 			<div v-if="note.user.isBot" :class="$style.isBot">bot</div>
 			<div v-if="note.user.badgeRoles" :class="$style.badgeRoles">
 				<img v-for="(role, i) in note.user.badgeRoles" :key="i" v-tooltip="role.name" :class="$style.badgeRole" :src="role.iconUrl!"/>
 			</div>
 		</div>
-		<div :class="$style.username"><MkAcct :user="note.user"/></div>
+		<div data-note-author-acct :class="$style.username"><MkAcct :user="note.user"/></div>
 	</div>
 	<div :class="$style.section">
 		<div :class="$style.info">
@@ -45,14 +45,14 @@ Header for a note in the Sharkey style, displaying info such as username and cre
 	</div>
 </header>
 <header v-else :class="$style.classicRoot">
-	<div v-if="mock" :class="$style.name">
-		<MkUserName :user="note.user"/>
+	<div v-if="mock" data-note-author-name :class="$style.name">
+		<MkUserName :user="note.user" forceReadable/>
 	</div>
-	<MkA v-else v-user-preview="note.user.id" :class="$style.classicName" :to="userPage(note.user)">
-		<MkUserName :user="note.user"/>
+	<MkA v-else v-user-preview="note.user.id" data-note-author-name :class="$style.classicName" :to="userPage(note.user)">
+		<MkUserName :user="note.user" forceReadable/>
 	</MkA>
 	<div v-if="note.user.isBot" :class="$style.isBot">bot</div>
-	<div :class="$style.classicUsername"><MkAcct :user="note.user"/></div>
+	<div data-note-author-acct :class="$style.classicUsername"><MkAcct :user="note.user"/></div>
 	<div v-if="note.user.badgeRoles" :class="$style.badgeRoles">
 		<img v-for="(role, i) in note.user.badgeRoles" :key="i" v-tooltip="role.name" :class="$style.badgeRole" :src="role.iconUrl ?? ''"/>
 	</div>
@@ -117,6 +117,7 @@ const mock = inject(DI.mock, false);
 	cursor: auto; /* not clickToOpen-able */
 	min-height: 100%;
 	align-items: center;
+	--noteAcctColor: color-mix(in srgb, var(--MI_THEME-fg) 68%, transparent);
 }
 
 .classicRoot {
@@ -124,6 +125,7 @@ const mock = inject(DI.mock, false);
 	align-items: baseline;
 	white-space: nowrap;
 	cursor: auto; /* not clickToOpen-able */
+	--noteAcctColor: color-mix(in srgb, var(--MI_THEME-fg) 68%, transparent);
 }
 
 .section {
@@ -149,11 +151,18 @@ const mock = inject(DI.mock, false);
 	padding: 0;
 	overflow: hidden;
 	overflow-wrap: anywhere;
+	color: var(--MI_THEME-fg) !important;
 	font-size: 1em;
 	font-weight: bold;
+	-webkit-text-fill-color: var(--MI_THEME-fg) !important;
 	text-decoration: none;
 	text-overflow: ellipsis;
 	max-width: 300px;
+
+		:deep(*) {
+			color: inherit !important;
+			-webkit-text-fill-color: currentColor !important;
+		}
 
 		&::-webkit-scrollbar {
 			display: none;
@@ -171,10 +180,17 @@ const mock = inject(DI.mock, false);
 	margin: 0 .5em 0 0;
 	padding: 0;
 	overflow: hidden;
+	color: var(--MI_THEME-fg) !important;
 	font-size: 1em;
 	font-weight: bold;
+	-webkit-text-fill-color: var(--MI_THEME-fg) !important;
 	text-decoration: none;
 	text-overflow: ellipsis;
+
+	:deep(*) {
+		color: inherit !important;
+		-webkit-text-fill-color: currentColor !important;
+	}
 
 	&:hover {
 		text-decoration: underline;
@@ -195,9 +211,16 @@ const mock = inject(DI.mock, false);
 	flex-shrink: 9999999;
 	margin: 0 .5em 0 0;
 	overflow: hidden;
+	color: var(--noteAcctColor) !important;
+	-webkit-text-fill-color: var(--noteAcctColor) !important;
 	text-overflow: ellipsis;
 	font-size: .95em;
 	max-width: 300px;
+
+	:deep(*) {
+		color: inherit !important;
+		-webkit-text-fill-color: currentColor !important;
+	}
 
 	&::-webkit-scrollbar {
 		display: none;
@@ -208,7 +231,14 @@ const mock = inject(DI.mock, false);
 	flex-shrink: 9999999;
 	margin: 0 .5em 0 0;
 	overflow: hidden;
+	color: var(--noteAcctColor) !important;
+	-webkit-text-fill-color: var(--noteAcctColor) !important;
 	text-overflow: ellipsis;
+
+	:deep(*) {
+		color: inherit !important;
+		-webkit-text-fill-color: currentColor !important;
+	}
 }
 
 .info {

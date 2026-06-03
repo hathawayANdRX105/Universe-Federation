@@ -29,13 +29,13 @@ Displays a note in the Sharkey style. Used to show the "main" note in a given co
 	</div>
 	<div v-if="pinned" :class="$style.tip"><i class="ti ti-pin"></i> {{ i18n.ts.pinnedNote }}</div>
 	<div v-if="isRenote" :class="$style.renote">
-		<div v-if="note.channel" :class="$style.colorBar" :style="{ background: note.channel.color }"></div>
+		<div v-if="note.channel" data-note-color-bar :class="$style.colorBar" :style="{ background: note.channel.color }"></div>
 		<MkAvatar :class="$style.renoteAvatar" :user="note.user" link preview/>
 		<i class="ti ti-repeat" style="margin-right: 4px;"></i>
 		<I18n :src="i18n.ts.renotedBy" tag="span" :class="$style.renoteText">
 			<template #user>
 				<MkA v-user-preview="note.userId" :class="$style.renoteUserName" :to="userPage(note.user)">
-					<MkUserName :user="note.user"/>
+					<MkUserName :user="note.user" forceReadable/>
 				</MkA>
 			</template>
 		</I18n>
@@ -60,8 +60,8 @@ Displays a note in the Sharkey style. Used to show the "main" note in a given co
 	</div>
 	<article v-else :class="$style.article" @contextmenu.stop="onContextmenu">
 		<div style="display: flex; padding-bottom: 10px;">
-			<div v-if="appearNote.channel" :class="$style.colorBar" :style="{ background: appearNote.channel.color }"></div>
-			<MkAvatar :class="[$style.avatar, { [$style.avatarReplyTo]: appearNote.reply }]" :user="appearNote.user" :link="!mock" :preview="!mock"/>
+			<div v-if="appearNote.channel" data-note-color-bar :class="$style.colorBar" :style="{ background: appearNote.channel.color }"></div>
+			<MkAvatar data-note-author-avatar :class="[$style.avatar, { [$style.avatarReplyTo]: appearNote.reply }]" :user="appearNote.user" :link="!mock" :preview="!mock"/>
 			<div :class="$style.main">
 				<SkNoteHeader :note="appearNote" :mini="true"/>
 			</div>
@@ -530,7 +530,7 @@ function renote(visibility: Visibility, localOnly: boolean = false) {
 				appearNote.value.isRenoted = true;
 			}).finally(() => { renoting = false; });
 		}
-	} else if (!appearNote.value.channel || appearNote.value.channel.allowRenoteToExternal) {
+	} else {
 		const el = renoteButton.value as HTMLElement | null | undefined;
 		if (el) {
 			const rect = el.getBoundingClientRect();
@@ -624,7 +624,7 @@ function reply(): void {
 	}
 	os.post({
 		reply: appearNote.value,
-		channel: appearNote.value.channel,
+		channel: appearNote.value.channel ?? undefined,
 	}).then(() => {
 		focus();
 	});

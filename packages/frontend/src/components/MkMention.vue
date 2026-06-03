@@ -5,7 +5,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <MkA v-user-preview="canonical" :class="[$style.root, { [$style.isMe]: isMe }]" :to="url" :behavior="navigationBehavior">
-	<img :class="$style.icon" :src="avatarUrl" alt="">
+	<img v-if="!avatarLoadError" :class="$style.icon" :src="avatarUrl" alt="" decoding="async" @error="onAvatarError" @load="onAvatarLoad">
+	<span v-else data-mention-avatar-fallback :class="[$style.icon, $style.iconFallback]" aria-hidden="true"><i class="ti ti-user"></i></span>
 	<span>
 		<span>@{{ username }}</span>
 		<span v-if="(host != localHost)" :class="$style.host">@{{ toUnicode(host) }}</span>
@@ -15,7 +16,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { toUnicode } from 'punycode.js';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { host as localHost } from '@@/js/config.js';
 import type { MkABehavior } from '@/components/global/MkA.vue';
 import { $i } from '@/i.js';
@@ -40,6 +41,20 @@ const avatarUrl = computed(() => prefer.s.disableShowingAnimatedImages || prefer
 	? getStaticImageUrl(`/avatar/@${props.username}@${props.host}`)
 	: `/avatar/@${props.username}@${props.host}`,
 );
+
+const avatarLoadError = ref(false);
+
+watch(avatarUrl, () => {
+	avatarLoadError.value = false;
+});
+
+function onAvatarError() {
+	avatarLoadError.value = true;
+}
+
+function onAvatarLoad() {
+	avatarLoadError.value = false;
+}
 </script>
 
 <style lang="scss" module>
@@ -64,6 +79,15 @@ const avatarUrl = computed(() => prefer.s.disableShowingAnimatedImages || prefer
 	margin: 0 0.2em 0 0;
 	vertical-align: bottom;
 	border-radius: var(--MI-radius-full);
+}
+
+.iconFallback {
+	display: inline-grid;
+	place-items: center;
+	color: var(--MI_THEME-fgTransparentWeak);
+	background: color-mix(in srgb, var(--MI_THEME-fg) 12%, var(--MI_THEME-panel));
+	font-size: 0.9em;
+	line-height: 1;
 }
 
 .host {

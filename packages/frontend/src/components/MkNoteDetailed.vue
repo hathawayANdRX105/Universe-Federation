@@ -27,7 +27,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<I18n :src="i18n.ts.renotedBy" tag="span">
 				<template #user>
 					<MkA v-user-preview="note.userId" :class="$style.renoteName" :to="userPage(note.user)">
-						<MkUserName :user="note.user"/>
+						<MkUserName :user="note.user" forceReadable/>
 					</MkA>
 				</template>
 			</I18n>
@@ -51,7 +51,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div :class="$style.noteHeaderBody">
 				<div>
 					<MkA v-user-preview="appearNote.user.id" :class="$style.noteHeaderName" :to="userPage(appearNote.user)">
-						<MkUserName :nowrap="false" :user="appearNote.user"/>
+						<MkUserName :nowrap="false" :user="appearNote.user" forceReadable/>
 					</MkA>
 					<span v-if="appearNote.user.isBot" :class="$style.isBot">bot</span>
 					<div :class="$style.noteHeaderInfo">
@@ -434,12 +434,14 @@ useTooltip(renoteButton, async (showing) => {
 	const users = renotes.map(x => x.user);
 
 	if (users.length < 1) return;
+	const targetElement = renoteButton.value;
+	if (targetElement == null) return;
 
 	const { dispose } = os.popup(MkUsersTooltip, {
 		showing,
 		users,
 		count: appearNote.value.renoteCount,
-		targetElement: renoteButton.value,
+		targetElement,
 	}, {
 		closed: () => dispose(),
 	});
@@ -455,12 +457,14 @@ useTooltip(quoteButton, async (showing) => {
 	const users = renotes.map(x => x.user);
 
 	if (users.length < 1) return;
+	const targetElement = quoteButton.value;
+	if (targetElement == null) return;
 
 	const { dispose } = os.popup(MkUsersTooltip, {
 		showing,
 		users,
 		count: appearNote.value.renoteCount,
-		targetElement: quoteButton.value,
+		targetElement,
 	}, {
 		closed: () => dispose(),
 	});
@@ -609,7 +613,7 @@ function reply(): void {
 	showMovedDialog();
 	os.post({
 		reply: appearNote.value,
-		channel: appearNote.value.channel,
+		channel: appearNote.value.channel ?? undefined,
 	}).then(() => {
 		focus();
 	});
@@ -899,7 +903,13 @@ function animatedMFM() {
 }
 
 .renoteName {
+	color: var(--MI_THEME-fg) !important;
 	font-weight: bold;
+
+	:deep(*) {
+		color: inherit !important;
+		-webkit-text-fill-color: currentColor !important;
+	}
 }
 
 .renoteInfo {
@@ -951,8 +961,14 @@ function animatedMFM() {
 }
 
 .noteHeaderName {
+	color: var(--MI_THEME-fg) !important;
 	font-weight: bold;
 	line-height: 1.3;
+
+	:deep(*) {
+		color: inherit !important;
+		-webkit-text-fill-color: currentColor !important;
+	}
 }
 
 .isBot {
@@ -976,8 +992,14 @@ function animatedMFM() {
 .noteHeaderUsername {
 	margin-bottom: 2px;
 	margin-right: 0.5em;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 68%, transparent);
 	line-height: 1.3;
 	word-wrap: anywhere;
+
+	:deep(*) {
+		color: inherit !important;
+		-webkit-text-fill-color: currentColor !important;
+	}
 }
 
 .playMFMButton {

@@ -613,7 +613,15 @@ onUnmounted(() => {
 							line-height: 32px;
 							font-weight: bold;
 							font-size: 1.8em;
+							color: #fff;
+							-webkit-text-fill-color: #fff;
+							text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 0 8px rgba(0, 0, 0, 0.55);
 							filter: drop-shadow(0 0 4px #000);
+
+							:deep(*) {
+								color: inherit !important;
+								-webkit-text-fill-color: currentColor !important;
+							}
 						}
 
 						> .bottom {
