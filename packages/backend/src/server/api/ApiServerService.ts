@@ -14,6 +14,7 @@ import { DI } from '@/di-symbols.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { AiService, AiServiceError } from '@/core/AiService.js';
 import { InternalEventService } from '@/global/InternalEventService.js';
+import { TimeService } from '@/global/TimeService.js';
 import { getIpHash } from '@/misc/get-ip-hash.js';
 import { sendRateLimitHeaders } from '@/misc/rate-limit-utils.js';
 import { bindThis } from '@/decorators.js';
@@ -34,6 +35,8 @@ const aiChatStreamRateLimit = {
 	size: 10,
 	dripRate: 5000,
 };
+const AI_CHAT_STREAM_BODY_LIMIT = 128 * 1024;
+const AI_CHAT_STREAM_WRITE_TIMEOUT_MS = 10000;
 
 @Injectable()
 export class ApiServerService {
@@ -62,6 +65,7 @@ export class ApiServerService {
 		private signinApiService: SigninApiService,
 		private signinWithPasskeyApiService: SigninWithPasskeyApiService,
 		private readonly internalEventService: InternalEventService,
+		private readonly timeService: TimeService,
 	) {
 		//this.createServer = this.createServer.bind(this);
 	}
@@ -226,7 +230,7 @@ export class ApiServerService {
 				fileIds?: string[];
 				systemPrompt?: string | null;
 			};
-		}>('/ai/chat-stream', async (request, reply) => {
+		}>('/ai/chat-stream', { bodyLimit: AI_CHAT_STREAM_BODY_LIMIT }, async (request, reply) => {
 			const token = request.headers.authorization?.startsWith('Bearer ')
 				? request.headers.authorization.slice(7)
 				: request.body?.i;
@@ -278,15 +282,36 @@ export class ApiServerService {
 				const abortController = new AbortController();
 				reply.raw.on('close', () => abortController.abort());
 				const body = request.body ?? {};
-				const getNullableString = (value: unknown) => typeof value === 'string' ? value : null;
+				const getNullableString = (value: unknown, maxLength = 512) => typeof value === 'string' ? value.slice(0, maxLength) : null;
 				const content = typeof body.content === 'string' ? body.content.slice(0, 20000) : '';
 				const fileIds = Array.isArray(body.fileIds)
 					? body.fileIds.filter((id): id is string => typeof id === 'string').slice(0, 8)
 					: [];
+				const waitForDrainOrClose = async (): Promise<void> => {
+					await new Promise<void>((resolve) => {
+						const cleanup = () => {
+							this.timeService.stopTimer(timer);
+							reply.raw.off('drain', cleanup);
+							reply.raw.off('close', cleanup);
+							resolve();
+						};
+						const timer = this.timeService.startTimer(cleanup, AI_CHAT_STREAM_WRITE_TIMEOUT_MS);
+						reply.raw.once('drain', cleanup);
+						reply.raw.once('close', cleanup);
+					});
+				};
 
-				const writeEvent = (event: string, data: unknown) => {
-					reply.raw.write(`event: ${event}\n`);
-					reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+				const writeEvent = async (event: string, data: unknown): Promise<boolean> => {
+					if (reply.raw.destroyed || reply.raw.writableEnded) return false;
+					const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+					if (!reply.raw.write(payload)) {
+						await waitForDrainOrClose();
+						if (reply.raw.destroyed || reply.raw.writableEnded || reply.raw.writableNeedDrain) {
+							abortController.abort();
+							return false;
+						}
+					}
+					return true;
 				};
 
 				try {
@@ -297,18 +322,32 @@ export class ApiServerService {
 						model: getNullableString(body.model),
 						content,
 						fileIds,
-						systemPrompt: getNullableString(body.systemPrompt),
+						systemPrompt: getNullableString(body.systemPrompt, 12000),
 						abortSignal: abortController.signal,
-						onDelta: (text) => writeEvent('delta', { text }),
+						onDelta: async (text) => {
+							await writeEvent('delta', { text });
+						},
 					});
-					writeEvent('done', result);
+					await writeEvent('done', result);
 				} catch (err) {
-					writeEvent('error', this.formatAiStreamError(err));
+					if (!abortController.signal.aborted) {
+						await writeEvent('error', this.formatAiStreamError(err));
+					}
 				} finally {
-					reply.raw.end();
+					if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+						reply.raw.end();
+					}
 				}
 			} catch (err) {
 				const error = this.formatAiStreamError(err);
+				if (reply.raw.headersSent) {
+					if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+						reply.raw.write(`event: error\ndata: ${JSON.stringify(error)}\n\n`);
+						reply.raw.end();
+					}
+					return reply;
+				}
+
 				reply.code(error.statusCode);
 				reply.send({
 					error,

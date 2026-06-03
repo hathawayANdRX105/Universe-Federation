@@ -351,34 +351,70 @@ export class HttpRequestService {
 		this.utilityService.assertUrl(parsedUrl, { allowHttp });
 
 		const controller = new AbortController();
-		this.timeService.startTimer(() => {
+		const timeoutHandle = this.timeService.startTimer(() => {
 			controller.abort();
 		}, timeout);
+		let timerAttachedToBody = false;
 
 		const isLocalAddressAllowed = args.isLocalAddressAllowed ?? false;
 
-		const res = await fetch(parsedUrl, {
-			method: args.method ?? 'GET',
-			headers: {
-				'User-Agent': this.config.userAgent,
-				...(args.headers ?? {}),
-			},
-			body: args.body,
-			size: args.size ?? 10 * 1024 * 1024,
-			agent: (url) => this.getAgentByUrl(url, false, isLocalAddressAllowed),
-			signal: controller.signal,
-		});
+		try {
+			const res = await fetch(parsedUrl, {
+				method: args.method ?? 'GET',
+				headers: {
+					'User-Agent': this.config.userAgent,
+					...(args.headers ?? {}),
+				},
+				body: args.body,
+				size: args.size ?? 10 * 1024 * 1024,
+				agent: (url) => this.getAgentByUrl(url, false, isLocalAddressAllowed),
+				signal: controller.signal,
+			});
 
-		if (!res.ok && extra.throwErrorWhenResponseNotOk) {
-			throw new StatusError(`request error from ${url}`, res.status, res.statusText);
-		}
+			if (!res.ok && extra.throwErrorWhenResponseNotOk) {
+				this.closeResponseBody(res);
+				throw new StatusError(`request error from ${url}`, res.status, res.statusText);
+			}
 
-		if (res.ok) {
-			for (const validator of (extra.validators ?? [])) {
-				validator(res);
+			if (res.ok) {
+				try {
+					for (const validator of (extra.validators ?? [])) {
+						validator(res);
+					}
+				} catch (err) {
+					this.closeResponseBody(res);
+					throw err;
+				}
+			}
+
+			if (res.body != null) {
+				timerAttachedToBody = true;
+				const clearTimer = () => {
+					this.timeService.stopTimer(timeoutHandle);
+					res.body?.off('end', clearTimer);
+					res.body?.off('error', clearTimer);
+					res.body?.off('close', clearTimer);
+				};
+				res.body.once('end', clearTimer);
+				res.body.once('error', clearTimer);
+				res.body.once('close', clearTimer);
+			}
+
+			return res;
+		} finally {
+			if (!timerAttachedToBody) {
+				this.timeService.stopTimer(timeoutHandle);
 			}
 		}
+	}
 
-		return res;
+	@bindThis
+	private closeResponseBody(res: Response): void {
+		const body = res.body as unknown as {
+			destroy?: () => void;
+			cancel?: () => Promise<unknown> | void;
+		} | null;
+		body?.destroy?.();
+		void body?.cancel?.();
 	}
 }

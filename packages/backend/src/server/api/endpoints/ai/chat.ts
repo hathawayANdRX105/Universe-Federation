@@ -25,10 +25,10 @@ export const paramDef = {
 	properties: {
 		conversationId: { type: 'string', format: 'misskey:id', nullable: true, default: null },
 		providerId: { type: 'string', format: 'misskey:id', nullable: true, default: null },
-		model: { type: 'string', nullable: true, default: null },
+		model: { type: 'string', nullable: true, maxLength: 512, default: null },
 		content: { type: 'string', maxLength: 20000, default: '' },
-		fileIds: { type: 'array', items: { type: 'string', format: 'misskey:id' }, default: [] },
-		systemPrompt: { type: 'string', nullable: true, default: null },
+		fileIds: { type: 'array', maxItems: 8, items: { type: 'string', format: 'misskey:id' }, default: [] },
+		systemPrompt: { type: 'string', nullable: true, maxLength: 12000, default: null },
 	},
 	required: [],
 } as const;

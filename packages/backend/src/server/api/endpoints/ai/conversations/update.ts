@@ -18,8 +18,8 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		conversationId: { type: 'string', format: 'misskey:id' },
-		title: { type: 'string', nullable: true },
-		systemPrompt: { type: 'string', nullable: true },
+		title: { type: 'string', nullable: true, maxLength: 256 },
+		systemPrompt: { type: 'string', nullable: true, maxLength: 12000 },
 	},
 	required: ['conversationId'],
 } as const;

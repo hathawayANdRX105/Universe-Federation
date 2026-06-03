@@ -20,7 +20,7 @@ import type {
 import type { MiMeta } from '@/models/Meta.js';
 import type { MiLocalUser, MiUser } from '@/models/User.js';
 import { IdService } from '@/core/IdService.js';
-import { HttpRequestService } from '@/core/HttpRequestService.js';
+import { HttpRequestService, isPrivateUrl } from '@/core/HttpRequestService.js';
 import { MetaService } from '@/core/MetaService.js';
 import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.js';
 import { TimeService } from '@/global/TimeService.js';
@@ -65,6 +65,17 @@ type StreamChatParams = {
 	abortSignal?: AbortSignal;
 	onDelta?: (text: string) => void | Promise<void>;
 };
+
+const MAX_AI_ATTACHMENTS = 8;
+const MAX_AI_CONTEXT_MESSAGES = 100;
+const MAX_AI_MODELS = 100;
+const MAX_AI_MODEL_NAME_LENGTH = 512;
+const MAX_AI_PROVIDER_NAME_LENGTH = 128;
+const MAX_AI_USER_CONTENT_LENGTH = 20000;
+const MAX_AI_SYSTEM_PROMPT_LENGTH = 12000;
+const MAX_AI_TITLE_LENGTH = 256;
+const MAX_AI_SSE_BUFFER_LENGTH = 1024 * 1024;
+const MAX_AI_ASSISTANT_CONTENT_LENGTH = 200000;
 
 export type PackedAiProvider = {
 	id: string;
@@ -156,13 +167,41 @@ export class AiService {
 	@bindThis
 	public normalizeBaseUrl(value: string): string {
 		const trimmed = value.trim();
-		const parsed = new URL(trimmed);
-		if (!['http:', 'https:'].includes(parsed.protocol)) {
-			throw new AiServiceError('INVALID_URL', 'Provider URL must be HTTP or HTTPS.');
+		let parsed: URL;
+		try {
+			parsed = new URL(trimmed);
+		} catch {
+			throw new AiServiceError('INVALID_URL', 'Provider URL is invalid.');
 		}
 
+		if (parsed.protocol !== 'https:') {
+			throw new AiServiceError('INVALID_URL', 'Provider URL must be HTTPS.');
+		}
+		if (parsed.username || parsed.password) {
+			throw new AiServiceError('INVALID_URL', 'Provider URL must not contain credentials.');
+		}
+		if (parsed.search || parsed.hash) {
+			throw new AiServiceError('INVALID_URL', 'Provider URL must not contain query or hash components.');
+		}
+
+		parsed.pathname = parsed.pathname.replace(/\/+$/, '');
 		const normalized = parsed.toString().replace(/\/+$/, '');
 		if (!normalized) throw new AiServiceError('INVALID_URL', 'Provider URL is invalid.');
+		return normalized;
+	}
+
+	@bindThis
+	public async normalizeSafeBaseUrl(value: string): Promise<string> {
+		const normalized = this.normalizeBaseUrl(value);
+		let privateNetwork = false;
+		try {
+			privateNetwork = await isPrivateUrl(new URL(normalized), this.httpRequestService.lookup);
+		} catch {
+			throw new AiServiceError('INVALID_URL', 'Provider URL could not be resolved.');
+		}
+		if (privateNetwork) {
+			throw new AiServiceError('INVALID_URL', 'Provider URL must not resolve to a private or local network address.');
+		}
 		return normalized;
 	}
 
@@ -236,9 +275,9 @@ export class AiService {
 		const now = this.timeService.date;
 		const provider = await this.aiProvidersRepository.insertOne({
 			id: this.idService.gen(),
-			name: this.trimText(values.name, 128, 'Provider'),
-			baseUrl: this.normalizeBaseUrl(values.baseUrl ?? ''),
-			apiKey: values.apiKey ?? '',
+			name: this.trimText(values.name, MAX_AI_PROVIDER_NAME_LENGTH, 'Provider'),
+			baseUrl: await this.normalizeSafeBaseUrl(values.baseUrl ?? ''),
+			apiKey: this.normalizeApiKey(values.apiKey),
 			isEnabled: values.isEnabled ?? true,
 			models: this.normalizeModelList(values.models),
 			defaultModel: this.optionalText(values.defaultModel),
@@ -264,9 +303,9 @@ export class AiService {
 			updatedAt: this.timeService.date,
 		};
 
-		if (values.name !== undefined) patch.name = this.trimText(values.name, 128, provider.name);
-		if (values.baseUrl !== undefined) patch.baseUrl = this.normalizeBaseUrl(values.baseUrl);
-		if (values.apiKey !== undefined && values.apiKey !== null && values.apiKey !== '') patch.apiKey = values.apiKey;
+		if (values.name !== undefined) patch.name = this.trimText(values.name, MAX_AI_PROVIDER_NAME_LENGTH, provider.name);
+		if (values.baseUrl !== undefined) patch.baseUrl = await this.normalizeSafeBaseUrl(values.baseUrl);
+		if (values.apiKey !== undefined && values.apiKey !== null && values.apiKey !== '') patch.apiKey = this.normalizeApiKey(values.apiKey);
 		if (values.isEnabled !== undefined) patch.isEnabled = values.isEnabled;
 		if (values.models !== undefined) patch.models = this.normalizeModelList(values.models);
 		if (values.defaultModel !== undefined) patch.defaultModel = this.optionalText(values.defaultModel);
@@ -341,7 +380,7 @@ export class AiService {
 			...(values.enableAi !== undefined ? { enableAi: values.enableAi } : {}),
 			...(values.showAiInNavbar !== undefined ? { showAiInNavbar: values.showAiInNavbar } : {}),
 			...(values.aiDefaultProviderId !== undefined ? { aiDefaultProviderId: values.aiDefaultProviderId } : {}),
-			...(values.aiMaxContextMessages !== undefined ? { aiMaxContextMessages: this.clampInt(values.aiMaxContextMessages, 1, 100, 20) } : {}),
+			...(values.aiMaxContextMessages !== undefined ? { aiMaxContextMessages: this.clampInt(values.aiMaxContextMessages, 1, MAX_AI_CONTEXT_MESSAGES, 20) } : {}),
 		});
 
 		return await this.getSettings();
@@ -381,11 +420,14 @@ export class AiService {
 				allowedModels: this.getAllowedModels(provider),
 			}))
 			.filter(provider => provider.allowedModels.length > 0);
+		const defaultProviderId = available.some(provider => provider.id === this.meta.aiDefaultProviderId)
+			? this.meta.aiDefaultProviderId
+			: (available[0]?.id ?? null);
 
 		return {
 			enabled: true,
 			providers: available,
-			defaultProviderId: this.meta.aiDefaultProviderId,
+			defaultProviderId,
 			maxContextMessages: this.meta.aiMaxContextMessages,
 		};
 	}
@@ -417,10 +459,10 @@ export class AiService {
 		const conversation = await this.aiConversationsRepository.insertOne({
 			id: this.idService.gen(),
 			userId: user.id,
-			title: this.trimText(values.title, 256, 'New chat'),
+			title: this.trimText(values.title, MAX_AI_TITLE_LENGTH, 'New chat'),
 			providerId: provider.id,
 			model,
-			systemPrompt: this.optionalText(values.systemPrompt),
+			systemPrompt: this.optionalText(values.systemPrompt, MAX_AI_SYSTEM_PROMPT_LENGTH),
 			createdAt: now,
 			updatedAt: now,
 		});
@@ -435,8 +477,8 @@ export class AiService {
 	}): Promise<PackedAiConversation> {
 		const conversation = await this.getOwnedConversation(userId, conversationId);
 		await this.aiConversationsRepository.update(conversation.id, {
-			...(values.title !== undefined ? { title: this.trimText(values.title, 256, conversation.title) } : {}),
-			...(values.systemPrompt !== undefined ? { systemPrompt: this.optionalText(values.systemPrompt) } : {}),
+			...(values.title !== undefined ? { title: this.trimText(values.title, MAX_AI_TITLE_LENGTH, conversation.title) } : {}),
+			...(values.systemPrompt !== undefined ? { systemPrompt: this.optionalText(values.systemPrompt, MAX_AI_SYSTEM_PROMPT_LENGTH) } : {}),
 			updatedAt: this.timeService.date,
 		});
 		return this.packConversation(await this.getOwnedConversation(userId, conversation.id));
@@ -471,7 +513,7 @@ export class AiService {
 
 	@bindThis
 	public async streamChat(params: StreamChatParams): Promise<AiChatResult> {
-		const content = params.content.trim();
+		const content = this.trimText(params.content, MAX_AI_USER_CONTENT_LENGTH, '');
 		if (content === '' && ((params.fileIds ?? []).length === 0)) {
 			throw new AiServiceError('CONTENT_REQUIRED', 'Message content or an image is required.');
 		}
@@ -524,6 +566,9 @@ export class AiService {
 			const messages = await this.buildOpenAiMessages(conversation, userMessage, provider, attachments);
 			const response = await this.openAiChatRequest(provider, model, messages, params.abortSignal);
 			const usage = await this.readStreamingResponse(response, async delta => {
+				if (assistantContent.length + delta.length > MAX_AI_ASSISTANT_CONTENT_LENGTH) {
+					throw new AiServiceError('AI_RESPONSE_TOO_LARGE', 'AI response is too large.', 502);
+				}
 				assistantContent += delta;
 				await params.onDelta?.(delta);
 			}, params.abortSignal);
@@ -624,8 +669,7 @@ export class AiService {
 
 	@bindThis
 	private getAllowedModels(provider: MiAiProvider): string[] {
-		const models = provider.allowedModels.length > 0 ? provider.allowedModels : provider.models;
-		return this.normalizeModelList(models);
+		return this.normalizeModelList(provider.allowedModels);
 	}
 
 	@bindThis
@@ -640,7 +684,7 @@ export class AiService {
 		const started = this.timeService.now;
 
 		try {
-			const res = await this.httpRequestService.send(`${provider.baseUrl}/models`, {
+			const res = await this.httpRequestService.send(await this.getProviderEndpoint(provider, '/models'), {
 				method: 'GET',
 				headers: {
 					Accept: 'application/json',
@@ -655,6 +699,7 @@ export class AiService {
 
 			const elapsedMs = this.timeService.now - started;
 			if (!res.ok) {
+				this.closeResponseBody(res);
 				return {
 					ok: false,
 					models: [],
@@ -708,6 +753,9 @@ export class AiService {
 	private async resolveAttachments(userId: MiUser['id'], fileIds: string[], model: string): Promise<MiAiMessage['attachments']> {
 		const ids = Array.from(new Set(fileIds.filter(Boolean)));
 		if (ids.length === 0) return [];
+		if (ids.length > MAX_AI_ATTACHMENTS) {
+			throw new AiServiceError('TOO_MANY_ATTACHMENTS', `AI chat supports up to ${MAX_AI_ATTACHMENTS} image attachments.`);
+		}
 		if (!this.isVisionModel(model)) {
 			throw new AiServiceError('AI_MODEL_DOES_NOT_SUPPORT_IMAGES', 'The selected model does not support image input.');
 		}
@@ -745,7 +793,7 @@ export class AiService {
 		provider: MiAiProvider,
 		attachments: MiAiMessage['attachments'],
 	): Promise<OpenAiChatMessage[]> {
-		const historyLimit = this.clampInt(this.meta.aiMaxContextMessages, 1, 100, 20);
+		const historyLimit = this.clampInt(this.meta.aiMaxContextMessages, 1, MAX_AI_CONTEXT_MESSAGES, 20);
 		const history = await this.aiMessagesRepository.find({
 			where: {
 				conversationId: conversation.id,
@@ -807,7 +855,7 @@ export class AiService {
 		const rest = system ? messages.slice(1) : messages;
 		return [
 			...(system ? [system] : []),
-			...rest.slice(-this.clampInt(this.meta.aiMaxContextMessages, 1, 100, 20)),
+			...rest.slice(-this.clampInt(this.meta.aiMaxContextMessages, 1, MAX_AI_CONTEXT_MESSAGES, 20)),
 		];
 	}
 
@@ -817,7 +865,7 @@ export class AiService {
 			throw new AiServiceError('STREAM_ABORTED', 'AI generation was stopped by the client.', 499);
 		}
 
-		const res = await this.httpRequestService.send(`${provider.baseUrl}/chat/completions`, {
+		const res = await this.httpRequestService.send(await this.getProviderEndpoint(provider, '/chat/completions'), {
 			method: 'POST',
 			headers: {
 				Accept: 'text/event-stream, application/json',
@@ -839,12 +887,18 @@ export class AiService {
 		});
 
 		if (!res.ok) {
+			this.closeResponseBody(res);
 			throw new AiServiceError('UPSTREAM_ERROR', `AI provider returned HTTP ${res.status}.`, res.status >= 500 ? 502 : 400);
 		}
 
 		// node-fetch keeps request timers alive until the body is consumed; stream readers
 		// still need to watch the client abort signal while parsing chunks.
 		return res;
+	}
+
+	@bindThis
+	private async getProviderEndpoint(provider: MiAiProvider, path: string): Promise<string> {
+		return `${await this.normalizeSafeBaseUrl(provider.baseUrl)}${path}`;
 	}
 
 	@bindThis
@@ -876,28 +930,56 @@ export class AiService {
 		let buffer = '';
 		let usage: Record<string, unknown> | null = null;
 
-		for await (const chunk of response.body as unknown as AsyncIterable<Buffer | Uint8Array>) {
-			if (abortSignal?.aborted) {
-				throw new AiServiceError('STREAM_ABORTED', 'AI generation was stopped by the client.', 499);
-			}
-			buffer += decoder.decode(chunk, { stream: true });
+		try {
+			for await (const chunk of response.body as unknown as AsyncIterable<Buffer | Uint8Array>) {
+				if (abortSignal?.aborted) {
+					throw new AiServiceError('STREAM_ABORTED', 'AI generation was stopped by the client.', 499);
+				}
+				buffer += decoder.decode(chunk, { stream: true });
+				if (buffer.length > MAX_AI_SSE_BUFFER_LENGTH) {
+					throw new AiServiceError('AI_STREAM_TOO_LARGE', 'AI stream buffer is too large.', 502);
+				}
 
-			let boundary = buffer.indexOf('\n\n');
-			while (boundary !== -1) {
-				const event = buffer.slice(0, boundary);
-				buffer = buffer.slice(boundary + 2);
-				const result = await this.handleSseEvent(event, onDelta);
+				let boundary = this.findSseBoundary(buffer);
+				while (boundary != null) {
+					const event = buffer.slice(0, boundary.index);
+					buffer = buffer.slice(boundary.index + boundary.length);
+					const result = await this.handleSseEvent(event, onDelta);
+					usage = result ?? usage;
+					boundary = this.findSseBoundary(buffer);
+				}
+			}
+
+			if (buffer.trim()) {
+				const result = await this.handleSseEvent(buffer, onDelta);
 				usage = result ?? usage;
-				boundary = buffer.indexOf('\n\n');
 			}
-		}
-
-		if (buffer.trim()) {
-			const result = await this.handleSseEvent(buffer, onDelta);
-			usage = result ?? usage;
+		} catch (err) {
+			this.closeResponseBody(response);
+			throw err;
 		}
 
 		return usage;
+	}
+
+	@bindThis
+	private closeResponseBody(response: Response): void {
+		const body = response.body as unknown as {
+			destroy?: () => void;
+			cancel?: () => Promise<unknown> | void;
+		} | null;
+		body?.destroy?.();
+		void body?.cancel?.();
+	}
+
+	@bindThis
+	private findSseBoundary(buffer: string): { index: number; length: number; } | null {
+		const lf = buffer.indexOf('\n\n');
+		const crlf = buffer.indexOf('\r\n\r\n');
+		if (lf === -1 && crlf === -1) return null;
+		if (lf === -1) return { index: crlf, length: 4 };
+		if (crlf === -1) return { index: lf, length: 2 };
+		return lf < crlf ? { index: lf, length: 2 } : { index: crlf, length: 4 };
 	}
 
 	@bindThis
@@ -911,6 +993,9 @@ export class AiService {
 		let usage: Record<string, unknown> | null = null;
 		for (const line of dataLines) {
 			if (line === '[DONE]') continue;
+			if (line.length > MAX_AI_SSE_BUFFER_LENGTH) {
+				throw new AiServiceError('AI_STREAM_TOO_LARGE', 'AI stream event is too large.', 502);
+			}
 			let json: any;
 			try {
 				json = JSON.parse(line);
@@ -958,8 +1043,9 @@ export class AiService {
 	private normalizeModelList(models: string[] | undefined): string[] {
 		return Array.from(new Set((models ?? [])
 			.map(model => model.trim())
-			.filter(Boolean)))
-			.slice(0, 100);
+			.filter(Boolean)
+			.map(model => model.slice(0, MAX_AI_MODEL_NAME_LENGTH))))
+			.slice(0, MAX_AI_MODELS);
 	}
 
 	@bindThis
@@ -969,9 +1055,14 @@ export class AiService {
 	}
 
 	@bindThis
-	private optionalText(value: string | null | undefined): string | null {
+	private optionalText(value: string | null | undefined, maxLength = MAX_AI_MODEL_NAME_LENGTH): string | null {
 		const trimmed = value?.trim() ?? '';
-		return trimmed.length > 0 ? trimmed : null;
+		return trimmed.length > 0 ? trimmed.slice(0, maxLength) : null;
+	}
+
+	@bindThis
+	private normalizeApiKey(value: string | null | undefined): string {
+		return (value ?? '').trim().slice(0, 4096);
 	}
 
 	@bindThis
@@ -993,7 +1084,13 @@ export class AiService {
 		if (err instanceof AiServiceError) return err.message;
 		if (err instanceof StatusError) return `HTTP ${err.statusCode}`;
 		if (err instanceof Error && err.name === 'AbortError') return 'Request timed out.';
-		if (err instanceof Error && err.message) return err.message.replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer <redacted>');
+		if (err instanceof Error && err.message) {
+			return err.message
+				.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer <redacted>')
+				.replace(/\bsk-[A-Za-z0-9._-]{8,}\b/g, 'sk-<redacted>')
+				.replace(/((?:api[_-]?key|key|token)=)[^&\s]+/gi, '$1<redacted>')
+				.slice(0, 240);
+		}
 		return 'AI request failed.';
 	}
 }

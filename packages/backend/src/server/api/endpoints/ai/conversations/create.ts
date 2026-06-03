@@ -18,9 +18,9 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		providerId: { type: 'string', format: 'misskey:id', nullable: true, default: null },
-		model: { type: 'string', nullable: true, default: null },
-		title: { type: 'string', nullable: true, default: null },
-		systemPrompt: { type: 'string', nullable: true, default: null },
+		model: { type: 'string', nullable: true, maxLength: 512, default: null },
+		title: { type: 'string', nullable: true, maxLength: 256, default: null },
+		systemPrompt: { type: 'string', nullable: true, maxLength: 12000, default: null },
 	},
 	required: [],
 } as const;

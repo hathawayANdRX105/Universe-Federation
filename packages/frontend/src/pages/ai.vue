@@ -152,7 +152,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import { apiUrl } from '@@/js/config.js';
 import MkButton from '@/components/MkButton.vue';
@@ -239,6 +239,10 @@ const streamingMessageId = ref<string | null>(null);
 const abortController = ref<AbortController | null>(null);
 const messagesEl = ref<HTMLElement | null>(null);
 const draftEl = ref<HTMLTextAreaElement | null>(null);
+
+const AI_MOBILE_BREAKPOINT = 850;
+const AI_STREAM_BUFFER_LIMIT = 1024 * 1024;
+const isMobileLayout = ref(window.innerWidth <= AI_MOBILE_BREAKPOINT);
 
 const suggestions = computed(() => [
 	i18n.ts._ai.suggestion1,
@@ -511,11 +515,15 @@ async function requestChatStream(body: {
 		const read = await reader.read();
 		if (read.done) break;
 		buffer += decoder.decode(read.value, { stream: true });
+		if (buffer.length > AI_STREAM_BUFFER_LIMIT) {
+			await reader.cancel().catch(() => undefined);
+			throw new Error('AI stream buffer is too large.');
+		}
 
-		let boundary = buffer.indexOf('\n\n');
-		while (boundary !== -1) {
-			const rawEvent = buffer.slice(0, boundary);
-			buffer = buffer.slice(boundary + 2);
+		let boundary = findSseBoundary(buffer);
+		while (boundary != null) {
+			const rawEvent = buffer.slice(0, boundary.index);
+			buffer = buffer.slice(boundary.index + boundary.length);
 			const event = parseSseEvent(rawEvent);
 			if (event.type === 'delta' && typeof event.data?.text === 'string') {
 				onDelta(event.data.text);
@@ -524,7 +532,7 @@ async function requestChatStream(body: {
 			} else if (event.type === 'error') {
 				throw event.data;
 			}
-			boundary = buffer.indexOf('\n\n');
+			boundary = findSseBoundary(buffer);
 		}
 	}
 
@@ -536,6 +544,15 @@ async function requestChatStream(body: {
 
 	if (donePayload == null) throw new Error('AI stream ended without a completion event.');
 	return donePayload;
+}
+
+function findSseBoundary(buffer: string): { index: number; length: number; } | null {
+	const lf = buffer.indexOf('\n\n');
+	const crlf = buffer.indexOf('\r\n\r\n');
+	if (lf === -1 && crlf === -1) return null;
+	if (lf === -1) return { index: crlf, length: 4 };
+	if (crlf === -1) return { index: lf, length: 2 };
+	return lf < crlf ? { index: lf, length: 2 } : { index: crlf, length: 4 };
 }
 
 function parseSseEvent(raw: string): { type: string; data: any; } {
@@ -550,7 +567,7 @@ function parseSseEvent(raw: string): { type: string; data: any; } {
 	}
 	return {
 		type,
-		data: data.length > 0 ? JSON.parse(data.join('\n')) : null,
+		data: data.length > 0 ? JSON.parse(data.join('\n').slice(0, AI_STREAM_BUFFER_LIMIT)) : null,
 	};
 }
 
@@ -577,6 +594,15 @@ function autoGrow() {
 function resetTextareaHeight() {
 	if (draftEl.value) draftEl.value.style.height = 'auto';
 }
+
+function updateLayoutMode() {
+	isMobileLayout.value = window.innerWidth <= AI_MOBILE_BREAKPOINT;
+}
+
+window.addEventListener('resize', updateLayoutMode, { passive: true });
+onBeforeUnmount(() => {
+	window.removeEventListener('resize', updateLayoutMode);
+});
 
 async function attachImage(ev: MouseEvent) {
 	const files = await selectFiles(ev.currentTarget ?? ev.target, i18n.ts.attachFile);
@@ -698,17 +724,23 @@ const headerTabs = computed(() => []);
 definePage(() => ({
 	title: i18n.ts._ai.title,
 	icon: 'ti ti-robot',
-	needWideArea: true,
+	needWideArea: !isMobileLayout.value,
 }));
 </script>
 
 <style lang="scss" module>
 .root {
+	--ai-mobile-footer-height: var(--MI-minBottomSpacing, 0px);
+	--ai-content-height: calc(100cqh - (var(--MI-stickyTop, 0px) + var(--MI-stickyBottom, 0px) + var(--MI-visualViewportBottom, 0px)));
+	--ai-pane-max-width: 920px;
+	--ai-pane-gutter: max(18px, calc((100% - var(--ai-pane-max-width)) / 2));
+
 	display: grid;
 	grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-	height: calc(100dvh - var(--MI-minBottomSpacing, 0px) - 56px);
-	min-height: 560px;
+	height: var(--ai-content-height);
+	min-height: 0;
 	background: var(--MI_THEME-bg);
+	overflow: hidden;
 }
 
 .sidebar {
@@ -740,6 +772,7 @@ definePage(() => ({
 	min-height: 0;
 	overflow-y: auto;
 	padding-bottom: 12px;
+	scrollbar-gutter: stable;
 }
 
 .sidebarEmpty {
@@ -804,6 +837,7 @@ definePage(() => ({
 	grid-template-rows: auto auto minmax(0, 1fr) auto auto;
 	min-width: 0;
 	min-height: 0;
+	overflow: hidden;
 }
 
 .topbar {
@@ -834,8 +868,9 @@ definePage(() => ({
 .messages {
 	min-height: 0;
 	overflow-y: auto;
-	padding: 24px max(18px, calc((100% - 860px) / 2));
+	padding: 24px var(--ai-pane-gutter);
 	scrollbar-gutter: stable;
+	overscroll-behavior: contain;
 }
 
 .emptyState {
@@ -1048,7 +1083,7 @@ definePage(() => ({
 }
 
 .pendingAttachments {
-	padding: 10px max(18px, calc((100% - 860px) / 2)) 0;
+	padding: 10px var(--ai-pane-gutter) 0;
 }
 
 .pendingAttachment button {
@@ -1064,11 +1099,12 @@ definePage(() => ({
 	grid-template-columns: 40px minmax(0, 1fr) 40px;
 	gap: 8px;
 	align-items: end;
-	margin: 14px max(18px, calc((100% - 860px) / 2)) 18px;
+	margin: 14px var(--ai-pane-gutter) 18px;
 	padding: 8px;
 	border: 1px solid var(--MI_THEME-divider);
 	border-radius: var(--MI-radius);
 	background: var(--MI_THEME-panel);
+	box-sizing: border-box;
 }
 
 .textarea {
@@ -1099,8 +1135,8 @@ definePage(() => ({
 	.root {
 		grid-template-columns: 1fr;
 		grid-template-rows: auto minmax(0, 1fr);
-		height: auto;
-		min-height: calc(100dvh - 56px);
+		height: var(--ai-content-height);
+		min-height: 0;
 	}
 
 	.sidebar {
@@ -1124,7 +1160,7 @@ definePage(() => ({
 	}
 
 	.messages {
-		min-height: 420px;
+		min-height: 0;
 		padding: 18px 14px;
 	}
 
@@ -1133,7 +1169,7 @@ definePage(() => ({
 	}
 
 	.composer {
-		margin: 12px 14px 16px;
+		margin: 12px 14px calc(16px + var(--ai-mobile-footer-height));
 	}
 }
 </style>
