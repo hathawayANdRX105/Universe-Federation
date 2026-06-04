@@ -260,6 +260,50 @@ describe('chat room search', () => {
 		});
 	});
 
+	test('allows one-character searches with a selected sender', async () => {
+		vi.mocked(misskeyApi).mockImplementation(async (endpoint) => {
+			if (endpoint === 'chat/rooms/members') {
+				return [{
+					id: 'membership-alice',
+					userId: alice.id,
+					user: alice,
+				}] as never;
+			}
+
+			if (endpoint === 'chat/messages/search') {
+				return [createMessage('m01')] as never;
+			}
+
+			return [] as never;
+		});
+
+		const view = renderSearch();
+		await flushPromises();
+
+		await fireEvent.click(view.getByText('All senders'));
+		await flushPromises();
+		const menuItems = vi.mocked(os.popupMenu).mock.calls[0][0];
+		findUserMenuItem(menuItems, alice.id).action(new MouseEvent('click'));
+		await flushPromises();
+
+		await fireEvent.update(view.getByPlaceholderText('Search messages'), '3');
+		const searchButton = view.getByText('Search').closest('button');
+		assert.ok(searchButton != null);
+		assert.strictEqual(searchButton.disabled, false);
+
+		await fireEvent.click(searchButton);
+		await flushPromises();
+
+		const searchCalls = vi.mocked(misskeyApi).mock.calls.filter(([endpoint]) => endpoint === 'chat/messages/search');
+		assert.deepStrictEqual(searchCalls[0][1] as unknown, {
+			query: '3',
+			limit: 30,
+			roomId: 'room',
+			userId: undefined,
+			fromUserId: alice.id,
+		});
+	});
+
 	test('fetches the next search page when the mobile results scroller reaches the bottom', async () => {
 		const firstPage = Array.from({ length: 30 }, (_, i) => createMessage(`m${String(i).padStart(2, '0')}`));
 		const secondPage = Array.from({ length: 3 }, (_, i) => createMessage(`m${String(i + 30).padStart(2, '0')}`));

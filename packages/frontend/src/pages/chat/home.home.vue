@@ -83,7 +83,7 @@ const searched = ref(false);
 const searchFetching = ref(false);
 const searchError = ref(false);
 const searchResults = ref<Misskey.entities.ChatMessage[]>([]);
-const MIN_SEARCH_QUERY_LENGTH = 2;
+const MIN_SEARCH_QUERY_LENGTH = 1;
 let disposed = false;
 let searchRequestId = 0;
 
@@ -154,7 +154,7 @@ async function createRoom() {
 }
 
 async function search() {
-	const query = searchQuery.value.trim();
+	const query = searchQuery.value.trim().normalize('NFC');
 	if (query.length < MIN_SEARCH_QUERY_LENGTH || searchFetching.value) return;
 
 	const requestId = ++searchRequestId;

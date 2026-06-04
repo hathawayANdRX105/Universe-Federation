@@ -548,7 +548,7 @@ describe('ChatService large room fast path', () => {
 	test('message search applies an explicit sender filter inside the room scope', async () => {
 		const ctx = createService(LARGE_CHAT_ROOM_MEMBER_THRESHOLD + 1);
 
-		await ctx.service.searchMessages('reader', 'Needle', 20, {
+		await ctx.service.searchMessages('reader', ' ３ ', 20, {
 			roomId: 'room',
 			fromUserId: 'sender',
 		});
@@ -556,7 +556,7 @@ describe('ChatService large room fast path', () => {
 		expect(ctx.chatMessagesQueryBuilder.where).toHaveBeenCalledWith('message.toRoomId = :roomId', { roomId: 'room' });
 		expect(ctx.chatMessagesQueryBuilder.andWhere).toHaveBeenCalledWith('message.fromUserId = :fromUserId', { fromUserId: 'sender' });
 		expect(ctx.chatMessagesQueryBuilder.andWhere).toHaveBeenCalledWith('message.text IS NOT NULL');
-		expect(ctx.chatMessagesQueryBuilder.andWhere).toHaveBeenCalledWith('LOWER(message.text) LIKE :q', { q: '%needle%' });
+		expect(ctx.chatMessagesQueryBuilder.andWhere).toHaveBeenCalledWith('LOWER(message.text) LIKE :q', { q: '%３%' });
 	});
 
 	test('reactions use query parameters instead of interpolating records into SQL', async () => {

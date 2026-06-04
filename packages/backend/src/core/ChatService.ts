@@ -1407,6 +1407,7 @@ export class ChatService {
 		untilId?: MiChatMessage['id'] | null;
 		fromUserId?: MiUser['id'] | null;
 	}) {
+		const normalizedQuery = query.trim().normalize('NFC').toLowerCase();
 		const q = this.chatMessagesRepository.createQueryBuilder('message');
 
 		if (params.userId) {
@@ -1457,7 +1458,7 @@ export class ChatService {
 		}
 
 		q.andWhere('message.text IS NOT NULL');
-		q.andWhere('LOWER(message.text) LIKE :q', { q: `%${ sqlLikeEscape(query.toLowerCase()) }%` });
+		q.andWhere('LOWER(message.text) LIKE :q', { q: `%${ sqlLikeEscape(normalizedQuery) }%` });
 
 		q.leftJoinAndSelect('message.file', 'file');
 		q.leftJoinAndSelect('message.fromUser', 'fromUser');

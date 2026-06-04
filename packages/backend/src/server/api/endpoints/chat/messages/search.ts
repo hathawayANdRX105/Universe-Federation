@@ -44,7 +44,7 @@ export const meta = {
 export const paramDef = {
 	type: 'object',
 	properties: {
-		query: { type: 'string', minLength: 2, maxLength: 256 },
+		query: { type: 'string', minLength: 1, maxLength: 256 },
 		limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
 		untilId: { type: 'string', format: 'misskey:id' },
 		userId: { type: 'string', format: 'misskey:id', nullable: true },

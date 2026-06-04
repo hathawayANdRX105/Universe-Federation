@@ -16,7 +16,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			>
 				<template #prefix><i class="ti ti-search"></i></template>
 			</MkInput>
-			<MkButton primary rounded :wait="fetching" :disabled="searchQuery.trim().length < MIN_SEARCH_QUERY_LENGTH" @click="search">{{ i18n.ts.search }}</MkButton>
+			<MkButton primary rounded :wait="fetching" :disabled="normalizeSearchQuery(searchQuery).length < MIN_SEARCH_QUERY_LENGTH" @click="search">{{ i18n.ts.search }}</MkButton>
 		</div>
 		<div :class="$style.filters">
 			<button class="_button" :class="$style.senderFilter" :disabled="fetching || moreFetching" @click="selectSender">
@@ -108,7 +108,7 @@ const rootEl = ref<HTMLElement | null>(null);
 const senderOptions = ref<Misskey.entities.UserLite[]>([]);
 const selectedSender = ref<Misskey.entities.UserLite | null>(null);
 const SEARCH_LIMIT = 30;
-const MIN_SEARCH_QUERY_LENGTH = 2;
+const MIN_SEARCH_QUERY_LENGTH = 1;
 const FETCH_MORE_SCROLL_THRESHOLD = 360;
 let disposed = false;
 let searchRequestId = 0;
@@ -118,7 +118,7 @@ let senderOptionsLoadPromise: Promise<void> | null = null;
 let fetchMoreCheckFrame: number | null = null;
 
 const searchParams = computed(() => ({
-	query: searchQuery.value.trim(),
+	query: normalizeSearchQuery(searchQuery.value),
 	limit: SEARCH_LIMIT,
 	roomId: props.roomId,
 	userId: props.userId,
@@ -217,9 +217,13 @@ function clearSearchResults() {
 	error.value = false;
 }
 
+function normalizeSearchQuery(query: string) {
+	return query.trim().normalize('NFC');
+}
+
 function refetchAfterSenderChange() {
 	clearSearchResults();
-	if (searchQuery.value.trim().length > 0 && searched.value) {
+	if (normalizeSearchQuery(searchQuery.value).length > 0 && searched.value) {
 		void search();
 	} else {
 		searched.value = false;
@@ -300,7 +304,7 @@ async function selectSender(ev: MouseEvent) {
 }
 
 async function search() {
-	const query = searchQuery.value.trim();
+	const query = normalizeSearchQuery(searchQuery.value);
 	if (query.length < MIN_SEARCH_QUERY_LENGTH || fetching.value) return;
 
 	const requestId = ++searchRequestId;
