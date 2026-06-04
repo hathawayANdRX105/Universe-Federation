@@ -143,6 +143,16 @@ describe('chat room scroll state', () => {
 		assert.strictEqual(/\.bubble \{[\s\S]*?&::before \{[\s\S]*?bottom: 0;/.test(source), false);
 	});
 
+	test('keeps mention highlight aligned with the bubble and arrow', async () => {
+		const source = await import('@/pages/chat/XMessage.vue?raw').then(module => module.default);
+		const mentionedBubbleRule = source.match(/\.mentionedBubble \{(?<body>[\s\S]*?)\n\}/);
+
+		assert.ok(mentionedBubbleRule?.groups?.body != null);
+		assert.ok(!mentionedBubbleRule.groups.body.includes('border:'));
+		assert.ok(!mentionedBubbleRule.groups.body.includes('0 0 0 3px'));
+		assert.ok(mentionedBubbleRule.groups.body.includes('filter: drop-shadow('));
+	});
+
 	test('sorts context/search messages by creation time before id', () => {
 		const sorted = sortChatMessagesForTimeline([
 			{ id: 'z', createdAt: '2026-06-01T00:00:00.000Z' },

@@ -630,11 +630,11 @@ function getReferenceText(message: Misskey.entities.ChatMessageLite | Misskey.en
 }
 
 .mentionedBubble {
-	border: solid 1px color(from var(--MI_THEME-accent) srgb r g b / 0.45);
 	background:
 		linear-gradient(0deg, color(from var(--MI_THEME-accent) srgb r g b / 0.12), color(from var(--MI_THEME-accent) srgb r g b / 0.12)),
 		var(--MI_THEME-panel);
-	box-shadow: 0 0 0 3px color(from var(--MI_THEME-accent) srgb r g b / 0.12), 0 1px 2px rgb(0 0 0 / 0.16);
+	box-shadow: 0 1px 2px rgb(0 0 0 / 0.16);
+	filter: drop-shadow(0 0 3px color(from var(--MI_THEME-accent) srgb r g b / 0.28));
 }
 
 .mentionNotice {
