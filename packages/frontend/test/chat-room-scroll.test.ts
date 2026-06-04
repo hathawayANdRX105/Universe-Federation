@@ -123,7 +123,15 @@ describe('chat room scroll state', () => {
 		assert.match(roomSource, /async function ensureLatestOnChatTabReturn/);
 		assert.match(roomSource, /const previousTab = tab\.value;[\s\S]*if \(previousTab !== 'chat'\) \{[\s\S]*scheduleLatestOnChatTabReturn/);
 		assert.match(roomSource, /function scheduleLatestOnChatTabReturn\(\) \{[\s\S]*ensureLatestOnChatTabReturn/);
+		assert.match(roomSource, /v-show=\"tab === 'chat'\" ref=\"chatPaneEl\"/);
+		assert.match(roomSource, /function resetChatPaneScrollPosition\(\)/);
 		assert.match(roomSource, /await fetchLatestGap\(\);[\s\S]*scrollToLatest\('instant', \{ flushReadReceipt: true \}\);/);
+	});
+
+	test('shows a direct latest button while detached from the chat bottom', () => {
+		assert.match(roomSource, /showScrollToLatestButton = ref\(false\)/);
+		assert.match(roomSource, /showScrollToLatestButton\.value = latestDistance > SCROLL_TAIL_THRESHOLD/);
+		assert.match(roomSource, /class="_buttonPrimary" :class="\$style\.toLatestButton"/);
 	});
 
 	test('sorts context/search messages by creation time before id', () => {

@@ -215,6 +215,26 @@ function focus() {
 	textareaEl.value?.focus();
 }
 
+function insertText(value: string) {
+	const textarea = textareaEl.value;
+	const start = textarea?.selectionStart ?? text.value.length;
+	const end = textarea?.selectionEnd ?? text.value.length;
+	text.value = text.value.substring(0, start) + value + text.value.substring(end);
+	nextTick(() => {
+		if (textareaEl.value == null) return;
+
+		const position = start + value.length;
+		textareaEl.value.focus();
+		textareaEl.value.setSelectionRange(position, position);
+	});
+}
+
+function insertMention(user: Misskey.entities.UserLite) {
+	const acct = user.host == null ? user.username : `${user.username}@${user.host}`;
+	const prefix = text.value.length === 0 || /\s$/.test(text.value) ? '' : ' ';
+	insertText(`${prefix}@${acct} `);
+}
+
 function scrollTextareaIntoViewAfterFocus() {
 	for (const timer of focusScrollTimers) {
 		window.clearTimeout(timer);
@@ -417,6 +437,7 @@ async function insertEmoji(ev: MouseEvent) {
 
 defineExpose({
 	focus,
+	insertMention,
 });
 
 onMounted(() => {

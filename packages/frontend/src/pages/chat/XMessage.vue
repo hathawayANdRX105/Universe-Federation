@@ -118,6 +118,7 @@ const props = defineProps<{
 const emit = defineEmits<{
 	(ev: 'reply', message: NormalizedChatMessage | Misskey.entities.ChatMessage): void;
 	(ev: 'quote', message: NormalizedChatMessage | Misskey.entities.ChatMessage): void;
+	(ev: 'mention', user: Misskey.entities.UserLite): void;
 	(ev: 'openReference', messageId: string): void;
 	(ev: 'deletedMany', messageIds: string[]): void;
 }>();
@@ -248,6 +249,14 @@ function showMenu(ev: MouseEvent, contextmenu = false) {
 	}
 
 	if (!isMe.value && $i.policies.chatAvailability === 'available') {
+		if (props.message.fromUser != null && props.message.toRoomId != null) {
+			menu.push({
+				text: i18n.ts.mention,
+				icon: 'ti ti-at',
+				action: () => emit('mention', props.message.fromUser!),
+			});
+		}
+
 		menu.push({
 			text: i18n.ts.reaction,
 			icon: 'ti ti-mood-plus',

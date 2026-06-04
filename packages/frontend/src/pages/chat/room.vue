@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<i :class="headerActions[0].icon"></i>
 		</button>
 	</div>
-	<div v-if="tab === 'chat'" :class="$style.chatPane">
+	<div v-show="tab === 'chat'" ref="chatPaneEl" :class="$style.chatPane">
 		<div class="_gaps">
 			<div v-if="initializing">
 				<MkLoading/>
@@ -86,7 +86,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					tag="div" :class="$style.messageList"
 				>
 					<div v-for="item in timeline.toReversed()" :key="item.id" :class="[$style.messageItem, { [$style.contextTarget]: item.type === 'item' && item.id === contextTargetMessageId }]" :data-scroll-anchor="item.type === 'item' ? item.id : undefined">
-						<XMessage v-if="item.type === 'item'" :message="item.data" :enableReferenceActions="true" :canDeleteAnyMessage="canDeleteAnyMessage" :canManageRoomUsers="canManageRoomUsers" @reply="setReplyTarget(item.data)" @quote="setQuoteTarget(item.data)" @openReference="openReferenceMessage" @deletedMany="onDeletedMany"/>
+						<XMessage v-if="item.type === 'item'" :message="item.data" :enableReferenceActions="true" :canDeleteAnyMessage="canDeleteAnyMessage" :canManageRoomUsers="canManageRoomUsers" @reply="setReplyTarget(item.data)" @quote="setQuoteTarget(item.data)" @mention="mentionUser" @openReference="openReferenceMessage" @deletedMany="onDeletedMany"/>
 						<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
 							<span><i class="ti ti-chevron-up"></i> {{ item.nextText }}</span>
 							<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
@@ -108,23 +108,29 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 
-	<div v-else-if="tab === 'search'" :class="$style.searchPane">
+	<Transition name="fade">
+		<button v-show="tab === 'chat' && showScrollToLatestButton && !showIndicator" class="_buttonPrimary" :class="$style.toLatestButton" :title="i18n.ts.bottom" @click="onIndicatorClick">
+			<i class="ti ti-arrow-down"></i>
+		</button>
+	</Transition>
+
+	<div v-if="tab === 'search'" :class="$style.searchPane">
 		<XSearch :userId="userId" :roomId="roomId" :user="user" :room="room" @openContext="openMessageContext"/>
 	</div>
 
-	<div v-else-if="tab === 'members'" :class="$style.tabPane">
+	<div v-if="tab === 'members'" :class="$style.tabPane">
 		<div class="_spacer" :class="$style.tabPaneInner" style="--MI_SPACER-w: 700px;">
 			<XMembers v-if="room != null" :room="room" @inviteUser="inviteUser"/>
 		</div>
 	</div>
 
-	<div v-else-if="tab === 'info'" :class="$style.tabPane">
+	<div v-if="tab === 'info'" :class="$style.tabPane">
 		<div class="_spacer" :class="$style.tabPaneInner" style="--MI_SPACER-w: 700px;">
 			<XInfo v-if="room != null" :room="room" @updated="onRoomUpdated"/>
 		</div>
 	</div>
 
-	<div v-else-if="tab === 'management'" :class="$style.tabPane">
+	<div v-if="tab === 'management'" :class="$style.tabPane">
 		<div class="_spacer" :class="$style.tabPaneInner" style="--MI_SPACER-w: 700px;">
 			<XManagement v-if="room != null && room.canManage" :room="room" @updated="onRoomUpdated" @cleared="onCleared"/>
 		</div>
@@ -213,12 +219,14 @@ const connection = ref<Misskey.IChannelConnection<Misskey.Channels['chatUser']> 
 const showIndicator = ref(false);
 const newMessageCount = ref(0);
 const rootEl = ref<HTMLElement | null>(null);
+const chatPaneEl = ref<HTMLElement | null>(null);
 const timelineEl = ref<HTMLElement | null>(null);
 const formEl = ref<InstanceType<typeof XForm> | null>(null);
 const timeline = makeDateSeparatedTimelineComputedRef(messages);
 const contextTargetMessageId = ref<string | null>(null);
 const pendingContextScrollId = ref<string | null>(null);
 const usersById = ref(new Map<string, Misskey.entities.UserLite>());
+const showScrollToLatestButton = ref(false);
 
 const SCROLL_LATEST_THRESHOLD = 24;
 const SCROLL_AUTO_STICK_THRESHOLD = 4;
@@ -283,7 +291,13 @@ function isAtLatest() {
 	const scrollContainer = getScrollContainer(timelineEl.value);
 	if (scrollContainer == null) return true;
 
-	return autoScrollState.canAutoFollowLatest(getChatScrollMetrics(scrollContainer).latestDistance);
+	const { latestDistance } = getChatScrollMetrics(scrollContainer);
+	if (latestDistance <= SCROLL_LATEST_THRESHOLD) {
+		autoScrollState.updateFromScroll(latestDistance);
+		return true;
+	}
+
+	return autoScrollState.canAutoFollowLatest(latestDistance);
 }
 
 function clearNewMessageIndicator() {
@@ -302,6 +316,7 @@ function scrollToLatest(behavior: ScrollBehavior = 'smooth', options?: { flushRe
 		behavior,
 	});
 	clearNewMessageIndicator();
+	showScrollToLatestButton.value = false;
 	if (options?.flushReadReceipt === true) {
 		readReceiptBatcher.flush();
 	}
@@ -323,6 +338,7 @@ function setupTimelineScrollListener() {
 	const onScroll = () => {
 		const { latestDistance, historyDistance } = getChatScrollMetrics(scrollContainer);
 		autoScrollState.updateFromScroll(latestDistance);
+		showScrollToLatestButton.value = latestDistance > SCROLL_TAIL_THRESHOLD;
 		if (historyDistance >= SCROLL_HISTORY_THRESHOLD) {
 			historyFetchArmed = true;
 		}
@@ -360,6 +376,8 @@ function setupTimelineScrollListener() {
 		scrollContainer.removeEventListener('pointermove', markUserScrollInteraction);
 		scrollContainer.removeEventListener('wheel', markUserScrollInteraction);
 	};
+
+	onScroll();
 }
 
 function getVisibleMessageAnchor(): ScrollAnchor | null {
@@ -926,9 +944,17 @@ async function finishInitializeRender() {
 	} else {
 		await nextTick();
 		await waitAnimationFrame();
+		resetChatPaneScrollPosition();
 		scrollToLatest('instant');
 		await fillInitialScrollableHistory();
 	}
+}
+
+function resetChatPaneScrollPosition() {
+	chatPaneEl.value?.scrollTo({
+		top: 0,
+		behavior: 'instant',
+	});
 }
 
 async function initialize() {
@@ -944,6 +970,7 @@ async function initialize() {
 	connection.value = null;
 	showIndicator.value = false;
 	newMessageCount.value = 0;
+	showScrollToLatestButton.value = false;
 	contextTargetMessageId.value = null;
 	pendingContextScrollId.value = null;
 	historyFetchArmed = true;
@@ -1340,6 +1367,10 @@ function setQuoteTarget(message: NormalizedChatMessage) {
 	nextTick(() => formEl.value?.focus());
 }
 
+function mentionUser(user: Misskey.entities.UserLite) {
+	formEl.value?.insertMention(user);
+}
+
 function onVisibilitychange() {
 	if (window.document.hidden) return;
 	readReceiptBatcher.flush();
@@ -1457,6 +1488,7 @@ async function ensureLatestOnChatTabReturn(generation: number) {
 
 	if (generation !== chatTabLatestReturnGeneration || tab.value !== 'chat' || initializing.value || initializeError.value != null || joinRequiredRoom.value != null) return;
 
+	resetChatPaneScrollPosition();
 	scrollToLatest('instant', { flushReadReceipt: true });
 	await fillInitialScrollableHistory();
 }
@@ -1947,6 +1979,24 @@ definePage(computed(() => {
 
 .newIcon {
 	display: inline-block;
+}
+
+.toLatestButton {
+	position: absolute;
+	right: max(18px, env(safe-area-inset-right));
+	bottom: calc(72px + env(safe-area-inset-bottom));
+	z-index: 5;
+	display: grid;
+	place-items: center;
+	width: 42px;
+	height: 42px;
+	padding: 0;
+	border-radius: 999px;
+	box-shadow: 0 6px 18px rgb(0 0 0 / 0.22);
+
+	> i {
+		font-size: 18px;
+	}
 }
 
 .footer {
