@@ -4,6 +4,7 @@
  */
 
 import { EventEmitter } from 'events';
+import type { Socket } from 'net';
 import { WebSocket } from 'ws';
 import { CountingSet } from '@/misc/CountingSet.js';
 import { SkEventSource } from '@/misc/SkEventEmitter.js';
@@ -70,6 +71,18 @@ export const CloseTimeout = 1000 * 10; // 10 seconds
  * https://github.com/websockets/ws/blob/master/doc/ws.md#new-websocketserveroptions-callback
  */
 export const ConnectionBacklogLimit = 511;
+
+/**
+ * Yield during very large fanout so HTTP requests and incoming websocket frames
+ * are not starved by one synchronous broadcast loop.
+ */
+export const BroadcastFanoutYieldInterval = 16;
+
+/**
+ * Start very large fanout on the next tick so the Redis pubsub callback does
+ * not monopolize the event loop before pending HTTP responses can flush.
+ */
+export const BroadcastFanoutInitialYieldThreshold = 1024;
 
 /**
  * Connection status values:
@@ -144,6 +157,37 @@ export interface WebSocketClient {
 	token: MiAccessToken | null;
 }
 
+interface RedisMessageHub {
+	readonly connectionsByChannel: Map<GlobalEventNames, Set<Connection>>;
+	readonly onMessage: (channel: string, data: string) => void;
+}
+
+class FastEventEmitter<TEvents extends Record<string, any[]>> extends EventEmitter<TEvents> {
+	public emitFast<K extends keyof TEvents & string>(eventName: K, ...args: TEvents[K]): boolean {
+		const listeners = this.listeners(eventName as never);
+		if (listeners.length === 0) return false;
+
+		for (const listener of listeners) {
+			try {
+				(listener as unknown as (...args: TEvents[K]) => void)(...args);
+			} catch (err) {
+				console.error(err);
+			}
+		}
+
+		return true;
+	}
+}
+
+type FastWebSocket = WebSocket & {
+	_socket?: Socket;
+	_sender?: {
+		_state?: number;
+		_queue?: unknown[];
+		_firstFragment?: boolean;
+	};
+};
+
 // Rather high limit because when catching up at the top of a timeline, the frontend may render many many notes.
 // Each of which causes a message via `useNoteCapture` to ask for realtime updates of that note.
 // Up to 4000 messages, then 20 per second
@@ -166,14 +210,20 @@ export const SocketConnectRateLimit = {
  * Main stream connection
  */
 export class Connection extends SkEventSource<ConnectionEvents> {
+	private static cachedRedisMessageData: string | null = null;
+	private static cachedRedisMessage: GlobalEvent<GlobalEventNames> | null = null;
+	private static readonly redisMessageHubs = new WeakMap<Redis, RedisMessageHub>();
+	private static readonly unmaskedTextFrameHeaders = new Map<number, Buffer>();
+
 	/**
 	 * Connection-specific sub-EV mirroring events from the global bus.
 	 */
-	public readonly subscriber = new EventEmitter<GlobalEventsMap>();
+	public readonly subscriber = this.createSubscriber();
 	private readonly logger: Logger;
 
 	private readonly channels = new Map<string, Channel>();
 	private readonly subscribingNotes = new CountingSet<MiNote['id']>();
+	private readonly subscribedGlobalChannels = new Set<GlobalEventNames>();
 
 	private _state: ConnectionState = 'ready';
 	private _lastActive: Date;
@@ -345,7 +395,6 @@ export class Connection extends SkEventSource<ConnectionEvents> {
 		if (this._state !== 'ready') throw new IdentifiableError(errorCodes.websocketError, 'Cannot re-open a closed socket connection');
 
 		// Set up external events
-		this.redisForSub.on('message', this.onRedisMessage);
 		this.subscriber.on('broadcast', this.onSubscriberBroadcast);
 		this.wsConnection.on('message', this.onWsConnectionMessage);
 		this.wsConnection.on('ping', this.onWsConnectionPing);
@@ -357,26 +406,186 @@ export class Connection extends SkEventSource<ConnectionEvents> {
 		await this.emit('open', {});
 	}
 
-	@bindThis
-	private onRedisMessage(_: string, data: string): void {
-		if (!Connection.shouldParseRedisMessage(data, channel => this.subscriber.listenerCount(channel) > 0)) return;
+	private createSubscriber(): FastEventEmitter<GlobalEventsMap> {
+		const subscriber = new FastEventEmitter<GlobalEventsMap>();
+		subscriber.on('newListener', this.onSubscriberNewListener as never);
+		subscriber.on('removeListener', this.onSubscriberRemoveListener as never);
+		return subscriber;
+	}
 
-		const { channel: parsedChannel, message } = JSON.parse(data) as GlobalEvent<GlobalEventNames>;
-		this.subscriber.emit(parsedChannel, message);
+	@bindThis
+	private onSubscriberNewListener(eventName: string | symbol): void {
+		if (!Connection.isGlobalEventName(eventName)) return;
+		if (this.subscriber.listenerCount(eventName) > 0) return;
+
+		this.addGlobalChannelSubscription(eventName);
+	}
+
+	@bindThis
+	private onSubscriberRemoveListener(eventName: string | symbol): void {
+		if (!Connection.isGlobalEventName(eventName)) return;
+		if (this.subscriber.listenerCount(eventName) > 0) return;
+
+		this.removeGlobalChannelSubscription(eventName);
+	}
+
+	private addGlobalChannelSubscription(channel: GlobalEventNames): void {
+		if (this.subscribedGlobalChannels.has(channel)) return;
+
+		this.subscribedGlobalChannels.add(channel);
+		const hub = Connection.getRedisMessageHub(this.redisForSub);
+		let connections = hub.connectionsByChannel.get(channel);
+		if (connections == null) {
+			connections = new Set();
+			hub.connectionsByChannel.set(channel, connections);
+		}
+		connections.add(this);
+	}
+
+	private removeGlobalChannelSubscription(channel: GlobalEventNames): void {
+		if (!this.subscribedGlobalChannels.delete(channel)) return;
+
+		const hub = Connection.redisMessageHubs.get(this.redisForSub);
+		const connections = hub?.connectionsByChannel.get(channel);
+		if (connections == null) return;
+
+		connections.delete(this);
+		if (connections.size === 0) {
+			hub?.connectionsByChannel.delete(channel);
+		}
+	}
+
+	private removeAllGlobalChannelSubscriptions(): void {
+		for (const channel of this.subscribedGlobalChannels) {
+			const hub = Connection.redisMessageHubs.get(this.redisForSub);
+			const connections = hub?.connectionsByChannel.get(channel);
+			connections?.delete(this);
+			if (connections?.size === 0) {
+				hub?.connectionsByChannel.delete(channel);
+			}
+		}
+		this.subscribedGlobalChannels.clear();
+	}
+
+	private onRedisGlobalEvent(event: GlobalEvent<GlobalEventNames>): void {
+		if (this._state !== 'opened') return;
+
+		switch (event.channel.split(':', 1)[0]) {
+			case 'chatRoomStream':
+			case 'chatUserStream':
+				this.subscriber.emitFast(event.channel, event.message);
+				return;
+			default:
+				this.subscriber.emit(event.channel, event.message);
+		}
+	}
+
+	private static dispatchRedisGlobalEvent(connections: Set<Connection>, event: GlobalEvent<GlobalEventNames>): void {
+		let index = 0;
+		let iterator = connections.values();
+
+		const dispatchChunk = () => {
+			for (;;) {
+				const next = iterator.next();
+				if (next.done) return;
+
+				next.value.onRedisGlobalEvent(event);
+				index++;
+				if (index % BroadcastFanoutYieldInterval === 0) {
+					setImmediate(dispatchChunk);
+					return;
+				}
+			}
+		};
+
+		if (connections.size >= BroadcastFanoutInitialYieldThreshold) {
+			setImmediate(dispatchChunk);
+		} else {
+			dispatchChunk();
+		}
 	}
 
 	// Exposed for focused tests without constructing a full websocket connection.
 	public static shouldParseRedisMessage(data: string, hasListener: (channel: GlobalEventNames) => boolean): boolean {
+		const channel = Connection.extractRedisMessageChannel(data);
+		return channel == null || hasListener(channel);
+	}
+
+	// Exposed for focused tests without constructing a full websocket connection.
+	public static getRedisMessageForListener(data: string, hasListener: (channel: GlobalEventNames) => boolean): GlobalEvent<GlobalEventNames> | null {
+		const channel = Connection.extractRedisMessageChannel(data);
+		if (channel != null && !hasListener(channel)) return null;
+
+		return Connection.parseRedisMessage(data);
+	}
+
+	private static getRedisMessageHub(redisForSub: Redis): RedisMessageHub {
+		const existing = Connection.redisMessageHubs.get(redisForSub);
+		if (existing != null) return existing;
+
+		const hub: RedisMessageHub = {
+			connectionsByChannel: new Map(),
+			onMessage: (_redisChannel: string, data: string) => {
+				const channel = Connection.extractRedisMessageChannel(data);
+				if (channel == null) {
+					const event = Connection.tryParseRedisMessage(data);
+					if (event == null) return;
+
+					const connections = hub.connectionsByChannel.get(event.channel);
+					if (connections == null || connections.size === 0) return;
+
+					Connection.dispatchRedisGlobalEvent(connections, event);
+					return;
+				}
+
+				const connections = hub.connectionsByChannel.get(channel);
+				if (connections == null || connections.size === 0) return;
+
+				const event = Connection.tryParseRedisMessage(data);
+				if (event == null) return;
+
+				Connection.dispatchRedisGlobalEvent(connections, event);
+			},
+		};
+		redisForSub.on('message', hub.onMessage);
+		Connection.redisMessageHubs.set(redisForSub, hub);
+		return hub;
+	}
+
+	private static isGlobalEventName(eventName: string | symbol): eventName is GlobalEventNames {
+		return typeof eventName === 'string' && eventName !== 'newListener' && eventName !== 'removeListener';
+	}
+
+	private static extractRedisMessageChannel(data: string): GlobalEventNames | null {
 		const marker = '"channel":"';
 		const markerIndex = data.indexOf(marker);
-		if (markerIndex === -1) return true;
+		if (markerIndex === -1) return null;
 
 		const channelStart = markerIndex + marker.length;
 		const channelEnd = data.indexOf('"', channelStart);
-		if (channelEnd === -1) return true;
+		if (channelEnd === -1) return null;
 
-		const channel = data.slice(channelStart, channelEnd) as GlobalEventNames;
-		return hasListener(channel);
+		return data.slice(channelStart, channelEnd) as GlobalEventNames;
+	}
+
+	private static parseRedisMessage(data: string): GlobalEvent<GlobalEventNames> {
+		if (Connection.cachedRedisMessageData === data && Connection.cachedRedisMessage != null) {
+			return Connection.cachedRedisMessage;
+		}
+
+		const parsed = JSON.parse(data) as GlobalEvent<GlobalEventNames>;
+		Connection.cachedRedisMessageData = data;
+		Connection.cachedRedisMessage = parsed;
+		return parsed;
+	}
+
+	private static tryParseRedisMessage(data: string): GlobalEvent<GlobalEventNames> | null {
+		try {
+			const parsed = Connection.parseRedisMessage(data);
+			return typeof (parsed as { channel?: unknown }).channel === 'string' ? parsed : null;
+		} catch {
+			return null;
+		}
 	}
 
 	public static shouldCloseForBackpressure(bufferedAmount: number): boolean {
@@ -647,26 +856,103 @@ export class Connection extends SkEventSource<ConnectionEvents> {
 	 * クライアントにメッセージ送信
 	 */
 	@bindThis
-	public async sendMessageToWs<T extends Record<string, unknown>>(type: string, payload?: T): Promise<void> {
-		// Don't throw, since we might end up here if an async call completes while the connection is closing.
-		if (!this.isActive) return;
-
-		if (Connection.shouldCloseForBackpressure(this.wsConnection.bufferedAmount)) {
-			await this.close(1013, 'WebSocket send buffer exceeded');
-			return;
-		}
-
+	public sendMessageToWs<T extends Record<string, unknown>>(type: string, payload?: T, options?: { compress?: boolean }): Promise<void> {
 		const message = JSON.stringify({
 			type: type,
 			body: payload,
 		});
 
-		await new Promise<void>((resolve, reject) => {
-			this.wsConnection.send(message, (err?: unknown) => {
+		return this.sendSerializedMessageToWs(message, options);
+	}
+
+	@bindThis
+	public sendSerializedMessageToWs(message: string, options?: { compress?: boolean }): Promise<void> {
+		// Don't throw, since we might end up here if an async call completes while the connection is closing.
+		if (!this.isActive) return Promise.resolve();
+
+		if (Connection.shouldCloseForBackpressure(this.wsConnection.bufferedAmount)) {
+			return this.close(1013, 'WebSocket send buffer exceeded');
+		}
+
+		return new Promise<void>((resolve, reject) => {
+			this.wsConnection.send(message, {
+				compress: options?.compress ?? true,
+			}, (err?: unknown) => {
 				if (err != null) reject(err);
 				else resolve();
 			});
 		});
+	}
+
+	@bindThis
+	public sendSerializedMessageToWsFast(message: string, options?: { compress?: boolean }): void {
+		// Don't throw, since we might end up here if an async call completes while the connection is closing.
+		if (!this.isActive) return;
+
+		if (Connection.shouldCloseForBackpressure(this.wsConnection.bufferedAmount)) {
+			void this.close(1013, 'WebSocket send buffer exceeded');
+			return;
+		}
+
+		if (options?.compress === false && this.sendUncompressedSerializedMessageToWsFast(message)) {
+			return;
+		}
+
+		try {
+			this.wsConnection.send(message, {
+				compress: options?.compress ?? true,
+			});
+		} catch (err) {
+			void this.emit('error', { error: err });
+		}
+	}
+
+	private sendUncompressedSerializedMessageToWsFast(message: string): boolean {
+		const ws = this.wsConnection as FastWebSocket;
+		const socket = ws._socket;
+		const sender = ws._sender;
+		if (ws.readyState !== WebSocket.OPEN || socket == null || sender == null) return false;
+		if (!socket.writable || socket.destroyed) return false;
+		if (sender._state !== 0 || (sender._queue?.length ?? 0) > 0 || sender._firstFragment === false) return false;
+
+		try {
+			socket.cork();
+			socket.write(Connection.getUnmaskedTextFrameHeader(Buffer.byteLength(message)));
+			socket.write(message);
+			socket.uncork();
+			return true;
+		} catch (err) {
+			try {
+				socket.uncork();
+			} catch {
+				// ignore secondary uncork errors; the original socket error is emitted below.
+			}
+			void this.emit('error', { error: err });
+			return true;
+		}
+	}
+
+	private static getUnmaskedTextFrameHeader(byteLength: number): Buffer {
+		const cached = Connection.unmaskedTextFrameHeaders.get(byteLength);
+		if (cached != null) return cached;
+
+		let header: Buffer;
+		if (byteLength <= 125) {
+			header = Buffer.from([0x81, byteLength]);
+		} else if (byteLength <= 0xffff) {
+			header = Buffer.allocUnsafe(4);
+			header[0] = 0x81;
+			header[1] = 126;
+			header.writeUInt16BE(byteLength, 2);
+		} else {
+			header = Buffer.allocUnsafe(10);
+			header[0] = 0x81;
+			header[1] = 127;
+			header.writeBigUInt64BE(BigInt(byteLength), 2);
+		}
+
+		Connection.unmaskedTextFrameHeaders.set(byteLength, header);
+		return header;
 	}
 
 	@bindThis
@@ -793,6 +1079,7 @@ export class Connection extends SkEventSource<ConnectionEvents> {
 				if (c.dispose) c.dispose();
 			}
 			this.channels.clear();
+			this.removeAllGlobalChannelSubscriptions();
 
 			// Dispose note subscriptions
 			for (const k of this.subscribingNotes) {
@@ -801,7 +1088,6 @@ export class Connection extends SkEventSource<ConnectionEvents> {
 			this.subscribingNotes.clear();
 
 			// Disconnect external events
-			this.redisForSub.off('message', this.onRedisMessage);
 			this.subscriber.off('broadcast', this.onSubscriberBroadcast);
 			this.wsConnection.off('message', this.onWsConnectionMessage);
 			this.wsConnection.off('ping', this.onWsConnectionPing);

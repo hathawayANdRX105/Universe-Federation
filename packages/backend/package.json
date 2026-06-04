@@ -18,6 +18,7 @@
 		"build": "swc src -d built -D --strip-leading-paths",
 		"build:pre": "pnpm run -w build-pre && pnpm run --filter megalodon build && pnpm run --filter misskey-js build && pnpm run --filter misskey-reversi build && pnpm run --filter misskey-bubble-game build && pnpm run -w build-assets",
 		"build:test": "swc test-server -d built-test -D --config-file test-server/.swcrc --strip-leading-paths",
+		"loadtest:chat-room": "node ./scripts/loadtest/chat-room-ws.mjs",
 		"build:tsc": "tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json",
 		"watch": "pnpm run build:pre && node ./scripts/watch.mjs",
 		"restart": "pnpm build && pnpm start",
