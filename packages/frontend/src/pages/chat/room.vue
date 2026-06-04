@@ -942,19 +942,37 @@ async function finishInitializeRender() {
 	if (messageId != null) {
 		await scrollContextTargetAfterRender(messageId);
 	} else {
-		await nextTick();
-		await waitAnimationFrame();
-		resetChatPaneScrollPosition();
-		scrollToLatest('instant');
-		await fillInitialScrollableHistory();
+		await scrollToLatestAfterLayout({ fillHistory: true });
 	}
 }
 
-function resetChatPaneScrollPosition() {
-	chatPaneEl.value?.scrollTo({
-		top: 0,
-		behavior: 'instant',
-	});
+async function scrollToLatestAfterLayout(options?: { flushReadReceipt?: boolean; fillHistory?: boolean }) {
+	let stableFrames = 0;
+	let previousMaxScrollTop = -1;
+
+	for (let i = 0; i < 10; i++) {
+		await nextTick();
+		await waitAnimationFrame();
+
+		const scrollContainer = timelineEl.value == null ? null : getScrollContainer(timelineEl.value);
+		if (scrollContainer == null) continue;
+
+		const { maxScrollTop } = getChatScrollMetrics(scrollContainer);
+		scrollToLatest('instant');
+
+		if (maxScrollTop === previousMaxScrollTop) {
+			stableFrames++;
+			if (stableFrames >= 2) break;
+		} else {
+			stableFrames = 0;
+			previousMaxScrollTop = maxScrollTop;
+		}
+	}
+
+	scrollToLatest('instant', { flushReadReceipt: options?.flushReadReceipt });
+	if (options?.fillHistory === true) {
+		await fillInitialScrollableHistory();
+	}
 }
 
 async function initialize() {
@@ -1488,9 +1506,7 @@ async function ensureLatestOnChatTabReturn(generation: number) {
 
 	if (generation !== chatTabLatestReturnGeneration || tab.value !== 'chat' || initializing.value || initializeError.value != null || joinRequiredRoom.value != null) return;
 
-	resetChatPaneScrollPosition();
-	scrollToLatest('instant', { flushReadReceipt: true });
-	await fillInitialScrollableHistory();
+	await scrollToLatestAfterLayout({ flushReadReceipt: true, fillHistory: true });
 }
 
 function scheduleLatestOnChatTabReturn() {
