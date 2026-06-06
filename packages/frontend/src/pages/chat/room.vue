@@ -273,6 +273,7 @@ const readReceiptBatcher = new ChatReadReceiptBatcher({
 	},
 });
 let removeTimelineScrollListener: (() => void) | null = null;
+let timelineResizeObserver: ResizeObserver | null = null;
 let pendingStickToLatestFrame: number | null = null;
 let pendingIncomingMessageFrame: number | null = null;
 let pendingIncomingMessages: Misskey.entities.ChatMessageLite[] = [];
@@ -296,6 +297,24 @@ type ScrollAnchor = {
 	id: string;
 	offset: number;
 };
+
+type ScrollMetricsSnapshot = ReturnType<typeof getChatScrollMetrics>;
+
+let latestScrollMetricsSnapshot: ScrollMetricsSnapshot | null = null;
+
+function rememberLatestScrollMetrics(metrics: ScrollMetricsSnapshot) {
+	latestScrollMetricsSnapshot = metrics;
+}
+
+function shouldStickToLatestAfterLayoutShift(metrics: ScrollMetricsSnapshot): boolean {
+	if (autoScrollState.shouldStickToLatest(metrics.latestDistance, SCROLL_AUTO_STICK_THRESHOLD)) return true;
+	if (autoScrollState.isUserInteracting()) return false;
+	if (latestScrollMetricsSnapshot == null) return false;
+	if (latestScrollMetricsSnapshot.latestDistance > SCROLL_AUTO_STICK_THRESHOLD) return false;
+	if (metrics.maxScrollTop <= latestScrollMetricsSnapshot.maxScrollTop) return false;
+
+	return Math.abs(metrics.scrollTop - latestScrollMetricsSnapshot.maxScrollTop) <= SCROLL_AUTO_STICK_THRESHOLD;
+}
 
 function beginScrollRestoration() {
 	scrollRestorationDepth++;
@@ -339,6 +358,13 @@ function scrollToLatest(behavior: ScrollBehavior = 'smooth', options?: { flushRe
 			top: scrollTop,
 			behavior,
 		});
+		if (latestScrollContainer != null) {
+			rememberLatestScrollMetrics({
+				...getChatScrollMetrics(latestScrollContainer),
+				scrollTop,
+				latestDistance: 0,
+			});
+		}
 		clearNewMessageIndicator();
 		showScrollToLatestButton.value = false;
 		if (options?.flushReadReceipt === true) {
@@ -369,7 +395,9 @@ function setupTimelineScrollListener() {
 	};
 
 	const onScroll = () => {
-		const { latestDistance, historyDistance } = getChatScrollMetrics(scrollContainer);
+		const metrics = getChatScrollMetrics(scrollContainer);
+		rememberLatestScrollMetrics(metrics);
+		const { latestDistance, historyDistance } = metrics;
 		autoScrollState.updateFromScroll(latestDistance);
 		showScrollToLatestButton.value = latestDistance > SCROLL_TAIL_THRESHOLD;
 		if (historyDistance >= SCROLL_HISTORY_THRESHOLD) {
@@ -572,11 +600,18 @@ function scheduleStickToLatestAfterMutation() {
 		if (scrollContainer == null) return;
 
 		const metrics = getChatScrollMetrics(scrollContainer);
-		if (autoScrollState.shouldStickToLatest(metrics.latestDistance, SCROLL_AUTO_STICK_THRESHOLD)) {
+		if (shouldStickToLatestAfterLayoutShift(metrics)) {
 			scrollContainer.scrollTo({
 				top: metrics.maxScrollTop,
 				behavior: 'instant',
 			});
+			rememberLatestScrollMetrics({
+				...metrics,
+				scrollTop: metrics.maxScrollTop,
+				latestDistance: 0,
+			});
+		} else {
+			rememberLatestScrollMetrics(metrics);
 		}
 	});
 }
@@ -588,6 +623,17 @@ useMutationObserver(timelineEl, {
 }, () => {
 	scheduleStickToLatestAfterMutation();
 });
+
+watch(timelineEl, (to) => {
+	timelineResizeObserver?.disconnect();
+	timelineResizeObserver = null;
+	if (to == null) return;
+
+	timelineResizeObserver = new ResizeObserver(() => {
+		scheduleStickToLatestAfterMutation();
+	});
+	timelineResizeObserver.observe(to);
+}, { immediate: true });
 
 function refreshMessagesForUser(userId: string) {
 	let changed = false;
@@ -1656,6 +1702,7 @@ onBeforeUnmount(() => {
 	readReceiptBatcher.flush({ force: true });
 	connection.value?.dispose();
 	removeTimelineScrollListener?.();
+	timelineResizeObserver?.disconnect();
 	clearIncomingMessageQueue();
 	if (pendingStickToLatestFrame != null) {
 		window.cancelAnimationFrame(pendingStickToLatestFrame);

@@ -51,6 +51,18 @@ describe('chat room scroll state', () => {
 		assert.strictEqual(state.shouldStickToLatest(0, 4), true);
 	});
 
+	test('keeps latest stickiness when media changes rendered height', () => {
+		assert.match(roomSource, /let timelineResizeObserver: ResizeObserver \| null = null;/);
+		assert.match(roomSource, /new ResizeObserver\(\(\) => \{[\s\S]*scheduleStickToLatestAfterMutation\(\);[\s\S]*\}\)/);
+		assert.match(roomSource, /timelineResizeObserver\.observe\(to\);/);
+		assert.match(roomSource, /timelineResizeObserver\?\.disconnect\(\);/);
+		assert.match(roomSource, /let latestScrollMetricsSnapshot: ScrollMetricsSnapshot \| null = null;/);
+		assert.match(roomSource, /function shouldStickToLatestAfterLayoutShift\(metrics: ScrollMetricsSnapshot\)/);
+		assert.match(roomSource, /latestScrollMetricsSnapshot\.latestDistance > SCROLL_AUTO_STICK_THRESHOLD/);
+		assert.match(roomSource, /Math\.abs\(metrics\.scrollTop - latestScrollMetricsSnapshot\.maxScrollTop\) <= SCROLL_AUTO_STICK_THRESHOLD/);
+		assert.match(roomSource, /if \(shouldStickToLatestAfterLayoutShift\(metrics\)\) \{[\s\S]*scrollContainer\.scrollTo\(\{[\s\S]*top: metrics\.maxScrollTop/);
+	});
+
 	test('normalizes normal column scroll metrics for latest-at-bottom chat', () => {
 		assert.deepStrictEqual(getChatScrollMetrics({
 			scrollTop: 480,
