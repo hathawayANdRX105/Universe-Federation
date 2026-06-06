@@ -10,6 +10,7 @@ import type * as Misskey from 'misskey-js';
 import { nextTick } from 'vue';
 import XForm from '@/pages/chat/room.form.vue';
 import { misskeyApi } from '@/utility/misskey-api.js';
+import { selectFile } from '@/utility/select-file.js';
 
 const { me, preferState } = vi.hoisted(() => ({
 	me: {
@@ -39,6 +40,7 @@ vi.mock('@/i18n.js', () => ({
 	i18n: {
 		ts: {
 			attachFile: 'Attach file',
+			attachCancel: 'Remove attachment',
 			cancel: 'Cancel',
 			error: 'Error',
 			file: 'File',
@@ -114,6 +116,26 @@ function createMessage(text: string): Misskey.entities.ChatMessageLite {
 		quote: null,
 		reactions: [],
 	};
+}
+
+function createDriveFile(name: string): Misskey.entities.DriveFile {
+	return {
+		id: `file-${name}`,
+		createdAt: '2026-05-31T00:00:00.000Z',
+		name,
+		type: 'image/png',
+		md5: '',
+		size: 1024,
+		isSensitive: false,
+		blurhash: null,
+		properties: {},
+		url: `https://example.test/${name}`,
+		thumbnailUrl: `https://example.test/thumb-${name}`,
+		comment: null,
+		folderId: null,
+		userId: me.id,
+		user: me,
+	} as unknown as Misskey.entities.DriveFile;
 }
 
 function renderForm(listeners: Record<string, unknown> = {}): RenderResult {
@@ -192,5 +214,23 @@ describe('chat room form', () => {
 
 		request.resolve(createMessage('burst'));
 		await flushPromises();
+	});
+
+	test('shows an explicit remove button for an attached file', async () => {
+		vi.mocked(selectFile).mockResolvedValueOnce(createDriveFile('photo.png'));
+		const form = renderForm();
+
+		await fireEvent.click(form.getByTitle('Attach file'));
+		await flushPromises();
+
+		const attachedFile = form.container.querySelector('[data-chat-attached-file]');
+		assert.exists(attachedFile);
+		assert.ok(attachedFile.textContent?.includes('photo.png'));
+
+		await fireEvent.click(form.getByLabelText('Remove attachment'));
+		await flushPromises();
+
+		assert.strictEqual(form.container.querySelector('[data-chat-attached-file]'), null);
+		assert.strictEqual(form.queryByLabelText('Remove attachment'), null);
 	});
 });

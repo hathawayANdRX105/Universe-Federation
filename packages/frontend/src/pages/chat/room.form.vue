@@ -21,7 +21,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<button class="_button" :class="$style.referenceButton" :title="i18n.ts.cancel" @click="emit('clearQuote')"><i class="ti ti-x"></i></button>
 		</div>
 	</div>
-	<div v-if="file" :class="$style.file" @click="file = null"><i class="ti ti-paperclip"></i>{{ file.name }}</div>
+	<div v-if="file" :class="$style.file" data-chat-attached-file>
+		<i class="ti ti-paperclip"></i>
+		<span :class="$style.fileName">{{ file.name }}</span>
+		<button class="_button" :class="$style.fileRemove" type="button" :title="i18n.ts.attachCancel" :aria-label="i18n.ts.attachCancel" @click="removeAttachedFile">
+			<i class="ti ti-x"></i>
+		</button>
+	</div>
 	<div :class="$style.composer">
 		<button class="_button" :class="$style.button" :title="i18n.ts.attachFile" @click="chooseFile"><i class="ti ti-paperclip"></i></button>
 		<textarea
@@ -253,7 +259,9 @@ function onVisualViewportChange() {
 
 function chooseFile(ev: MouseEvent) {
 	selectFile(ev.currentTarget ?? ev.target, i18n.ts.selectFile).then(selectedFile => {
-		file.value = selectedFile;
+		if (selectedFile != null) {
+			file.value = selectedFile;
+		}
 	});
 }
 
@@ -267,6 +275,13 @@ function upload(fileToUpload: File, name?: string) {
 	uploadFile(fileToUpload, prefer.s.uploadFolder, name).then(res => {
 		file.value = res;
 	});
+}
+
+function removeAttachedFile() {
+	file.value = null;
+	if (fileEl.value != null) {
+		fileEl.value.value = '';
+	}
 }
 
 function getSendTarget(): SendTarget | null {
@@ -574,15 +589,35 @@ onBeforeUnmount(() => {
 	width: fit-content;
 	max-width: min(420px, 100%);
 	margin-left: 8px;
-	padding: 5px 10px;
-	cursor: pointer;
+	padding: 5px 6px 5px 10px;
 	border-radius: 999px;
 	background: light-dark(rgb(225 244 255), rgb(34 49 62));
 	color: light-dark(#168acd, #6ab7f5);
 	font-size: 90%;
 	overflow: hidden;
 	white-space: nowrap;
+}
+
+.fileName {
+	min-width: 0;
+	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+.fileRemove {
+	display: grid;
+	place-items: center;
+	flex: 0 0 auto;
+	width: 24px;
+	height: 24px;
+	border-radius: 999px;
+	color: inherit;
+
+	&:hover,
+	&:focus-visible {
+		color: #fff;
+		background: light-dark(#168acd, #5288c1);
+	}
 }
 
 .button {
