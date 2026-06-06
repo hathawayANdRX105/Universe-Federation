@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Inject, Injectable } from '@nestjs/common';
 import redisLock, { Unlock, NodeRedis } from 'redis-lock';
@@ -55,7 +56,7 @@ export class AppLockService {
 	@bindThis
 	public async tryGetChatRetentionLock(timeout = 60 * 60 * 1000): Promise<Unlock | null> {
 		const key = 'lock:chat-retention';
-		const token = `${Date.now()}:${Math.random()}`;
+		const token = randomUUID();
 		const result = await this.redisClient.set(key, token, 'PX', timeout, 'NX');
 		if (result !== 'OK') return null;
 
