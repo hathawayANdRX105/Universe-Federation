@@ -193,7 +193,7 @@ function menuEdit() {
 
 <style lang="scss" module>
 .root {
-	--nav-width: clamp(280px, 18vw, 320px);
+	--nav-width: clamp(248px, 17vw, 280px);
 	--nav-icon-only-width: 80px;
 	--nav-bg-transparent: color(from var(--MI_THEME-navBg) srgb r g b / 0.5);
 

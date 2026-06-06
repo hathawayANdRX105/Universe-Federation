@@ -297,12 +297,18 @@ definePage(() => ({
 	// rest of the instance keeps its own theme accent.
 	--x-blue: #1d9bf0;
 	--x-blue-hover: #1a8cd8;
+	--timeline-main-width: clamp(640px, 47vw, 760px);
+	--timeline-rail-width: clamp(320px, 22vw, 360px);
+	--timeline-column-gap: clamp(20px, 2vw, 32px);
+	--timeline-outer-gap: clamp(16px, 3vw, 48px);
 
-	width: min(100%, 988px);
-	margin: 0 auto;
+	box-sizing: border-box;
+	width: min(calc(100% - var(--timeline-outer-gap)), calc(var(--timeline-main-width) + var(--timeline-rail-width) + var(--timeline-column-gap)));
+	margin-left: var(--timeline-outer-gap);
+	margin-right: auto;
 	display: grid;
-	grid-template-columns: minmax(0, 600px) 350px;
-	column-gap: 28px;
+	grid-template-columns: minmax(0, var(--timeline-main-width)) minmax(300px, var(--timeline-rail-width));
+	column-gap: var(--timeline-column-gap);
 	align-items: start;
 	min-height: 100%;
 }
@@ -614,15 +620,18 @@ definePage(() => ({
 /* ---------- responsive ---------- */
 @media (max-width: 1200px) {
 	.shell {
-		grid-template-columns: minmax(0, 600px) 320px;
-		width: min(100%, 948px);
+		--timeline-main-width: 640px;
+		--timeline-rail-width: 320px;
+		--timeline-column-gap: 20px;
+		--timeline-outer-gap: 12px;
 	}
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1100px) {
 	.shell {
 		display: block;
-		width: min(100%, 600px);
+		width: min(100%, 720px);
+		margin: 0 auto;
 	}
 
 	.main {

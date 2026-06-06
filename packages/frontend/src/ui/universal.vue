@@ -137,6 +137,8 @@ $widgets-hide-threshold: 1090px;
 }
 
 .nonTitlebarArea {
+	--layout-side-rail-width: clamp(320px, 22vw, 360px);
+
 	display: flex;
 	flex: 1;
 	min-height: 0;
@@ -172,7 +174,8 @@ $widgets-hide-threshold: 1090px;
 }
 
 .widgets {
-	width: 350px;
+	flex: 0 0 var(--layout-side-rail-width);
+	width: var(--layout-side-rail-width);
 	height: 100%;
 	box-sizing: border-box;
 	overflow: auto;
