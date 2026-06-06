@@ -670,8 +670,8 @@ function menuEdit() {
 	}
 
 	.instance {
-		display: block;
-		text-align: center;
+		display: flex;
+		justify-content: center;
 		width: 100%;
 
 		&:focus-visible {
@@ -685,7 +685,7 @@ function menuEdit() {
 	}
 
 	.instanceIcon {
-		display: inline-block;
+		display: block;
 		width: 30px;
 		aspect-ratio: 1;
 		border-radius: 8px;
@@ -702,19 +702,23 @@ function menuEdit() {
 	}
 
 	.widget {
-		display: block;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		position: relative;
 		width: 100%;
 		height: 52px;
-		text-align: center;
+		line-height: 1;
 	}
 
 	.post {
-		display: block;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		position: relative;
 		width: 100%;
 		height: 52px;
-		text-align: center;
+		line-height: 1;
 
 		&::before {
 			content: "";
@@ -749,6 +753,13 @@ function menuEdit() {
 
 	.postIcon {
 		position: relative;
+		z-index: 1;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		line-height: 1;
 		color: var(--MI_THEME-fgOnAccent);
 	}
 
@@ -793,11 +804,15 @@ function menuEdit() {
 	}
 
 	.item {
-		display: block;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		position: relative;
-		padding: 18px 0;
+		height: 52px;
+		padding: 0;
 		width: 100%;
-		text-align: center;
+		box-sizing: border-box;
+		line-height: 1;
 		color: var(--navbar-readable-fg, var(--MI_THEME-navFg));
 
 		&:focus-visible {
@@ -836,8 +851,15 @@ function menuEdit() {
 	}
 
 	.itemIcon {
-		display: block;
+		position: relative;
+		z-index: 1;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
 		margin: 0 auto;
+		line-height: 1;
 		color: var(--navbar-readable-fg, inherit) !important;
 		-webkit-text-fill-color: var(--navbar-readable-fg, currentColor) !important;
 		opacity: 1;
@@ -846,6 +868,7 @@ function menuEdit() {
 		&::after {
 			color: inherit !important;
 			-webkit-text-fill-color: currentColor !important;
+			line-height: 1;
 			opacity: 1;
 		}
 	}
