@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test } from '@jest/globals';
-import { buildSigninEmail, resolveSigninEmailLocale } from './signin-email.js';
+import { buildSigninEmail, resolveSigninEmailLocale } from '@/server/api/signin-email.js';
 
 describe('signin-email', () => {
 	test('uses the profile language for login notification emails', () => {
