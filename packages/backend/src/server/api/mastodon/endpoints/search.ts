@@ -10,7 +10,7 @@ import { promiseMap } from '@/misc/promise-map.js';
 import { MastodonConverters } from '../MastodonConverters.js';
 import { parseTimelineArgs, TimelineArgs, toBoolean, toInt } from '../argsUtils.js';
 import { ApiError } from '../../error.js';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Entity } from 'megalodon';
 
 interface ApiSearchMastodonRoute {
@@ -108,15 +108,11 @@ export class ApiSearchMastodon {
 		});
 
 		fastify.get<ApiSearchMastodonRoute>('/v1/trends/statuses', async (request, reply) => {
-			const baseUrl = this.clientService.getBaseUrl(request);
-			const res = await fetch(`${baseUrl}/api/notes/featured`,
+			const url = new URL('/api/notes/featured', this.clientService.getSelfUrl());
+			const res = await fetch(url,
 				{
 					method: 'POST',
-					headers: {
-						...request.headers as Record<string, string>,
-						'Accept': 'application/json',
-						'Content-Type': 'application/json',
-					},
+					headers: getInternalApiHeaders(request),
 					body: '{}',
 				});
 
@@ -131,15 +127,11 @@ export class ApiSearchMastodon {
 		});
 
 		fastify.get<ApiSearchMastodonRoute>('/v2/suggestions', async (request, reply) => {
-			const baseUrl = this.clientService.getBaseUrl(request);
-			const res = await fetch(`${baseUrl}/api/users`,
+			const url = new URL('/api/users', this.clientService.getSelfUrl());
+			const res = await fetch(url,
 				{
 					method: 'POST',
-					headers: {
-						...request.headers as Record<string, string>,
-						'Accept': 'application/json',
-						'Content-Type': 'application/json',
-					},
+					headers: getInternalApiHeaders(request),
 					body: JSON.stringify({
 						limit: parseTimelineArgs(request.query).limit ?? 20,
 						origin: 'local',
@@ -162,6 +154,19 @@ export class ApiSearchMastodon {
 			return reply.send(response);
 		});
 	}
+}
+
+function getInternalApiHeaders(request: FastifyRequest): Record<string, string> {
+	const headers: Record<string, string> = {
+		'Accept': 'application/json',
+		'Content-Type': 'application/json',
+	};
+
+	if (request.headers.authorization) {
+		headers['Authorization'] = request.headers.authorization;
+	}
+
+	return headers;
 }
 
 async function verifyResponse(res: Response): Promise<void> {

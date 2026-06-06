@@ -4,14 +4,19 @@
  */
 
 import { Misskey } from 'megalodon';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { MiLocalUser } from '@/models/User.js';
 import { AuthenticateService } from '@/server/api/AuthenticateService.js';
+import { DI } from '@/di-symbols.js';
+import type { Config } from '@/config.js';
 import type { FastifyRequest } from 'fastify';
 
 @Injectable()
 export class MastodonClientService {
 	constructor(
+		@Inject(DI.config)
+		private readonly config: Config,
+
 		private readonly authenticateService: AuthenticateService,
 	) {}
 
@@ -46,9 +51,12 @@ export class MastodonClientService {
 		accessToken = accessToken !== undefined ? accessToken : getAccessToken(authorization);
 
 		// TODO pass agent?
-		const baseUrl = this.getBaseUrl(request);
 		const userAgent = request.headers['user-agent'];
-		return new Misskey(baseUrl, accessToken, userAgent);
+		return new Misskey(this.getSelfUrl(), accessToken, userAgent);
+	}
+
+	public getSelfUrl(): string {
+		return this.config.url;
 	}
 
 	readonly getBaseUrl = getBaseUrl;

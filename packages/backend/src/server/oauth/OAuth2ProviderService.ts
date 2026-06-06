@@ -101,12 +101,19 @@ export class OAuth2ProviderService {
 
 		for (const url of ['/authorize', '/authorize/']) {
 			fastify.get<{ Querystring: Record<string, string | string[] | undefined> }>(url, async (request, reply) => {
-				if (typeof(request.query.client_id) !== 'string') return reply.code(400).send({ error: 'BAD_REQUEST', error_description: 'Missing required query "client_id"' });
+				const clientId = getOptionalString(request.query.client_id);
+				if (!clientId) return reply.code(400).send({ error: 'BAD_REQUEST', error_description: 'Missing required query "client_id"' });
 
-				const redirectUri = new URL(Buffer.from(request.query.client_id, 'base64').toString());
+				const redirectUri = decodeClientRedirectUri(clientId, this.config.url);
+				if (!redirectUri) return reply.code(400).send({ error: 'BAD_REQUEST', error_description: 'Invalid query "client_id"' });
+
 				redirectUri.searchParams.set('mastodon', 'true');
-				if (request.query.state) redirectUri.searchParams.set('state', String(request.query.state));
-				if (request.query.redirect_uri) redirectUri.searchParams.set('redirect_uri', String(request.query.redirect_uri));
+
+				const state = getOptionalString(request.query.state);
+				if (state) redirectUri.searchParams.set('state', state);
+
+				const redirectUriQuery = getOptionalString(request.query.redirect_uri);
+				if (redirectUriQuery) redirectUri.searchParams.set('redirect_uri', redirectUriQuery);
 
 				return reply.redirect(redirectUri.toString());
 			});
@@ -126,20 +133,24 @@ export class OAuth2ProviderService {
 			}
 
 			try {
-				if (!body.client_secret) return reply.code(400).send({ error: 'BAD_REQUEST', error_description: 'Missing required query "client_secret"' });
+				const clientSecret = getOptionalString(body.client_secret);
+				if (!clientSecret) return reply.code(400).send({ error: 'BAD_REQUEST', error_description: 'Missing required query "client_secret"' });
 
-				const clientId = body.client_id ? String(body.clientId) : null;
-				const secret = String(body.client_secret);
-				const code = body.code ? String(body.code) : '';
+				const clientId = getOptionalString(body.client_id);
+				const code = getOptionalString(body.code) ?? '';
+				const scope = getOptionalString(body.scope);
+
+				if (body.client_id != null && clientId == null) return reply.code(400).send({ error: 'BAD_REQUEST', error_description: 'Invalid query "client_id"' });
+				if (body.code != null && code === '') return reply.code(400).send({ error: 'BAD_REQUEST', error_description: 'Invalid query "code"' });
 
 				// TODO fetch the access token directly, then remove all oauth code from megalodon
 				const client = this.mastodonClientService.getClient(request);
-				const atData = await client.fetchAccessToken(clientId, secret, code);
+				const atData = await client.fetchAccessToken(clientId, clientSecret, code);
 
 				const ret = {
 					access_token: atData.accessToken,
 					token_type: 'Bearer',
-					scope: atData.scope || body.scope || 'read write follow push',
+					scope: atData.scope || scope || 'read write follow push',
 					created_at: atData.createdAt || Math.floor(this.timeService.now / 1000),
 				};
 				return reply.send(ret);
@@ -148,5 +159,20 @@ export class OAuth2ProviderService {
 				return reply.code(401).send(data);
 			}
 		});
+	}
+}
+
+function getOptionalString(value: string | string[] | undefined): string | null {
+	return typeof value === 'string' ? value : null;
+}
+
+export function decodeClientRedirectUri(clientId: string, selfUrl: string): URL | null {
+	try {
+		const redirectUri = new URL(Buffer.from(clientId, 'base64').toString('utf8'));
+		const self = new URL(selfUrl);
+		if (redirectUri.origin !== self.origin) return null;
+		return redirectUri;
+	} catch {
+		return null;
 	}
 }
