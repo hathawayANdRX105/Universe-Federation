@@ -144,6 +144,8 @@ const visibility = useDocumentVisibility();
 
 let isPausingUpdate = false;
 let timerForSetPause: number | null = null;
+let toBottomTimer: number | null = null;
+let moreFetchingTimer: number | null = null;
 let lastKnownHeadState = false;
 let removeHeadStateScrollListener: (() => void) | null = null;
 const BACKGROUND_PAUSE_WAIT_SEC = 10;
@@ -178,15 +180,15 @@ watch([rootEl, scrollableElement], () => {
 }, { immediate: true });
 
 watch([backed, rootEl], () => {
+	scrollRemove.value?.();
+	scrollRemove.value = null;
+
 	if (!backed.value) {
 		if (!rootEl.value) return;
 
 		scrollRemove.value = props.pagination.reversed
 			? onScrollBottom(rootEl.value, executeQueue, TOLERANCE)
 			: onScrollTop(rootEl.value, (topVisible) => { if (topVisible) executeQueue(); }, TOLERANCE);
-	} else {
-		if (scrollRemove.value) scrollRemove.value();
-		scrollRemove.value = null;
 	}
 });
 
@@ -463,7 +465,7 @@ function executeQueue() {
 }
 
 function prependQueue(newItem: MisskeyEntity) {
-	queue.value = new Map([[newItem.id, newItem], ...queue.value] as [string, MisskeyEntity][]);
+	queue.value = new Map([[newItem.id, newItem], ...queue.value].slice(0, props.displayLimit) as [string, MisskeyEntity][]);
 }
 
 /*
@@ -502,11 +504,15 @@ onBeforeMount(() => {
 	init().then(() => {
 		if (props.pagination.reversed) {
 			nextTick(() => {
-				window.setTimeout(toBottom, 800);
+				toBottomTimer = window.setTimeout(() => {
+					toBottomTimer = null;
+					toBottom();
+				}, 800);
 
 				// scrollToBottomでmoreFetchingボタンが画面外まで出るまで
 				// more = trueを遅らせる
-				window.setTimeout(() => {
+				moreFetchingTimer = window.setTimeout(() => {
+					moreFetchingTimer = null;
 					moreFetching.value = false;
 				}, 2000);
 			});
@@ -523,6 +529,16 @@ onBeforeUnmount(() => {
 		window.clearTimeout(preventAppearFetchMoreTimer.value);
 		preventAppearFetchMoreTimer.value = null;
 	}
+	if (toBottomTimer) {
+		window.clearTimeout(toBottomTimer);
+		toBottomTimer = null;
+	}
+	if (moreFetchingTimer) {
+		window.clearTimeout(moreFetchingTimer);
+		moreFetchingTimer = null;
+	}
+	scrollRemove.value?.();
+	scrollRemove.value = null;
 	removeHeadStateScrollListener?.();
 	removeHeadStateScrollListener = null;
 	scrollObserver.value?.disconnect();

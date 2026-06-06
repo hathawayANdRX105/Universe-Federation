@@ -140,6 +140,8 @@ const visibility = useDocumentVisibility();
 
 let isPausingUpdate = false;
 let timerForSetPause: number | null = null;
+let toBottomTimer: number | null = null;
+let moreFetchingTimer: number | null = null;
 const BACKGROUND_PAUSE_WAIT_SEC = 10;
 
 // 先頭が表示されているかどうかを検出
@@ -166,13 +168,13 @@ watch(rootEl, () => {
 });
 
 watch([backed, rootEl], () => {
+	scrollRemove.value?.();
+	scrollRemove.value = null;
+
 	if (!backed.value) {
 		if (!rootEl.value) return;
 
 		scrollRemove.value = (props.pagination.reversed ? onScrollBottom : onScrollTop)(rootEl.value, executeQueue, TOLERANCE);
-	} else {
-		if (scrollRemove.value) scrollRemove.value();
-		scrollRemove.value = null;
 	}
 });
 
@@ -447,11 +449,15 @@ onBeforeMount(() => {
 	init().then(() => {
 		if (props.pagination.reversed) {
 			nextTick(() => {
-				setTimeout(toBottom, 800);
+				toBottomTimer = window.setTimeout(() => {
+					toBottomTimer = null;
+					toBottom();
+				}, 800);
 
 				// scrollToBottomでmoreFetchingボタンが画面外まで出るまで
 				// more = trueを遅らせる
-				setTimeout(() => {
+				moreFetchingTimer = window.setTimeout(() => {
+					moreFetchingTimer = null;
 					moreFetching.value = false;
 				}, 2000);
 			});
@@ -468,6 +474,16 @@ onBeforeUnmount(() => {
 		clearTimeout(preventAppearFetchMoreTimer.value);
 		preventAppearFetchMoreTimer.value = null;
 	}
+	if (toBottomTimer) {
+		clearTimeout(toBottomTimer);
+		toBottomTimer = null;
+	}
+	if (moreFetchingTimer) {
+		clearTimeout(moreFetchingTimer);
+		moreFetchingTimer = null;
+	}
+	scrollRemove.value?.();
+	scrollRemove.value = null;
 	scrollObserver.value?.disconnect();
 });
 
