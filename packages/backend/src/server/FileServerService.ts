@@ -29,7 +29,7 @@ import { correctFilename } from '@/misc/correct-filename.js';
 import { handleRequestRedirectToOmitSearch } from '@/misc/fastify-hook-handlers.js';
 import { renamePath } from '@/misc/rename-file.js';
 import { getIpHash } from '@/misc/get-ip-hash.js';
-import { AuthenticateService } from '@/server/api/AuthenticateService.js';
+import { AuthenticateService, AuthenticationError } from '@/server/api/AuthenticateService.js';
 import { SkRateLimiterService } from '@/server/SkRateLimiterService.js';
 import { Keyed, RateLimit, sendRateLimitHeaders } from '@/misc/rate-limit-utils.js';
 import { renderInlineError } from '@/misc/render-inline-error.js';
@@ -39,6 +39,11 @@ const _filename = fileURLToPath(import.meta.url);
 const _dirname = dirname(_filename);
 
 const assets = `${_dirname}/../../server/file/assets/`;
+
+type ParsedRange = {
+	start: number;
+	end: number;
+};
 
 @Injectable()
 export class FileServerService {
@@ -204,35 +209,17 @@ export class FileServerService {
 						reply.header('Accept-Ranges', 'bytes');
 					}
 
-					if (request.headers.range && file.file.size > 0) {
-						const range = request.headers.range as string;
-						const parts = range.replace(/bytes=/, '').split('-');
-						const start = parseInt(parts[0], 10);
-						let end = parts[1] ? parseInt(parts[1], 10) : file.file.size - 1;
-						if (end > file.file.size) {
-							end = file.file.size - 1;
-						}
-						const chunksize = end - start + 1;
-
-						image = {
-							data: fs.createReadStream(file.path, {
-								start,
-								end,
-							}),
-							ext: file.ext,
-							type: file.mime,
-						};
-
-						reply.header('Content-Range', `bytes ${start}-${end}/${file.file.size}`);
-						reply.header('Content-Length', chunksize);
-						reply.code(206);
-					} else {
-						image = {
-							data: fs.createReadStream(file.path),
-							ext: file.ext,
-							type: file.mime,
-						};
+					const data = createReadStreamWithRange(file.path, file.file.size, request.headers.range, reply);
+					if (!data) {
+						file.cleanup();
+						return;
 					}
+
+					image = {
+						data,
+						ext: file.ext,
+						type: file.mime,
+					};
 				}
 
 				if ('pipe' in image.data && typeof image.data.pipe === 'function') {
@@ -269,26 +256,7 @@ export class FileServerService {
 					reply.header('Accept-Ranges', 'bytes');
 				}
 
-				if (request.headers.range && file.file.size > 0) {
-					const range = request.headers.range as string;
-					const parts = range.replace(/bytes=/, '').split('-');
-					const start = parseInt(parts[0], 10);
-					let end = parts[1] ? parseInt(parts[1], 10) : file.file.size - 1;
-					if (end > file.file.size) {
-						end = file.file.size - 1;
-					}
-					const chunksize = end - start + 1;
-					const fileStream = fs.createReadStream(file.path, {
-						start,
-						end,
-					});
-					reply.header('Content-Range', `bytes ${start}-${end}/${file.file.size}`);
-					reply.header('Content-Length', chunksize);
-					reply.code(206);
-					return fileStream;
-				}
-
-				return fs.createReadStream(file.path);
+				return createReadStreamWithRange(file.path, file.file.size, request.headers.range, reply);
 			} else {
 				reply.header('Content-Type', FILE_TYPE_BROWSERSAFE.includes(file.file.type) ? file.file.type : 'application/octet-stream');
 				reply.header('Content-Length', file.file.size);
@@ -299,26 +267,7 @@ export class FileServerService {
 					reply.header('Accept-Ranges', 'bytes');
 				}
 
-				if (request.headers.range && file.file.size > 0) {
-					const range = request.headers.range as string;
-					const parts = range.replace(/bytes=/, '').split('-');
-					const start = parseInt(parts[0], 10);
-					let end = parts[1] ? parseInt(parts[1], 10) : file.file.size - 1;
-					if (end > file.file.size) {
-						end = file.file.size - 1;
-					}
-					const chunksize = end - start + 1;
-					const fileStream = fs.createReadStream(file.path, {
-						start,
-						end,
-					});
-					reply.header('Content-Range', `bytes ${start}-${end}/${file.file.size}`);
-					reply.header('Content-Length', chunksize);
-					reply.code(206);
-					return fileStream;
-				}
-
-				return fs.createReadStream(file.path);
+				return createReadStreamWithRange(file.path, file.file.size, request.headers.range, reply);
 			}
 		} catch (e) {
 			if ('cleanup' in file) file.cleanup();
@@ -456,39 +405,22 @@ export class FileServerService {
 			}
 
 			if (!image) {
-				if (file.file && file.file.size > 0) {
+				const size = file.file?.size ?? fs.statSync(file.path).size;
+				if (size > 0) {
 					reply.header('Accept-Ranges', 'bytes');
 				}
 
-				if (request.headers.range && file.file && file.file.size > 0) {
-					const range = request.headers.range as string;
-					const parts = range.replace(/bytes=/, '').split('-');
-					const start = parseInt(parts[0], 10);
-					let end = parts[1] ? parseInt(parts[1], 10) : file.file.size - 1;
-					if (end > file.file.size) {
-						end = file.file.size - 1;
-					}
-					const chunksize = end - start + 1;
-
-					image = {
-						data: fs.createReadStream(file.path, {
-							start,
-							end,
-						}),
-						ext: file.ext,
-						type: file.mime,
-					};
-
-					reply.header('Content-Range', `bytes ${start}-${end}/${file.file.size}`);
-					reply.header('Content-Length', chunksize);
-					reply.code(206);
-				} else {
-					image = {
-						data: fs.createReadStream(file.path),
-						ext: file.ext,
-						type: file.mime,
-					};
+				const data = createReadStreamWithRange(file.path, size, request.headers.range, reply);
+				if (!data) {
+					if ('cleanup' in file) file.cleanup();
+					return;
 				}
+
+				image = {
+					data,
+					ext: file.ext,
+					type: file.mime,
+				};
 			}
 
 			if ('cleanup' in file) {
@@ -639,8 +571,15 @@ export class FileServerService {
 		}
 
 		// koa will automatically load the `X-Forwarded-For` header if `proxy: true` is configured in the app.
-		const [user] = await this.authenticateService.authenticate(token);
-		const actor = user ?? getIpHash(request.ip);
+		let actor: string | MiUser = getIpHash(request.ip);
+		if (token) {
+			try {
+				const [user] = await this.authenticateService.authenticate(token);
+				actor = user ?? actor;
+			} catch (err) {
+				if (!(err instanceof AuthenticationError)) throw err;
+			}
+		}
 
 		// Call both limits: the per-resource limit and the shared cross-resource limit
 		return await this.checkResourceLimit(reply, actor, group, resource) && await this.checkSharedLimit(reply, actor, group);
@@ -692,5 +631,58 @@ export class FileServerService {
 
 		return true;
 	}
+}
+
+function createReadStreamWithRange(path: string, size: number, rangeHeader: string | undefined, reply: FastifyReply): fs.ReadStream | undefined {
+	if (!rangeHeader) return fs.createReadStream(path);
+	if (size <= 0) {
+		reply.code(416);
+		reply.header('Content-Range', `bytes */${Math.max(size, 0)}`);
+		reply.header('Content-Length', 0);
+		reply.send();
+		return undefined;
+	}
+
+	const range = parseRange(rangeHeader, size);
+	if (!range) {
+		reply.code(416);
+		reply.header('Content-Range', `bytes */${size}`);
+		reply.header('Content-Length', 0);
+		reply.send();
+		return undefined;
+	}
+
+	reply.header('Content-Range', `bytes ${range.start}-${range.end}/${size}`);
+	reply.header('Content-Length', range.end - range.start + 1);
+	reply.code(206);
+	return fs.createReadStream(path, range);
+}
+
+export function parseRange(rangeHeader: string, size: number): ParsedRange | null {
+	if (!Number.isSafeInteger(size) || size <= 0) return null;
+
+	const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+	if (!match) return null;
+
+	const [, startText, endText] = match;
+	if (startText === '' && endText === '') return null;
+
+	let start: number;
+	let end: number;
+
+	if (startText === '') {
+		const suffixLength = Number(endText);
+		if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+		start = Math.max(size - suffixLength, 0);
+		end = size - 1;
+	} else {
+		start = Number(startText);
+		if (!Number.isSafeInteger(start) || start < 0 || start >= size) return null;
+		end = endText === '' ? size - 1 : Number(endText);
+		if (!Number.isSafeInteger(end) || end < start) return null;
+		end = Math.min(end, size - 1);
+	}
+
+	return { start, end };
 }
 

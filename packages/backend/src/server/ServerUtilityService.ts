@@ -17,6 +17,10 @@ import type { MiMeta } from '@/models/Meta.js';
 import type { E as ApiErrorDefinition } from '@/server/api/error.js';
 import type { FastifyInstance } from 'fastify';
 
+const FORM_URLENCODED_BODY_LIMIT = 1024 * 1024;
+const FORM_URLENCODED_FIELD_LIMIT = 1024 * 1024;
+const MULTIPART_FIELDS_LIMIT = 64;
+
 @Injectable()
 export class ServerUtilityService {
 	constructor(
@@ -33,6 +37,9 @@ export class ServerUtilityService {
 			limits: {
 				fileSize: this.config.maxFileSize,
 				files: 1,
+				fields: MULTIPART_FIELDS_LIMIT,
+				fieldSize: FORM_URLENCODED_FIELD_LIMIT,
+				parts: MULTIPART_FIELDS_LIMIT + 1,
 			},
 		});
 
@@ -91,10 +98,26 @@ export class ServerUtilityService {
 	public addFormUrlEncodedContentType(fastify: FastifyInstance) {
 		fastify.addContentTypeParser('application/x-www-form-urlencoded', (_, payload, done) => {
 			let body = '';
-			payload.on('data', (data) => {
-				body += data;
+			let size = 0;
+			let tooLarge = false;
+
+			payload.on('data', (data: Buffer) => {
+				size += data.length;
+				if (size > FORM_URLENCODED_BODY_LIMIT) {
+					tooLarge = true;
+					return;
+				}
+				body += data.toString();
 			});
 			payload.on('end', () => {
+				if (tooLarge) {
+					const err = new Error('Payload too large') as Error & { statusCode?: number, code?: string };
+					err.statusCode = 413;
+					err.code = 'FST_ERR_CTP_BODY_TOO_LARGE';
+					done(err);
+					return;
+				}
+
 				try {
 					const parsed = querystring.parse(body);
 					done(null, parsed);
