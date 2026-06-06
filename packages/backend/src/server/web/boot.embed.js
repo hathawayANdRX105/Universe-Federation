@@ -32,12 +32,16 @@
 	}
 
 	// Force update when locales change
-	const bootVersion = typeof window['VERSION'] === 'string' ? window['VERSION'] : 'unknown';
-	const injectedLangsVersion = window['LA' + 'NGS' + '_VERSION'];
+	const bootVersion = typeof window.VERSION === 'string' ? window.VERSION : 'unknown';
+	const langsVersionKey = /** @type {keyof Window} */ ('LA' + 'NGS' + '_VERSION');
+	const injectedLangsVersion = window[langsVersionKey];
 	const langsVersion = typeof injectedLangsVersion === 'string' ? injectedLangsVersion : bootVersion;
 	const repairKey = `sharkey:embed-boot-repair:${bootVersion}:${langsVersion}`;
 	const maxRepairAttempts = 2;
 
+	/**
+	 * @param {unknown} reason
+	 */
 	async function repairAndReload(reason) {
 		const repairAttempts = Number(sessionStorage.getItem(repairKey) ?? '0');
 		if (repairAttempts >= maxRepairAttempts) {
@@ -177,7 +181,7 @@
 			<pre><code></code></pre>
 		</details>
 		</main>`;
-		document.querySelector('.errorInfo code').textContent = detailsText;
+		document.querySelector('.errorInfo code')?.appendChild(document.createTextNode(detailsText));
 		addStyle(`
 		* {
 			box-sizing: border-box;

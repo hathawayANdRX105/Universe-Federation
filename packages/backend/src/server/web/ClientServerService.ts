@@ -5,7 +5,7 @@
 
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Inject, Injectable } from '@nestjs/common';
 import ms from 'ms';
@@ -67,15 +67,70 @@ const _dirname = dirname(_filename);
 const staticAssets = `${_dirname}/../../../assets/`;
 const clientAssets = `${_dirname}/../../../../frontend/assets/`;
 const assets = `${_dirname}/../../../../../built/_frontend_dist_/`;
+const localeAssets = join(assets, 'locales');
 const swAssets = `${_dirname}/../../../../../built/_sw_dist_/`;
 const frontendViteOut = `${_dirname}/../../../../../built/_frontend_vite_/`;
 const frontendEmbedViteOut = `${_dirname}/../../../../../built/_frontend_embed_vite_/`;
 const tarball = `${_dirname}/../../../../../built/tarball/`;
 
+const localeAssetFileRegex = /^([A-Za-z0-9-]+)\.[A-Za-z0-9_-]+\.json$/;
+export const localeAssetExactCacheControl = 'public, max-age=604800';
+export const localeAssetFallbackCacheControl = 'public, max-age=60, stale-while-revalidate=300';
+
+type LocaleAssetResolution = {
+	lang: string;
+	cacheControl: string;
+} & ({
+	type: 'file';
+	filePath: string;
+} | {
+	type: 'inline';
+	body: string;
+});
+
 type FrontendManifestEntry = {
 	file: string;
 	css?: string[];
 };
+
+export function parseLocaleAssetFile(file: string): string | null {
+	return localeAssetFileRegex.exec(file)?.[1] ?? null;
+}
+
+export function resolveLocaleAsset(file: string, localesDir = localeAssets): LocaleAssetResolution | null {
+	const lang = parseLocaleAssetFile(file);
+	if (lang == null) return null;
+
+	const locale = (locales as Record<string, Record<string, unknown> | undefined>)[lang];
+	if (locale == null) return null;
+
+	const exactFilePath = join(localesDir, file);
+	if (fs.existsSync(exactFilePath)) {
+		return {
+			type: 'file',
+			lang,
+			filePath: exactFilePath,
+			cacheControl: localeAssetExactCacheControl,
+		};
+	}
+
+	const currentFilePath = join(localesDir, `${lang}.${localesVersion}.json`);
+	if (fs.existsSync(currentFilePath)) {
+		return {
+			type: 'file',
+			lang,
+			filePath: currentFilePath,
+			cacheControl: localeAssetFallbackCacheControl,
+		};
+	}
+
+	return {
+		type: 'inline',
+		lang,
+		body: JSON.stringify({ ...locale, _version_: localesVersion }),
+		cacheControl: localeAssetFallbackCacheControl,
+	};
+}
 
 @Injectable()
 export class ClientServerService {
@@ -295,6 +350,23 @@ export class ClientServerService {
 			prefix: '/client-assets/',
 			maxAge: ms('7 days'),
 			decorateReply: false,
+		});
+
+		fastify.get<{ Params: { file: string } }>('/assets/locales/:file', async (request, reply) => {
+			const localeAsset = resolveLocaleAsset(request.params.file);
+			if (localeAsset == null) {
+				reply.code(404);
+				return;
+			}
+
+			reply.header('Cache-Control', localeAsset.cacheControl);
+			reply.type('application/json; charset=utf-8');
+
+			if (localeAsset.type === 'file') {
+				return await fs.promises.readFile(localeAsset.filePath, 'utf-8');
+			}
+
+			return localeAsset.body;
 		});
 
 		fastify.register(fastifyStatic, {
