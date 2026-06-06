@@ -91,7 +91,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { useTemplateRef, watch, computed, ref, onDeactivated, onActivated, onMounted } from 'vue';
+import { useTemplateRef, watch, computed, ref, onDeactivated, onActivated, onMounted, onUnmounted } from 'vue';
 import * as Misskey from 'misskey-js';
 import type { MenuItem } from '@/types/menu.js';
 import type { Keymap } from '@/utility/hotkey.js';
@@ -325,58 +325,96 @@ function toggleMute() {
 
 let onceInit = false;
 let mediaTickFrameId: number | null = null;
-let stopAudioElWatch: () => void;
+let stopAudioElWatch: (() => void) | null = null;
+let cleanupAudioElListeners: (() => void) | null = null;
 
 function init() {
 	if (onceInit) return;
 	onceInit = true;
 
 	stopAudioElWatch = watch(audioEl, () => {
+		cleanupAudioElListeners?.();
+		cleanupAudioElListeners = null;
 		if (audioEl.value) {
+			const el = audioEl.value;
 			isReady.value = true;
 
 			function updateMediaTick() {
-				if (audioEl.value) {
-					try {
-						bufferedEnd.value = audioEl.value.buffered.end(0);
-					} catch (err) {
-						bufferedEnd.value = 0;
-					}
-
-					elapsedTimeMs.value = audioEl.value.currentTime * 1000;
-
-					if (audioEl.value.loop !== loop.value) {
-						loop.value = audioEl.value.loop;
-					}
+				try {
+					bufferedEnd.value = el.buffered.length > 0 ? el.buffered.end(el.buffered.length - 1) : 0;
+				} catch (err) {
+					bufferedEnd.value = 0;
 				}
-				mediaTickFrameId = window.requestAnimationFrame(updateMediaTick);
+
+				elapsedTimeMs.value = el.currentTime * 1000;
+
+				if (el.loop !== loop.value) {
+					loop.value = el.loop;
+				}
 			}
 
-			updateMediaTick();
+			const stopMediaTick = () => {
+				if (mediaTickFrameId) {
+					window.cancelAnimationFrame(mediaTickFrameId);
+					mediaTickFrameId = null;
+				}
+			};
 
-			audioEl.value.addEventListener('play', () => {
+			const startMediaTick = () => {
+				stopMediaTick();
+				const tick = () => {
+					updateMediaTick();
+					if (!el.paused && !el.ended) {
+						mediaTickFrameId = window.requestAnimationFrame(tick);
+					}
+				};
+				tick();
+			};
+
+			const onPlay = () => {
 				isActuallyPlaying.value = true;
-			});
-
-			audioEl.value.addEventListener('pause', () => {
+				startMediaTick();
+			};
+			const onPause = () => {
 				isActuallyPlaying.value = false;
 				isPlaying.value = false;
-			});
-
-			audioEl.value.addEventListener('ended', () => {
+				stopMediaTick();
+				updateMediaTick();
+			};
+			const onEnded = () => {
 				oncePlayed.value = false;
 				isActuallyPlaying.value = false;
 				isPlaying.value = false;
-			});
+				stopMediaTick();
+				updateMediaTick();
+			};
+			const onDurationChange = () => {
+				durationMs.value = el.duration * 1000;
+				updateMediaTick();
+			};
+			const onProgress = () => {
+				updateMediaTick();
+			};
 
-			durationMs.value = audioEl.value.duration * 1000;
-			audioEl.value.addEventListener('durationchange', () => {
-				if (audioEl.value) {
-					durationMs.value = audioEl.value.duration * 1000;
-				}
-			});
+			updateMediaTick();
+			el.addEventListener('play', onPlay);
+			el.addEventListener('pause', onPause);
+			el.addEventListener('ended', onEnded);
+			el.addEventListener('durationchange', onDurationChange);
+			el.addEventListener('timeupdate', onProgress);
+			el.addEventListener('progress', onProgress);
 
-			audioEl.value.volume = volume.value;
+			durationMs.value = el.duration * 1000;
+			el.volume = volume.value;
+			cleanupAudioElListeners = () => {
+				stopMediaTick();
+				el.removeEventListener('play', onPlay);
+				el.removeEventListener('pause', onPause);
+				el.removeEventListener('ended', onEnded);
+				el.removeEventListener('durationchange', onDurationChange);
+				el.removeEventListener('timeupdate', onProgress);
+				el.removeEventListener('progress', onProgress);
+			};
 		}
 	}, {
 		immediate: true,
@@ -403,7 +441,7 @@ onActivated(() => {
 	init();
 });
 
-onDeactivated(() => {
+function resetPlayerState() {
 	isReady.value = false;
 	isPlaying.value = false;
 	isActuallyPlaying.value = false;
@@ -411,12 +449,23 @@ onDeactivated(() => {
 	durationMs.value = 0;
 	bufferedEnd.value = 0;
 	hide.value = (prefer.s.nsfw === 'force' || prefer.s.dataSaver.media) ? true : (props.audio.isSensitive && prefer.s.nsfw !== 'ignore');
-	stopAudioElWatch();
+	cleanupAudioElListeners?.();
+	cleanupAudioElListeners = null;
+	stopAudioElWatch?.();
+	stopAudioElWatch = null;
 	onceInit = false;
 	if (mediaTickFrameId) {
 		window.cancelAnimationFrame(mediaTickFrameId);
 		mediaTickFrameId = null;
 	}
+}
+
+onDeactivated(() => {
+	resetPlayerState();
+});
+
+onUnmounted(() => {
+	resetPlayerState();
 });
 </script>
 

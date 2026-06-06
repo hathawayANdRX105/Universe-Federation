@@ -112,7 +112,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, useTemplateRef, computed, watch, onDeactivated, onActivated, onMounted } from 'vue';
+import { ref, useTemplateRef, computed, watch, onDeactivated, onActivated, onMounted, onUnmounted } from 'vue';
 import * as Misskey from 'misskey-js';
 import type { MenuItem } from '@/types/menu.js';
 import type { Keymap } from '@/utility/hotkey.js';
@@ -312,7 +312,7 @@ const controlsShowing = computed(() => {
 	return false;
 });
 const isFullscreen = ref(false);
-let controlStateTimer: string | number;
+let controlStateTimer: number | null = null;
 
 // MediaControl: Common State
 const oncePlayed = ref(false);
@@ -341,14 +341,16 @@ const bufferedDataRatio = computed(() => {
 
 // MediaControl Events
 function onMouseOver() {
-	if (controlStateTimer) {
+	if (controlStateTimer != null) {
 		window.clearTimeout(controlStateTimer);
+		controlStateTimer = null;
 	}
 	isHoverring.value = true;
 }
 
 function onMouseLeave() {
 	controlStateTimer = window.setTimeout(() => {
+		controlStateTimer = null;
 		isHoverring.value = false;
 	}, 100);
 }
@@ -405,64 +407,104 @@ function toggleMute() {
 
 let onceInit = false;
 let mediaTickFrameId: number | null = null;
-let stopVideoElWatch: () => void;
+let stopVideoElWatch: (() => void) | null = null;
+let cleanupVideoElListeners: (() => void) | null = null;
 
 function init() {
 	if (onceInit) return;
 	onceInit = true;
 
 	stopVideoElWatch = watch(videoEl, () => {
+		cleanupVideoElListeners?.();
+		cleanupVideoElListeners = null;
 		if (videoEl.value) {
+			const el = videoEl.value;
+			let active = true;
 			isReady.value = true;
 
 			function updateMediaTick() {
-				if (videoEl.value) {
-					try {
-						bufferedEnd.value = videoEl.value.buffered.end(0);
-					} catch (err) {
-						bufferedEnd.value = 0;
-					}
-
-					elapsedTimeMs.value = videoEl.value.currentTime * 1000;
-
-					if (videoEl.value.loop !== loop.value) {
-						loop.value = videoEl.value.loop;
-					}
+				try {
+					bufferedEnd.value = el.buffered.length > 0 ? el.buffered.end(el.buffered.length - 1) : 0;
+				} catch (err) {
+					bufferedEnd.value = 0;
 				}
-				mediaTickFrameId = window.requestAnimationFrame(updateMediaTick);
+
+				elapsedTimeMs.value = el.currentTime * 1000;
+
+				if (el.loop !== loop.value) {
+					loop.value = el.loop;
+				}
 			}
 
-			updateMediaTick();
+			const stopMediaTick = () => {
+				if (mediaTickFrameId) {
+					window.cancelAnimationFrame(mediaTickFrameId);
+					mediaTickFrameId = null;
+				}
+			};
 
-			videoEl.value.addEventListener('play', () => {
+			const startMediaTick = () => {
+				stopMediaTick();
+				const tick = () => {
+					updateMediaTick();
+					if (!el.paused && !el.ended) {
+						mediaTickFrameId = window.requestAnimationFrame(tick);
+					}
+				};
+				tick();
+			};
+
+			const onPlay = () => {
 				isActuallyPlaying.value = true;
-			});
-
-			videoEl.value.addEventListener('pause', () => {
+				startMediaTick();
+			};
+			const onPause = () => {
 				isActuallyPlaying.value = false;
 				isPlaying.value = false;
-			});
-
-			videoEl.value.addEventListener('ended', () => {
+				stopMediaTick();
+				updateMediaTick();
+			};
+			const onEnded = () => {
 				oncePlayed.value = false;
 				isActuallyPlaying.value = false;
 				isPlaying.value = false;
-			});
+				stopMediaTick();
+				updateMediaTick();
+			};
+			const onDurationChange = () => {
+				durationMs.value = el.duration * 1000;
+				updateMediaTick();
+			};
+			const onProgress = () => {
+				updateMediaTick();
+			};
 
-			durationMs.value = videoEl.value.duration * 1000;
-			videoEl.value.addEventListener('durationchange', () => {
-				if (videoEl.value) {
-					durationMs.value = videoEl.value.duration * 1000;
+			updateMediaTick();
+			el.addEventListener('play', onPlay);
+			el.addEventListener('pause', onPause);
+			el.addEventListener('ended', onEnded);
+			el.addEventListener('durationchange', onDurationChange);
+			el.addEventListener('timeupdate', onProgress);
+			el.addEventListener('progress', onProgress);
+
+			durationMs.value = el.duration * 1000;
+			el.volume = volume.value;
+			hasAudio(el).then(had => {
+				if (active && !had && videoEl.value === el) {
+					el.loop = el.muted = true;
+					el.play();
 				}
 			});
-
-			videoEl.value.volume = volume.value;
-			hasAudio(videoEl.value).then(had => {
-				if (!had && videoEl.value) {
-					videoEl.value.loop = videoEl.value.muted = true;
-					videoEl.value.play();
-				}
-			});
+			cleanupVideoElListeners = () => {
+				active = false;
+				stopMediaTick();
+				el.removeEventListener('play', onPlay);
+				el.removeEventListener('pause', onPause);
+				el.removeEventListener('ended', onEnded);
+				el.removeEventListener('durationchange', onDurationChange);
+				el.removeEventListener('timeupdate', onProgress);
+				el.removeEventListener('progress', onProgress);
+			};
 		}
 	}, {
 		immediate: true,
@@ -498,7 +540,7 @@ onActivated(() => {
 	init();
 });
 
-onDeactivated(() => {
+function resetPlayerState() {
 	isReady.value = false;
 	isPlaying.value = false;
 	isActuallyPlaying.value = false;
@@ -506,12 +548,27 @@ onDeactivated(() => {
 	durationMs.value = 0;
 	bufferedEnd.value = 0;
 	hide.value = (prefer.s.nsfw === 'force' || prefer.s.dataSaver.media) ? true : (props.video.isSensitive && prefer.s.nsfw !== 'ignore');
-	stopVideoElWatch();
+	cleanupVideoElListeners?.();
+	cleanupVideoElListeners = null;
+	stopVideoElWatch?.();
+	stopVideoElWatch = null;
 	onceInit = false;
+	if (controlStateTimer != null) {
+		window.clearTimeout(controlStateTimer);
+		controlStateTimer = null;
+	}
 	if (mediaTickFrameId) {
 		window.cancelAnimationFrame(mediaTickFrameId);
 		mediaTickFrameId = null;
 	}
+}
+
+onDeactivated(() => {
+	resetPlayerState();
+});
+
+onUnmounted(() => {
+	resetPlayerState();
 });
 </script>
 
