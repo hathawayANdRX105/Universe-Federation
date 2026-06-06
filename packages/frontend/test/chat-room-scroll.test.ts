@@ -128,6 +128,13 @@ describe('chat room scroll state', () => {
 		assert.match(roomSource, /await fetchLatestGap\(\);[\s\S]*await scrollToLatestAfterLayout\(\{ flushReadReceipt: true, fillHistory: true \}\);/);
 	});
 
+	test('refreshes missing latest messages when opening the new message indicator', () => {
+		assert.match(roomSource, /async function fetchLatestGap\(sinceId = findNewestPersistedMessageId\(\)\)/);
+		assert.match(roomSource, /async function showLatestMessages\(behavior: ScrollBehavior = 'smooth'\)/);
+		assert.match(roomSource, /const sinceId = findNewestPersistedMessageId\(\);[\s\S]*flushIncomingMessagesNow\(\);[\s\S]*scrollToLatest\(behavior, \{ flushReadReceipt: true \}\);[\s\S]*await fetchLatestGap\(sinceId\);[\s\S]*await scrollToLatestAfterLayout\(\{ flushReadReceipt: true \}\);/);
+		assert.match(roomSource, /function onIndicatorClick\(\) \{[\s\S]*void showLatestMessages\('smooth'\);/);
+	});
+
 	test('shows a direct latest button while detached from the chat bottom', () => {
 		assert.match(roomSource, /showScrollToLatestButton = ref\(false\)/);
 		assert.match(roomSource, /showScrollToLatestButton\.value = latestDistance > SCROLL_TAIL_THRESHOLD/);

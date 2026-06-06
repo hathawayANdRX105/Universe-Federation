@@ -932,8 +932,7 @@ function connectStream() {
 	connection.value.on('unreact', onUnreact);
 }
 
-async function fetchLatestGap() {
-	const sinceId = findNewestPersistedMessageId();
+async function fetchLatestGap(sinceId = findNewestPersistedMessageId()) {
 	const newMessages = props.userId ? await misskeyApi('chat/messages/user-timeline', {
 		userId: user.value!.id,
 		limit: TIMELINE_LIMIT,
@@ -945,6 +944,20 @@ async function fetchLatestGap() {
 	});
 
 	appendFetchedMessages(newMessages);
+}
+
+async function showLatestMessages(behavior: ScrollBehavior = 'smooth') {
+	const sinceId = findNewestPersistedMessageId();
+	flushIncomingMessagesNow();
+	scrollToLatest(behavior, { flushReadReceipt: true });
+
+	try {
+		await fetchLatestGap(sinceId);
+	} catch (err) {
+		console.warn('Failed to refresh latest chat messages after opening new message indicator:', err);
+	}
+
+	await scrollToLatestAfterLayout({ flushReadReceipt: true });
 }
 
 async function initializeContextTimeline(messageId: string) {
@@ -1543,7 +1556,7 @@ function onIndicatorClick() {
 		return;
 	}
 
-	scrollToLatest('smooth', { flushReadReceipt: true });
+	void showLatestMessages('smooth');
 }
 
 function notifyNewMessages(count = 1) {
