@@ -6,14 +6,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div ref="rootEl" :class="$style.root" class="_popup _shadow" :style="{ zIndex }" @contextmenu.prevent="() => {}">
 	<ol v-if="type === 'user'" ref="suggests" :class="$style.list">
-		<li v-for="user in users" tabindex="-1" :class="$style.item" @click="complete(type, user)" @keydown="onKeydown">
+		<li data-autocomplete-select-user tabindex="-1" :class="[$style.item, $style.userPickerAction]" @click="chooseUser()" @keydown="onKeydown">
+			<i class="ti ti-user-search"></i>
+			<span>{{ i18n.ts.selectUser }}</span>
+		</li>
+		<li v-for="user in users" :key="user.id" tabindex="-1" :class="$style.item" @click="complete(type, user)" @keydown="onKeydown">
 			<img :class="$style.avatar" :src="user.avatarUrl"/>
 			<span :class="$style.userName">
 				<MkUserName :key="user.id" :user="user"/>
 			</span>
 			<span>@{{ acct(user) }}</span>
 		</li>
-		<li tabindex="-1" :class="$style.item" @click="chooseUser()" @keydown="onKeydown">{{ i18n.ts.selectUser }}</li>
 	</ol>
 	<ol v-else-if="type === 'hashtag' && hashtags.length > 0" ref="suggests" :class="$style.list">
 		<li v-for="hashtag in hashtags" tabindex="-1" :class="$style.item" @click="complete(type, hashtag)" @keydown="onKeydown">
@@ -468,6 +471,17 @@ onBeforeUnmount(() => {
 		background: hsl(from var(--MI_THEME-accent) h s calc(l - 10));
 		color: #fff !important;
 	}
+}
+
+.userPickerAction {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	gap: 6px;
+	min-height: 32px;
+	color: var(--MI_THEME-accent);
+	background: var(--MI_THEME-popup);
+	border-bottom: solid 1px var(--MI_THEME-divider);
 }
 
 .avatar {
