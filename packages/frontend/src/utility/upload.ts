@@ -52,13 +52,18 @@ export function uploadFile(
 
 	const filename = name ?? file.name ?? 'untitled';
 	const extension = filename.split('.').length > 1 ? '.' + filename.split('.').pop() : '';
+	const previewUrl = window.URL.createObjectURL(file);
 	const ctx = reactive<Uploading>({
 		id,
 		name: prefer.s.keepOriginalFilename ? filename : id + extension,
 		progressMax: undefined,
 		progressValue: undefined,
-		img: window.URL.createObjectURL(file),
+		img: previewUrl,
 	});
+	const removeUpload = () => {
+		uploads.value = uploads.value.filter(x => x.id !== id);
+		window.URL.revokeObjectURL(previewUrl);
+	};
 
 	uploads.value.push(ctx);
 
@@ -97,7 +102,7 @@ export function uploadFile(
 			xhr.onload = ((ev: ProgressEvent<XMLHttpRequest>) => {
 				if (xhr.status !== 200 || ev.target == null || ev.target.response == null) {
 					// TODO: 消すのではなくて(ネットワーク的なエラーなら)再送できるようにしたい
-					uploads.value = uploads.value.filter(x => x.id !== id);
+					removeUpload();
 
 					if (xhr.status === 413) {
 						alert({
@@ -142,7 +147,7 @@ export function uploadFile(
 
 				resolve(driveFile);
 
-				uploads.value = uploads.value.filter(x => x.id !== id);
+				removeUpload();
 			}) as (ev: ProgressEvent<EventTarget>) => any;
 
 			xhr.upload.onprogress = ev => {
@@ -154,7 +159,7 @@ export function uploadFile(
 
 			xhr.send(formData);
 		})().catch(err => {
-			uploads.value = uploads.value.filter(x => x.id !== id);
+			removeUpload();
 			reject(err);
 		});
 	});

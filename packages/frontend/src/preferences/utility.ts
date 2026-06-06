@@ -112,9 +112,11 @@ function exportCurrentProfile() {
 	const p = prefer.profile;
 	const txtBlob = new Blob([JSON.stringify(p)], { type: 'text/plain' });
 	const dummya = window.document.createElement('a');
-	dummya.href = URL.createObjectURL(txtBlob);
+	const url = URL.createObjectURL(txtBlob);
+	dummya.href = url;
 	dummya.download = `${p.name || p.id}.misskeypreferences`;
 	dummya.click();
+	window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function importProfile() {

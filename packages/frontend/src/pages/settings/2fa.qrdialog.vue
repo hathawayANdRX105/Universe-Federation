@@ -161,9 +161,11 @@ function downloadBackupCodes() {
 	if (backupCodes.value !== undefined) {
 		const txtBlob = new Blob([backupCodes.value.join('\n')], { type: 'text/plain' });
 		const dummya = window.document.createElement('a');
-		dummya.href = URL.createObjectURL(txtBlob);
+		const url = URL.createObjectURL(txtBlob);
+		dummya.href = url;
 		dummya.download = `${$i.username}@${hostname}` + (port !== '' ? `_${port}` : '') + '-2fa-backup-codes.txt';
 		dummya.click();
+		window.setTimeout(() => URL.revokeObjectURL(url), 0);
 	}
 }
 
