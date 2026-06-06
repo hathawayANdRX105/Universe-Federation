@@ -144,6 +144,14 @@ $widgets-hide-threshold: 1090px;
 	min-height: 0;
 }
 
+:global([class][class^="universal-nonTitlebarArea-"]),
+:global([class][class*=" universal-nonTitlebarArea-"]) {
+	width: min(100%, 1360px) !important;
+	max-width: 1360px !important;
+	margin-inline: auto !important;
+	align-self: center !important;
+}
+
 .sidebar {
 	border-right: solid 0.5px var(--MI_THEME-divider);
 }
