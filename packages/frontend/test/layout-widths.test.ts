@@ -16,13 +16,15 @@ describe('wide layout sizing', () => {
 
 		assert.match(universalSource, /--layout-side-rail-width:\s*clamp\(320px,\s*22vw,\s*360px\);/);
 		assert.match(universalSource, /flex:\s*0 0 var\(--layout-side-rail-width\);[\s\S]*width:\s*var\(--layout-side-rail-width\);/);
-		assert.match(universalSource, /universal-nonTitlebarArea-[^}]+max-width:\s*1360px\s*!important;/);
-		assert.match(universalSource, /universal-nonTitlebarArea-[^}]+align-self:\s*center\s*!important;/);
+		assert.notMatch(universalSource, /universal-nonTitlebarArea-[^}]+max-width:\s*1360px\s*!important;/);
+		assert.notMatch(universalSource, /universal-nonTitlebarArea-[^}]+align-self:\s*center\s*!important;/);
 
 		assert.match(timelineSource, /--timeline-main-width:\s*clamp\(640px,\s*47vw,\s*760px\);/);
 		assert.match(timelineSource, /--timeline-rail-width:\s*clamp\(320px,\s*22vw,\s*360px\);/);
 		assert.match(timelineSource, /grid-template-columns:\s*minmax\(0,\s*var\(--timeline-main-width\)\)\s*minmax\(300px,\s*var\(--timeline-rail-width\)\);/);
 		assert.match(timelineSource, /margin-left:\s*var\(--timeline-outer-gap\);[\s\S]*margin-right:\s*auto;/);
+		assert.match(timelineSource, /class="xTimelineWideShell"/);
+		assert.match(timelineSource, /universal-nonTitlebarArea-[^}]+:has\(\.xTimelineWideShell\)[\s\S]*max-width:\s*1360px\s*!important;/);
 		assert.match(timelineSource, /@media \(max-width:\s*1100px\)\s*\{[\s\S]*\.rightRail\s*\{[\s\S]*display:\s*none;/);
 	});
 });
