@@ -66,8 +66,9 @@ Displays an old version of an edited note.
 				<button class="_button" :class="$style.noteFooterButton">
 					<XNoteFooterIcon type="repost"/>
 				</button>
-				<button class="_button" :class="$style.noteFooterButton">
+				<button class="_button" :class="$style.noteFooterButton" disabled :aria-label="`Views ${viewsCount}`">
 					<XNoteFooterIcon type="views"/>
+					<p :class="$style.noteFooterButtonCount">{{ viewsCount }}</p>
 				</button>
 				<button class="_button" :class="$style.noteFooterButton">
 					<XNoteFooterIcon type="like"/>
@@ -98,6 +99,7 @@ import { getPluginHandlers } from '@/plugin.js';
 import SkNoteTranslation from '@/components/SkNoteTranslation.vue';
 import { getSelfNoteIds } from '@/utility/get-self-note-ids';
 import SkUrlPreviewGroup from '@/components/SkUrlPreviewGroup.vue';
+import { getNoteViewsCount } from '@/utility/get-note-views-count.js';
 
 const props = defineProps<{
 	note: Misskey.entities.Note;
@@ -147,6 +149,7 @@ const isRenote = (
 
 const el = shallowRef<HTMLElement>();
 const appearNote = computed(() => isRenote ? note.value.renote as Misskey.entities.Note : note.value);
+const viewsCount = computed(() => getNoteViewsCount(appearNote.value));
 const parsed = computed(() => appearNote.value.text ? mfm.parse(appearNote.value.text) : []);
 
 const showContent = ref(false);
@@ -287,6 +290,12 @@ const showTicker = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceT
 	&:hover {
 		color: var(--MI_THEME-fgHighlighted);
 	}
+}
+
+.noteFooterButtonCount {
+	display: inline;
+	margin: 0 0 0 8px;
+	opacity: 0.7;
 }
 
 @container (max-width: 500px) {

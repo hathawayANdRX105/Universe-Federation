@@ -30,6 +30,7 @@ import type { OnModuleInit } from '@nestjs/common';
 import type { CacheService, UserRelation } from '../CacheService.js';
 import type { CustomEmojiService } from '../CustomEmojiService.js';
 import type { ReactionService } from '../ReactionService.js';
+import type { RecommendationService } from '../RecommendationService.js';
 import type { UserEntityService } from './UserEntityService.js';
 import type { DriveFileEntityService } from './DriveFileEntityService.js';
 
@@ -72,6 +73,7 @@ export class NoteEntityService implements OnModuleInit {
 	private customEmojiService: CustomEmojiService;
 	private reactionService: ReactionService;
 	private reactionsBufferingService: ReactionsBufferingService;
+	private recommendationService: RecommendationService;
 	private noteLoader = new DebounceLoader(this.findNoteOrFail);
 	private channelLoader = new DebounceLoader(this.findChannelOrFail);
 
@@ -126,6 +128,7 @@ export class NoteEntityService implements OnModuleInit {
 		this.customEmojiService = this.moduleRef.get('CustomEmojiService');
 		this.reactionService = this.moduleRef.get('ReactionService');
 		this.reactionsBufferingService = this.moduleRef.get('ReactionsBufferingService');
+		this.recommendationService = this.moduleRef.get('RecommendationService');
 	}
 
 	// Implementation moved to NoteVisibilityService
@@ -576,6 +579,7 @@ export class NoteEntityService implements OnModuleInit {
 				userRelations?: Map<string, UserRelation>;
 				favoriteNotes?: Set<string>;
 				renotedNotes?: Set<string>;
+				viewsCounts?: Map<MiNote['id'], number>;
 				iAmAdmin?: boolean;
 				iAmModerator?: boolean;
 			};
@@ -676,6 +680,7 @@ export class NoteEntityService implements OnModuleInit {
 			visibleUserIds: note.visibility === 'specified' ? note.visibleUserIds : undefined,
 			renoteCount: note.renoteCount,
 			repliesCount: note.repliesCount,
+			viewsCount: opts._hint_?.viewsCounts?.get(note.id) ?? this.recommendationService.getNoteExposureCounts([note.id]).then(counts => counts.get(note.id) ?? 0),
 			reactionCount: Object.values(reactions).reduce((a, b) => a + b, 0),
 			reactions: reactions,
 			reactionEmojis: this.customEmojiService.populateEmojis(reactionEmojiNames, host),
@@ -823,7 +828,7 @@ export class NoteEntityService implements OnModuleInit {
 			? (options?.hint?.iAmModerator ?? (iAmAdmin || this.roleService.isModerator(me)))
 			: false);
 
-		const [{ bufferedReactions, myReactionsMap }, packedFiles, packedUsers, polls, pollVotes, channels, mutedThreads, mutedNotes, favoriteNotes, renotedNotes, userRelations, iAmAdmin, iAmModerator] = await Promise.all([
+		const [{ bufferedReactions, myReactionsMap }, packedFiles, packedUsers, polls, pollVotes, channels, mutedThreads, mutedNotes, favoriteNotes, renotedNotes, viewsCounts, userRelations, iAmAdmin, iAmModerator] = await Promise.all([
 			// bufferedReactions & myReactionsMap
 			this.getReactions(targetNotes.values().toArray(), me),
 			// packedFiles
@@ -871,6 +876,8 @@ export class NoteEntityService implements OnModuleInit {
 				.select('note.renoteId', 'renoteId')
 				.getRawMany<{ renoteId: string }>()
 				.then(ns => new Set(ns.map(n => n.renoteId))) : new Set<string>(),
+			// viewsCounts
+			this.recommendationService.getNoteExposureCounts(noteIds),
 			// userRelations
 			userRelationsPromise,
 			// iAmAdmin
@@ -898,6 +905,7 @@ export class NoteEntityService implements OnModuleInit {
 				mutedNotes,
 				favoriteNotes,
 				renotedNotes,
+				viewsCounts,
 				userRelations,
 				iAmAdmin,
 				iAmModerator,

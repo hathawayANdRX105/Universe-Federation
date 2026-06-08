@@ -144,14 +144,13 @@ Displays a note in the Sharkey style. Used to show the "main" note in a given co
 					<i class="ti ti-ban"></i>
 				</button>
 				<button
-					v-if="canRenote && !props.mock && !$i?.rejectQuotes"
-					ref="quoteButton"
 					:class="$style.footerButton"
 					class="_button"
-					@click.stop
-					@mousedown="quote()"
+					disabled
+					:aria-label="`Views ${number(viewsCount)}`"
 				>
 					<XNoteFooterIcon type="views"/>
+					<p :class="$style.footerButtonCount">{{ number(viewsCount) }}</p>
 				</button>
 				<button v-if="appearNote.myReaction == null && appearNote.reactionAcceptance !== 'likeOnly'" ref="likeButton" :class="$style.footerButton" class="_button" @click.stop @click="like()">
 					<XNoteFooterIcon type="like"/>
@@ -238,6 +237,7 @@ import { extractPreviewUrls } from '@/utility/extract-preview-urls.js';
 import SkUrlPreviewGroup from '@/components/SkUrlPreviewGroup.vue';
 import MkNoteSub from '@/components/MkNoteSub.vue';
 import { sendRecommendationFeedback, setupRecommendationVisibilityFeedback } from '@/utility/recommendation-feedback.js';
+import { getNoteViewsCount } from '@/utility/get-note-views-count.js';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
@@ -281,7 +281,6 @@ const renoteTime = useTemplateRef('renoteTime');
 const reactButton = useTemplateRef('reactButton');
 const clipButton = useTemplateRef('clipButton');
 const menuVersionsButton = useTemplateRef('menuVersionsButton');
-const quoteButton = useTemplateRef('quoteButton');
 const likeButton = useTemplateRef('likeButton');
 const appearNote = computed(() => getAppearNote(note.value));
 const galleryEl = useTemplateRef('galleryEl');
@@ -297,6 +296,8 @@ const translation = ref<Misskey.entities.NotesTranslateResponse | false | null>(
 const translating = ref(false);
 const showTicker = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceTicker === 'remote' && appearNote.value.user.instance);
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.value.visibility) || (appearNote.value.visibility === 'followers' && appearNote.value.userId === $i?.id));
+const canQuote = computed(() => canRenote.value && !props.mock && !$i?.rejectQuotes);
+const viewsCount = computed(() => getNoteViewsCount(appearNote.value));
 const renoteCollapsed = ref(
 	prefer.s.collapseRenotes && isRenote && (
 		($i && ($i.id === note.value.userId || $i.id === appearNote.value.userId)) || // `||` must be `||`! See https://github.com/misskey-dev/misskey/issues/13131
@@ -446,29 +447,6 @@ if (!props.mock) {
 		});
 	});
 
-	useTooltip(quoteButton, async (showing) => {
-		if (!quoteButton.value) return;
-
-		const renotes = await misskeyApi('notes/renotes', {
-			noteId: appearNote.value.id,
-			limit: 11,
-			quote: true,
-		});
-
-		const users = renotes.map(x => x.user);
-
-		if (users.length < 1) return;
-
-		const { dispose } = os.popup(MkUsersTooltip, {
-			showing,
-			users,
-			count: appearNote.value.renoteCount,
-			targetElement: quoteButton.value,
-		}, {
-			closed: () => dispose(),
-		});
-	});
-
 	if (appearNote.value.reactionAcceptance === 'likeOnly') {
 		useTooltip(reactButton, async (showing) => {
 			const reactions = await misskeyApiGet('notes/reactions', {
@@ -497,10 +475,10 @@ if (!props.mock) {
 function boostVisibility(forceMenu: boolean = false) {
 	if (renoting) return;
 
-	if (!prefer.s.showVisibilitySelectorOnBoost && !forceMenu) {
+	if (!canQuote.value && !prefer.s.showVisibilitySelectorOnBoost && !forceMenu) {
 		renote(prefer.s.visibilityOnBoost);
 	} else {
-		os.popupMenu(boostMenuItems(appearNote, renote), renoteButton.value);
+		os.popupMenu(boostMenuItems(appearNote, renote, canQuote.value ? quote : undefined), renoteButton.value);
 	}
 }
 
@@ -576,7 +554,7 @@ function quote() {
 				quote: true,
 			}).then((res) => {
 				if (!(res.length > 0)) return;
-				const el = quoteButton.value as HTMLElement | null | undefined;
+				const el = renoteButton.value as HTMLElement | null | undefined;
 				if (el && res.length > 0) {
 					const rect = el.getBoundingClientRect();
 					const x = rect.left + (el.offsetWidth / 2);
@@ -601,7 +579,7 @@ function quote() {
 				quote: true,
 			}).then((res) => {
 				if (!(res.length > 0)) return;
-				const el = quoteButton.value as HTMLElement | null | undefined;
+				const el = renoteButton.value as HTMLElement | null | undefined;
 				if (el && res.length > 0) {
 					const rect = el.getBoundingClientRect();
 					const x = rect.left + (el.offsetWidth / 2);

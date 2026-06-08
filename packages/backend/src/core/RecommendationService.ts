@@ -153,6 +153,17 @@ export class RecommendationService {
 	}
 
 	@bindThis
+	public async getNoteExposureCounts(noteIds: string[]): Promise<Map<string, number>> {
+		if (noteIds.length === 0) return new Map();
+
+		const scores = await this.redisClient.zmscore(EXPOSURE_KEY, ...noteIds);
+		return new Map(noteIds.map((noteId, i) => {
+			const count = Number(scores[i] ?? 0);
+			return [noteId, Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0];
+		}));
+	}
+
+	@bindThis
 	public async getUserSignals(userId: string | null, notes: MiNote[], now = 0, seed = 0): Promise<Map<string, RecommendationSignal>> {
 		const result = new Map<string, RecommendationSignal>();
 		if (notes.length === 0) return result;

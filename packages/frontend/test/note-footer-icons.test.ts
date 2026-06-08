@@ -14,6 +14,8 @@ import mkNoteSubSource from '@/components/MkNoteSub.vue?raw';
 import skNoteSubSource from '@/components/SkNoteSub.vue?raw';
 import oldNoteWindowSource from '@/components/SkOldNoteWindow.vue?raw';
 import xNoteFooterIconSource from '@/components/XNoteFooterIcon.vue?raw';
+import boostQuoteSource from '@/utility/boost-quote.ts?raw';
+import noteViewsCountSource from '@/utility/get-note-views-count.ts?raw';
 
 const footerSources = [
 	['MkNote.vue', mkNoteSource],
@@ -55,6 +57,29 @@ describe('note footer X icons', () => {
 			assert.notMatch(combinedFooter, /ti ti-repeat|ph-rocket-launch/, `${fileName} footer should not use old repost glyphs`);
 			assert.notMatch(combinedFooter, /ph-quotes/, `${fileName} footer should not use the old quote glyph in the core slot`);
 			assert.notMatch(combinedFooter, /ph-heart ph-bold ph-lg|ti ti-heart"><\/i>/, `${fileName} footer should not use old inactive heart glyphs`);
+		}
+	});
+
+	test('uses the X views glyph as a read-only traffic counter', () => {
+		for (const [fileName, source] of footerSources) {
+			const combinedFooter = footerBlocks(source).join('\n');
+			assert.notMatch(combinedFooter, /quoteButton/, `${fileName} should not bind the views glyph to the old quote button`);
+			assert.notMatch(combinedFooter, /quote\(\)/, `${fileName} views slot should not trigger quote`);
+			assert.match(combinedFooter, /disabled[\s\S]*<XNoteFooterIcon[^>]+type="views"[\s\S]*(viewsCount|number\(viewsCount\))/, `${fileName} should render views as a disabled count display`);
+		}
+
+		assert.match(noteViewsCountSource, /maybeNote\.viewsCount\s*\?\?/);
+		assert.match(noteViewsCountSource, /maybeNote\.viewCount\s*\?\?/);
+		assert.match(noteViewsCountSource, /maybeNote\.exposureCount\s*\?\?/);
+	});
+
+	test('adds quote to the repost menu instead of the views slot', () => {
+		assert.match(boostQuoteSource, /quote\?: \(\) => void/);
+		assert.match(boostQuoteSource, /text: i18n\.ts\.quote/);
+		assert.match(boostQuoteSource, /action: quote/);
+
+		for (const [fileName, source] of footerSources.filter(([fileName]) => fileName !== 'SkOldNoteWindow.vue')) {
+			assert.match(source, /boostMenuItems\(appearNote, renote, canQuote\.value \? quote : undefined\)/, `${fileName} should pass quote into the repost menu`);
 		}
 	});
 });

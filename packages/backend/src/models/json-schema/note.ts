@@ -275,6 +275,10 @@ export const packedNoteSchema = {
 			type: 'number',
 			optional: false, nullable: false,
 		},
+		viewsCount: {
+			type: 'number',
+			optional: false, nullable: false,
+		},
 		uri: {
 			type: 'string',
 			optional: true, nullable: false,

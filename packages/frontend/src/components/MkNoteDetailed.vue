@@ -149,13 +149,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<i class="ti ti-ban"></i>
 			</button>
 			<button
-				v-if="canRenote && !$i?.rejectQuotes"
-				ref="quoteButton"
 				class="_button"
 				:class="$style.noteFooterButton"
-				@mousedown="quote()"
+				disabled
+				:aria-label="`Views ${number(viewsCount)}`"
 			>
 				<XNoteFooterIcon type="views"/>
+				<p :class="$style.noteFooterButtonCount">{{ number(viewsCount) }}</p>
 			</button>
 			<button v-if="appearNote.myReaction == null && appearNote.reactionAcceptance !== 'likeOnly'" ref="likeButton" :class="$style.noteFooterButton" class="_button" @mousedown="like()">
 				<XNoteFooterIcon type="like"/>
@@ -284,6 +284,7 @@ import SkMutedNote from '@/components/SkMutedNote.vue';
 import SkNoteTranslation from '@/components/SkNoteTranslation.vue';
 import { getSelfNoteIds } from '@/utility/get-self-note-ids.js';
 import SkUrlPreviewGroup from '@/components/SkUrlPreviewGroup.vue';
+import { getNoteViewsCount } from '@/utility/get-note-views-count.js';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
@@ -311,7 +312,6 @@ const renoteTime = useTemplateRef('renoteTime');
 const reactButton = useTemplateRef('reactButton');
 const clipButton = useTemplateRef('clipButton');
 const menuVersionsButton = useTemplateRef('menuVersionsButton');
-const quoteButton = useTemplateRef('quoteButton');
 const likeButton = useTemplateRef('likeButton');
 const appearNote = computed(() => getAppearNote(note.value));
 const galleryEl = useTemplateRef('galleryEl');
@@ -329,6 +329,8 @@ const conversation = ref<Misskey.entities.Note[]>([]);
 const replies = ref<Misskey.entities.Note[]>([]);
 const quotes = ref<Misskey.entities.Note[]>([]);
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.value.visibility) || (appearNote.value.visibility === 'followers' && appearNote.value.userId === $i?.id));
+const canQuote = computed(() => canRenote.value && !$i?.rejectQuotes);
+const viewsCount = computed(() => getNoteViewsCount(appearNote.value));
 const defaultLike = computed(() => prefer.s.like ? prefer.s.like : null);
 
 const renoteTooltip = computeRenoteTooltip(appearNote);
@@ -448,36 +450,13 @@ useTooltip(renoteButton, async (showing) => {
 	});
 });
 
-useTooltip(quoteButton, async (showing) => {
-	const renotes = await misskeyApi('notes/renotes', {
-		noteId: appearNote.value.id,
-		limit: 11,
-		quote: true,
-	});
-
-	const users = renotes.map(x => x.user);
-
-	if (users.length < 1) return;
-	const targetElement = quoteButton.value;
-	if (targetElement == null) return;
-
-	const { dispose } = os.popup(MkUsersTooltip, {
-		showing,
-		users,
-		count: appearNote.value.renoteCount,
-		targetElement,
-	}, {
-		closed: () => dispose(),
-	});
-});
-
 function boostVisibility(forceMenu: boolean = false) {
 	if (renoting) return;
 
-	if (!prefer.s.showVisibilitySelectorOnBoost && !forceMenu) {
+	if (!canQuote.value && !prefer.s.showVisibilitySelectorOnBoost && !forceMenu) {
 		renote(prefer.s.visibilityOnBoost);
 	} else {
-		os.popupMenu(boostMenuItems(appearNote, renote), renoteButton.value);
+		os.popupMenu(boostMenuItems(appearNote, renote, canQuote.value ? quote : undefined), renoteButton.value);
 	}
 }
 
@@ -568,7 +547,7 @@ function quote() {
 				quote: true,
 			}).then((res) => {
 				if (!(res.length > 0)) return;
-				const el = quoteButton.value as HTMLElement | null | undefined;
+				const el = renoteButton.value as HTMLElement | null | undefined;
 				if (el && res.length > 0) {
 					const rect = el.getBoundingClientRect();
 					const x = rect.left + (el.offsetWidth / 2);
@@ -593,7 +572,7 @@ function quote() {
 				quote: true,
 			}).then((res) => {
 				if (!(res.length > 0)) return;
-				const el = quoteButton.value as HTMLElement | null | undefined;
+				const el = renoteButton.value as HTMLElement | null | undefined;
 				if (el && res.length > 0) {
 					const rect = el.getBoundingClientRect();
 					const x = rect.left + (el.offsetWidth / 2);

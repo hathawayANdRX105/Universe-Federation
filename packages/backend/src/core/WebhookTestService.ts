@@ -438,6 +438,7 @@ export class WebhookTestService {
 			reactionCount: 0,
 			renoteCount: note.renoteCount,
 			repliesCount: note.repliesCount,
+			viewsCount: 0,
 			uri: note.uri ?? undefined,
 			url: note.url ?? undefined,
 			reactionAndUserPairCache: note.reactionAndUserPairCache,

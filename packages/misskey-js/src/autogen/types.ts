@@ -10701,6 +10701,7 @@ export type components = {
             reactionCount: number;
             renoteCount: number;
             repliesCount: number;
+            viewsCount: number;
             uri?: string;
             url?: string;
             reactionAndUserPairCache?: string[];

@@ -38,16 +38,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<p v-if="note.renoteCount > 0" :class="$style.noteFooterButtonCount">{{ note.renoteCount }}</p>
 				</button>
 				<button
-					v-if="canRenote && !$i?.rejectQuotes"
-					ref="quoteButton"
 					class="_button"
 					:class="$style.noteFooterButton"
-					@click.stop="quote()"
+					disabled
+					:aria-label="`Views ${viewsCount}`"
 				>
 					<XNoteFooterIcon type="views"/>
-				</button>
-				<button v-else class="_button" :class="$style.noteFooterButton" disabled>
-					<i class="ph-prohibit ph-bold ph-lg"></i>
+					<p :class="$style.noteFooterButtonCount">{{ viewsCount }}</p>
 				</button>
 				<button v-if="note.myReaction == null && note.reactionAcceptance !== 'likeOnly'" ref="likeButton" :class="$style.noteFooterButton" class="_button" @click.stop="like()">
 					<XNoteFooterIcon type="like"/>
@@ -113,6 +110,7 @@ import { instance, policies } from '@/instance';
 import { getAppearNote } from '@/utility/get-appear-note';
 import { setupNoteViewInterruptors } from '@/plugin.js';
 import { deepClone } from '@/utility/clone.js';
+import { getNoteViewsCount } from '@/utility/get-note-views-count.js';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
@@ -136,6 +134,8 @@ const note = ref(deepClone(props.note));
 const appearNote = computed(() => getAppearNote(note.value));
 
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.value.visibility) || appearNote.value.userId === $i?.id);
+const canQuote = computed(() => canRenote.value && !$i?.rejectQuotes);
+const viewsCount = computed(() => getNoteViewsCount(appearNote.value));
 
 const rootComp = useTemplateRef('rootComp');
 const el = computed(() => rootComp.value?.rootEl ?? null);
@@ -145,7 +145,6 @@ const isDeleted = ref(false);
 const reactButton = shallowRef<HTMLElement>();
 const clipButton = useTemplateRef('clipButton');
 const renoteButton = shallowRef<HTMLElement>();
-const quoteButton = shallowRef<HTMLElement>();
 const menuButton = shallowRef<HTMLElement>();
 const likeButton = shallowRef<HTMLElement>();
 
@@ -299,10 +298,10 @@ watch(() => props.expandAllCws, (expandAllCws) => {
 });
 
 function boostVisibility(forceMenu: boolean = false) {
-	if (!prefer.s.showVisibilitySelectorOnBoost && !forceMenu) {
+	if (!canQuote.value && !prefer.s.showVisibilitySelectorOnBoost && !forceMenu) {
 		renote(prefer.s.visibilityOnBoost);
 	} else {
-		os.popupMenu(boostMenuItems(appearNote, renote), renoteButton.value);
+		os.popupMenu(boostMenuItems(appearNote, renote, canQuote.value ? quote : undefined), renoteButton.value);
 	}
 }
 
@@ -366,7 +365,7 @@ function quote() {
 			quote: true,
 		}).then((res) => {
 			if (!(res.length > 0)) return;
-			const popupEl = quoteButton.value as HTMLElement | null | undefined;
+			const popupEl = renoteButton.value as HTMLElement | null | undefined;
 			if (popupEl && res.length > 0) {
 				const rect = popupEl.getBoundingClientRect();
 				const x = rect.left + (popupEl.offsetWidth / 2);

@@ -54,8 +54,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</div>
 
-				<MkInfo v-if="!status.enabled" warn>{{ i18n.ts._ai.disabledOnServer }}</MkInfo>
-				<MkInfo v-else-if="status.providers.length === 0" warn>{{ i18n.ts._ai.noProviderAvailable }}</MkInfo>
+				<div v-if="!status.enabled || status.providers.length === 0" :class="$style.noticeStack">
+					<MkInfo v-if="!status.enabled" warn>{{ i18n.ts._ai.disabledOnServer }}</MkInfo>
+					<MkInfo v-else-if="status.providers.length === 0" warn>{{ i18n.ts._ai.noProviderAvailable }}</MkInfo>
+				</div>
 
 				<div ref="messagesEl" :class="$style.messages">
 					<div v-if="displayMessages.length === 0" :class="$style.emptyState">
@@ -133,10 +135,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 						v-model="draft"
 						:class="$style.textarea"
 						:disabled="streaming || !canSend"
-						rows="1"
+						rows="3"
 						:placeholder="i18n.ts._ai.messagePlaceholder"
 						@keydown="onDraftKeydown"
-						@input="autoGrow"
 					></textarea>
 					<button v-if="streaming" v-tooltip="i18n.ts._ai.stop" class="_button" :class="$style.composerIconButton" type="button" @click="stopStreaming">
 						<i class="ti ti-player-stop"></i>
@@ -353,7 +354,6 @@ function useSuggestion(text: string) {
 	draft.value = text;
 	nextTick(() => {
 		draftEl.value?.focus();
-		autoGrow();
 	});
 }
 
@@ -584,15 +584,8 @@ function onDraftKeydown(ev: KeyboardEvent) {
 	}
 }
 
-function autoGrow() {
-	const el = draftEl.value;
-	if (!el) return;
-	el.style.height = 'auto';
-	el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
-}
-
 function resetTextareaHeight() {
-	if (draftEl.value) draftEl.value.style.height = 'auto';
+	if (draftEl.value) draftEl.value.scrollTop = 0;
 }
 
 function updateLayoutMode() {
@@ -834,6 +827,12 @@ definePage(() => ({
 
 .chat {
 	display: grid;
+	grid-template-areas:
+		"topbar"
+		"notice"
+		"messages"
+		"attachments"
+		"composer";
 	grid-template-rows: auto auto minmax(0, 1fr) auto auto;
 	min-width: 0;
 	min-height: 0;
@@ -841,6 +840,7 @@ definePage(() => ({
 }
 
 .topbar {
+	grid-area: topbar;
 	display: flex;
 	align-items: end;
 	justify-content: space-between;
@@ -865,7 +865,13 @@ definePage(() => ({
 	justify-content: flex-end;
 }
 
+.noticeStack {
+	grid-area: notice;
+	padding: 12px var(--ai-pane-gutter) 0;
+}
+
 .messages {
+	grid-area: messages;
 	min-height: 0;
 	overflow-y: auto;
 	padding: 24px var(--ai-pane-gutter);
@@ -1083,6 +1089,7 @@ definePage(() => ({
 }
 
 .pendingAttachments {
+	grid-area: attachments;
 	padding: 10px var(--ai-pane-gutter) 0;
 }
 
@@ -1095,6 +1102,7 @@ definePage(() => ({
 }
 
 .composer {
+	grid-area: composer;
 	display: grid;
 	grid-template-columns: 40px minmax(0, 1fr) 40px;
 	gap: 8px;
@@ -1104,18 +1112,22 @@ definePage(() => ({
 	border: 1px solid var(--MI_THEME-divider);
 	border-radius: var(--MI-radius);
 	background: var(--MI_THEME-panel);
+	box-shadow: 0 -8px 24px color-mix(in srgb, var(--MI_THEME-bg) 72%, transparent);
 	box-sizing: border-box;
 }
 
 .textarea {
 	display: block;
 	width: 100%;
-	min-height: 40px;
-	max-height: 180px;
-	padding: 9px 4px;
+	height: calc(1.5em * 3 + 18px);
+	min-height: calc(1.5em * 3 + 18px);
+	max-height: calc(1.5em * 3 + 18px);
+	padding: 9px 6px;
 	border: 0;
 	outline: 0;
+	box-sizing: border-box;
 	resize: none;
+	overflow-y: auto;
 	background: transparent;
 	color: var(--MI_THEME-fg);
 	font: inherit;
@@ -1162,6 +1174,10 @@ definePage(() => ({
 	.messages {
 		min-height: 0;
 		padding: 18px 14px;
+	}
+
+	.noticeStack {
+		padding: 10px 14px 0;
 	}
 
 	.pendingAttachments {

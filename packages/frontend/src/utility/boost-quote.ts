@@ -31,7 +31,7 @@ export function visibilityIsAtLeast(a: Visibility | string, b: Visibility | stri
 	return smallerVisibility(a, b) === b;
 }
 
-export function boostMenuItems(appearNote: Ref<Misskey.entities.Note>, renote: (v: Visibility, l: boolean) => void): MenuItem[] {
+export function boostMenuItems(appearNote: Ref<Misskey.entities.Note>, renote: (v: Visibility, l: boolean) => void, quote?: () => void): MenuItem[] {
 	const localOnly = ref(prefer.s.rememberNoteVisibility ? store.s.localOnly : prefer.s.defaultNoteLocalOnly);
 	const effectiveVisibility = (
 		appearNote.value.channel?.isSensitive
@@ -72,6 +72,14 @@ export function boostMenuItems(appearNote: Ref<Misskey.entities.Note>, renote: (
 	}
 
 	return [
+		...(quote ? [{
+			type: 'button',
+			icon: 'ti ti-quote',
+			text: i18n.ts.quote,
+			action: quote,
+		}, {
+			type: 'divider',
+		}] as MenuItem[] : []),
 		...menuItems,
 		{
 			type: 'switch',
