@@ -577,9 +577,9 @@ onBeforeUnmount(() => {
 }
 
 .body {
-	flex: 0 1 min(76%, 640px);
+	flex: 0 1 min(82%, 760px);
 	margin: 0 8px;
-	max-width: min(76%, 640px);
+	max-width: min(82%, 760px);
 	box-sizing: border-box;
 
 	// https://stackoverflow.com/questions/36230944/prevent-flex-items-from-overflowing-a-container
@@ -590,8 +590,8 @@ onBeforeUnmount(() => {
 	display: flex;
 	flex-direction: column;
 	align-items: flex-end;
-	flex-basis: min(76%, 640px);
-	max-width: min(76%, 640px);
+	flex-basis: min(82%, 760px);
+	max-width: min(82%, 760px);
 }
 
 .header {

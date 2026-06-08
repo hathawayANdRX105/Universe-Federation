@@ -63,6 +63,17 @@ describe('chat room scroll state', () => {
 		assert.match(roomSource, /if \(shouldStickToLatestAfterLayoutShift\(metrics\)\) \{[\s\S]*scrollContainer\.scrollTo\(\{[\s\S]*top: metrics\.maxScrollTop/);
 	});
 
+	test('keeps local chat tabs visible beside the room title on wide screens', () => {
+		assert.match(roomSource, /grid-template-columns:\s*minmax\(120px,\s*auto\)\s*minmax\(0,\s*1fr\)\s*auto;/);
+		assert.match(roomSource, /grid-template-areas:\s*"title tabs menu";/);
+		assert.match(roomSource, /@container \(max-width:\s*520px\)\s*\{[\s\S]*grid-template-areas:\s*"title menu"\s*"tabs tabs";/);
+	});
+
+	test('uses the shared layout width for the visible chat surface', () => {
+		assert.match(roomSource, /\.chatPane\s*\{[\s\S]*width:\s*min\(100%,\s*var\(--layout-main-column-width,\s*100%\)\);/);
+		assert.match(roomSource, /\.form\s*\{[\s\S]*max-width:\s*var\(--layout-main-column-width,\s*100%\);/);
+	});
+
 	test('normalizes normal column scroll metrics for latest-at-bottom chat', () => {
 		assert.deepStrictEqual(getChatScrollMetrics({
 			scrollTop: 480,

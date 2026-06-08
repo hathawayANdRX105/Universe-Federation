@@ -127,19 +127,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 
 	<div v-if="tab === 'members'" :class="$style.tabPane">
-		<div class="_spacer" :class="$style.tabPaneInner" style="--MI_SPACER-w: 700px;">
+		<div class="_spacer" :class="$style.tabPaneInner" style="--MI_SPACER-w: min(100%, 840px);">
 			<XMembers v-if="room != null" :room="room" @inviteUser="inviteUser"/>
 		</div>
 	</div>
 
 	<div v-if="tab === 'info'" :class="$style.tabPane">
-		<div class="_spacer" :class="$style.tabPaneInner" style="--MI_SPACER-w: 700px;">
+		<div class="_spacer" :class="$style.tabPaneInner" style="--MI_SPACER-w: min(100%, 840px);">
 			<XInfo v-if="room != null" :room="room" @updated="onRoomUpdated"/>
 		</div>
 	</div>
 
 	<div v-if="tab === 'management'" :class="$style.tabPane">
-		<div class="_spacer" :class="$style.tabPaneInner" style="--MI_SPACER-w: 700px;">
+		<div class="_spacer" :class="$style.tabPaneInner" style="--MI_SPACER-w: min(100%, 840px);">
 			<XManagement v-if="room != null && room.canManage" :room="room" @updated="onRoomUpdated" @cleared="onCleared"/>
 		</div>
 	</div>
@@ -1944,16 +1944,15 @@ definePage(computed(() => {
 	position: relative;
 	z-index: 1000;
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-columns: minmax(120px, auto) minmax(0, 1fr) auto;
 	grid-template-areas:
-		"title menu"
-		"tabs tabs";
+		"title tabs menu";
 	align-items: center;
 	gap: 0 8px;
 	width: 100%;
 	max-width: 100%;
 	min-width: 0;
-	padding: 0 14px 4px;
+	padding: 0 14px;
 	box-sizing: border-box;
 	background: var(--chat-room-header-bg);
 	border-bottom: solid 1px var(--MI_THEME-divider);
@@ -2001,7 +2000,6 @@ definePage(computed(() => {
 	width: 100%;
 	max-width: 100%;
 	min-width: 0;
-	border-top: solid 1px color-mix(in srgb, var(--chat-room-header-fg) 10%, transparent);
 }
 
 .localTabsShellScrollable {
@@ -2098,7 +2096,14 @@ definePage(computed(() => {
 @container (max-width: 520px) {
 	.localHeader {
 		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-areas:
+			"title menu"
+			"tabs tabs";
 		padding: 0 12px 2px;
+	}
+
+	.localTabsShell {
+		border-top: solid 1px color-mix(in srgb, var(--chat-room-header-fg) 10%, transparent);
 	}
 
 	.localTitle {
@@ -2187,7 +2192,7 @@ definePage(computed(() => {
 .chatPane {
 	height: 100%;
 	min-height: 0;
-	width: min(100%, 920px);
+	width: min(100%, var(--layout-main-column-width, 100%));
 	margin: 0 auto;
 	padding: 14px 18px;
 	box-sizing: border-box;
@@ -2380,7 +2385,7 @@ definePage(computed(() => {
 .form {
 	margin: 0 auto;
 	width: 100%;
-	max-width: 920px;
+	max-width: var(--layout-main-column-width, 100%);
 }
 
 .fade-enter-active, .fade-leave-active {

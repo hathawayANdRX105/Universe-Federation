@@ -1082,8 +1082,12 @@ customHtml:
       @media (min-width: 1280px) {
         [class^="universal-nonTitlebarArea-"],
         [class*=" universal-nonTitlebarArea-"] {
-          width: min(100%, 1200px) !important;
-          max-width: 1200px !important;
+          --layout-main-column-width: 600px !important;
+          --layout-side-rail-width: 350px !important;
+          --layout-column-gap: 30px !important;
+          --codex-layout-page-max-width: calc(var(--nav-width, 260px) + var(--layout-main-column-width) + var(--layout-side-rail-width) + var(--layout-column-gap));
+          width: min(100%, var(--codex-layout-page-max-width)) !important;
+          max-width: var(--codex-layout-page-max-width) !important;
           margin-inline: auto !important;
           align-self: center !important;
         }

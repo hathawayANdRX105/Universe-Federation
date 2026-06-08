@@ -10,7 +10,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div :class="$style.nonTitlebarArea">
 		<XSidebar v-if="!isMobile" :class="$style.sidebar" :showWidgetButton="!isDesktop" @widgetButtonClick="widgetsShowing = true"/>
 
-		<div :class="[$style.contents, !isMobile && prefer.r.showTitlebar.value ? $style.withSidebarAndTitlebar : null]" @contextmenu.stop="onContextmenu">
+		<div :class="[
+			$style.contents,
+			!isMobile && prefer.r.showTitlebar.value ? $style.withSidebarAndTitlebar : null,
+			isDesktop && !pageMetadata?.needWideArea ? $style.standardContents : null,
+		]" @contextmenu.stop="onContextmenu">
 			<div>
 				<XPreferenceRestore v-if="shouldSuggestRestoreBackup"/>
 				<XAnnouncements v-if="$i"/>
@@ -137,11 +141,18 @@ $widgets-hide-threshold: 1090px;
 }
 
 .nonTitlebarArea {
-	--layout-side-rail-width: clamp(320px, 22vw, 360px);
+	--layout-main-column-width: 600px;
+	--layout-side-rail-width: 350px;
+	--layout-column-gap: 30px;
+	--layout-page-max-width: calc(var(--nav-width, 260px) + var(--layout-main-column-width) + var(--layout-side-rail-width) + var(--layout-column-gap));
 
 	display: flex;
 	flex: 1;
 	min-height: 0;
+	width: min(100%, var(--layout-page-max-width));
+	max-width: var(--layout-page-max-width);
+	margin-inline: auto;
+	align-self: center;
 }
 
 .sidebar {
@@ -162,6 +173,12 @@ $widgets-hide-threshold: 1090px;
 	}
 }
 
+.standardContents {
+	flex: 0 1 var(--layout-main-column-width);
+	width: var(--layout-main-column-width);
+	max-width: min(100%, var(--layout-main-column-width));
+}
+
 .content {
 	flex: 1;
 	min-height: 0;
@@ -179,6 +196,7 @@ $widgets-hide-threshold: 1090px;
 	height: 100%;
 	box-sizing: border-box;
 	overflow: auto;
+	margin-left: var(--layout-column-gap);
 	padding: var(--MI-margin) var(--MI-margin) calc(var(--MI-margin) + env(safe-area-inset-bottom, 0px));
 	border-left: solid 0.5px var(--MI_THEME-divider);
 	background: var(--MI_THEME-bg);

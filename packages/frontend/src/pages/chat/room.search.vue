@@ -400,7 +400,7 @@ onBeforeUnmount(() => {
 
 .inner {
 	width: 100%;
-	max-width: min(700px, calc(100% - 24px));
+	max-width: min(var(--layout-main-column-width, 840px), calc(100% - 24px));
 	min-height: 100%;
 	height: max-content;
 	margin: 0 auto;

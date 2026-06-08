@@ -297,10 +297,10 @@ definePage(() => ({
 	// rest of the instance keeps its own theme accent.
 	--x-blue: #1d9bf0;
 	--x-blue-hover: #1a8cd8;
-	--timeline-main-width: clamp(640px, 47vw, 760px);
-	--timeline-rail-width: clamp(320px, 22vw, 360px);
-	--timeline-column-gap: clamp(20px, 2vw, 32px);
-	--timeline-outer-gap: clamp(16px, 3vw, 48px);
+	--timeline-main-width: var(--layout-main-column-width, 600px);
+	--timeline-rail-width: var(--layout-side-rail-width, 350px);
+	--timeline-column-gap: var(--layout-column-gap, 30px);
+	--timeline-outer-gap: 0px;
 
 	box-sizing: border-box;
 	width: min(calc(100% - var(--timeline-outer-gap)), calc(var(--timeline-main-width) + var(--timeline-rail-width) + var(--timeline-column-gap)));
@@ -311,14 +311,6 @@ definePage(() => ({
 	column-gap: var(--timeline-column-gap);
 	align-items: start;
 	min-height: 100%;
-}
-
-:global([class^="universal-nonTitlebarArea-"]:has(.xTimelineWideShell)),
-:global([class*=" universal-nonTitlebarArea-"]:has(.xTimelineWideShell)) {
-	width: min(100%, 1360px) !important;
-	max-width: 1360px !important;
-	margin-inline: auto !important;
-	align-self: center !important;
 }
 
 /* ---------- center column ----------
@@ -626,19 +618,19 @@ definePage(() => ({
 }
 
 /* ---------- responsive ---------- */
-@media (max-width: 1200px) {
+@media (max-width: 1250px) {
 	.shell {
-		--timeline-main-width: 640px;
-		--timeline-rail-width: 320px;
+		--timeline-rail-width: 300px;
 		--timeline-column-gap: 20px;
-		--timeline-outer-gap: 12px;
+		width: calc(100% - var(--timeline-outer-gap));
+		grid-template-columns: minmax(0, var(--timeline-main-width)) minmax(280px, var(--timeline-rail-width));
 	}
 }
 
 @media (max-width: 1100px) {
 	.shell {
 		display: block;
-		width: min(100%, 720px);
+		width: min(100%, 600px);
 		margin: 0 auto;
 	}
 

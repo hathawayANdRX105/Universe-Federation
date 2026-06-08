@@ -133,7 +133,7 @@ const emit = defineEmits<{
 	(ev: 'widgetButtonClick'): void;
 }>();
 
-const forceIconOnly = ref(window.innerWidth <= 1279);
+const forceIconOnly = ref(window.innerWidth <= 1099);
 const iconOnly = computed(() => {
 	return forceIconOnly.value || (store.r.menuDisplay.value === 'sideIcon');
 });
@@ -147,7 +147,7 @@ const otherMenuItemIndicated = computed(() => {
 });
 
 function calcViewState() {
-	forceIconOnly.value = window.innerWidth <= 1279;
+	forceIconOnly.value = window.innerWidth <= 1099;
 }
 
 window.addEventListener('resize', calcViewState, { passive: true });
@@ -193,8 +193,8 @@ function menuEdit() {
 
 <style lang="scss" module>
 .root {
-	--nav-width: clamp(248px, 17vw, 280px);
-	--nav-icon-only-width: 80px;
+	--nav-width: clamp(220px, 14vw, 260px);
+	--nav-icon-only-width: 72px;
 	--nav-bg-transparent: color(from var(--MI_THEME-navBg) srgb r g b / 0.5);
 
 	--subButtonWidth: 20px;
@@ -563,16 +563,16 @@ function menuEdit() {
 	.item {
 		position: relative;
 		display: grid;
-		grid-template-columns: 32px minmax(0, 1fr);
-		column-gap: 8px;
+		grid-template-columns: 28px minmax(0, 1fr);
+		column-gap: 10px;
 		align-items: center;
 		height: 44px;
-		margin: 2px 14px;
-		padding: 0 18px;
+		margin: 2px 12px;
+		padding: 0 14px;
 		text-overflow: ellipsis;
 		overflow: hidden;
 		white-space: nowrap;
-		width: calc(100% - 28px);
+		width: calc(100% - 24px);
 		text-align: left;
 		box-sizing: border-box;
 		border-radius: var(--MI-radius-ellipse);
@@ -602,7 +602,7 @@ function menuEdit() {
 		position: relative;
 		display: inline-flex;
 		justify-content: center;
-		width: 32px;
+		width: 28px;
 		flex-shrink: 0;
 		color: var(--navbar-readable-fg, inherit) !important;
 		-webkit-text-fill-color: var(--navbar-readable-fg, currentColor) !important;
