@@ -7,6 +7,7 @@
 
 import { assert, describe, test } from 'vitest';
 import navbarSource from '@/ui/_common_/navbar.vue?raw';
+import mobileNavbarSource from '@/ui/_common_/navbar-for-mobile.vue?raw';
 
 describe('icon-only navbar', () => {
 	test('centers collapsed sidebar icons with explicit flex sizing', () => {
@@ -16,5 +17,13 @@ describe('icon-only navbar', () => {
 		assert.match(navbarSource, /\.root\.iconOnly\s*\{[\s\S]*\.post\s*\{[\s\S]*display: flex;[\s\S]*align-items: center;[\s\S]*justify-content: center;[\s\S]*\}/);
 		assert.match(navbarSource, /\.root\.iconOnly\s*\{[\s\S]*\.postIcon\s*\{[\s\S]*display: inline-flex;[\s\S]*align-items: center;[\s\S]*justify-content: center;[\s\S]*\}/);
 		assert.strictEqual(/\.root\.iconOnly\s*\{[\s\S]*\.itemIcon\s*\{[\s\S]*display: block;/.test(navbarSource), false);
+	});
+
+	test('keeps mobile drawer brand icon compact', () => {
+		assert.match(mobileNavbarSource, /:src="instance\.iconUrl \|\| instance\.sidebarLogoUrl \|\| '\/apple-touch-icon\.png'"/);
+		assert.match(mobileNavbarSource, /\.top\s*\{[\s\S]*height: 60px;[\s\S]*padding: 8px 16px;[\s\S]*box-sizing: border-box;[\s\S]*\}/);
+		assert.match(mobileNavbarSource, /\.instance\s*\{[\s\S]*display: inline-flex;[\s\S]*width: 44px;[\s\S]*height: 44px;[\s\S]*overflow: clip;[\s\S]*\}/);
+		assert.match(mobileNavbarSource, /\.instanceIcon\s*\{[\s\S]*width: 34px;[\s\S]*height: 34px;[\s\S]*object-fit: cover;[\s\S]*\}/);
+		assert.strictEqual(/wideInstanceIcon/.test(mobileNavbarSource), false);
 	});
 });

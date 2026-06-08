@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div :class="$style.top">
 		<div :class="$style.banner" :style="{ backgroundImage: `url(${ instance.bannerUrl })` }"></div>
 		<button class="_button" :class="$style.instance" @click="openInstanceMenu">
-			<img :src="instance.sidebarLogoUrl || instance.iconUrl || '/apple-touch-icon.png'" alt="" :class="instance.sidebarLogoUrl ? $style.wideInstanceIcon : $style.instanceIcon"/>
+			<img :src="instance.iconUrl || instance.sidebarLogoUrl || '/apple-touch-icon.png'" alt="" :class="$style.instanceIcon"/>
 		</button>
 	</div>
 	<div :class="$style.middle">
@@ -104,6 +104,9 @@ function more() {
 
 	display: flex;
 	flex-direction: column;
+	height: 100%;
+	min-height: 100dvh;
+	overflow: hidden;
 }
 
 :global(html[data-color-scheme=dark]) {
@@ -170,46 +173,46 @@ function more() {
 }
 
 .top {
-	position: sticky;
-	top: 0;
-	z-index: 1;
-	padding: 20px 0;
-	background: var(--nav-bg-transparent);
-	-webkit-backdrop-filter: var(--MI-blur, blur(8px));
-	backdrop-filter: var(--MI-blur, blur(8px));
+	position: relative;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	height: 60px;
+	padding: 8px 16px;
+	box-sizing: border-box;
+	background: var(--MI_THEME-navBg);
 }
 
 .banner {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
-	background-size: cover;
-	background-position: center center;
-	-webkit-mask-image: linear-gradient(0deg, rgba(0,0,0,0) 15%, rgba(0,0,0,0.75) 100%);
-	mask-image: linear-gradient(0deg, rgba(0,0,0,0) 15%, rgba(0,0,0,0.75) 100%);
+	display: none;
 }
 
 .instance {
 	position: relative;
-	display: block;
-	text-align: center;
-	width: 100%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 12px;
+	overflow: clip;
+
+	&:hover, &:focus {
+		background: var(--MI_THEME-panelHighlight);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--MI_THEME-focus);
+		outline-offset: -2px;
+	}
 }
 
 .instanceIcon {
-	display: inline-block;
-	width: 38px;
-	aspect-ratio: 1;
+	display: block;
+	width: 34px;
+	height: 34px;
 	border-radius: 8px;
-}
-
-.wideInstanceIcon {
-	display: inline-block;
-	min-width: 38px;
-	max-width: 100%;
-	max-height: 80px;
+	object-fit: cover;
 }
 
 .bottom {
@@ -286,7 +289,11 @@ function more() {
 }
 
 .middle {
-	flex: 1;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	padding: 4px 0 8px;
 }
 
 .divider {
