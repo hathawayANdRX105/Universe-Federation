@@ -185,11 +185,13 @@ describe('chat room scroll state', () => {
 		assert.match(roomSource, /let streamRecoveryPollingTimer: number \| null = null;/);
 		assert.match(roomSource, /let streamRecoverySinceId: string \| undefined;/);
 		assert.match(roomSource, /let isRoomViewDisposed = false;/);
-		assert.match(roomSource, /function startStreamRecoveryPolling\(\)/);
-		assert.match(roomSource, /if \(isRoomViewDisposed\) return;/);
+			assert.match(roomSource, /function startStreamRecoveryPolling\(\)/);
+			assert.match(roomSource, /if \(isRoomViewDisposed\) return;/);
 			assert.match(roomSource, /function scheduleStreamRecovery\(reason: 'connected' \| 'visible' \| 'manual' = 'manual', options\?: \{ sinceId\?: string \}\)/);
 			assert.match(roomSource, /const shouldStickToLatest = shouldAutoRevealLatestMessages\(\);/);
 			assert.match(roomSource, /if \(reason === 'connected'\) \{[\s\S]*await waitChannelConnected\(\);[\s\S]*\}/);
+			assert.match(roomSource, /await Promise\.race\(\[[\s\S]*channel\.waitConnected\(\),[\s\S]*STREAM_CONNECT_TIMEOUT/);
+			assert.strictEqual(/const waitConnected = [\s\S]*\.waitConnected;/.test(roomSource), false);
 			assert.match(roomSource, /await syncLatestMessages\(\{ stickToLatest: shouldStickToLatest, flushReadReceipt: shouldStickToLatest, sinceId \}\);/);
 		assert.match(roomSource, /function onStreamConnected\(\) \{[\s\S]*scheduleStreamRecovery\('connected'\);[\s\S]*\}/);
 		assert.match(roomSource, /function onStreamDisconnected\(\) \{[\s\S]*showScrollToLatestButton\.value = true;[\s\S]*startStreamRecoveryPolling\(\);[\s\S]*\}/);

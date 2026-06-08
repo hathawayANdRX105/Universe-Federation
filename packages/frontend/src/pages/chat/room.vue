@@ -1039,12 +1039,9 @@ async function waitChannelConnected() {
 	const channel = connection.value;
 	if (!channel) return;
 
-	const waitConnected = (channel as { waitConnected?: () => Promise<void> }).waitConnected;
-	if (waitConnected == null) return;
-
 	try {
 		await Promise.race([
-			waitConnected(),
+			channel.waitConnected(),
 			new Promise<void>(resolve => window.setTimeout(resolve, STREAM_CONNECT_TIMEOUT)),
 		]);
 	} catch (err) {
