@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <PageWithHeader ref="pageComponent" :actions="[]" :tabs="[]" :swipable="false" :hideTitle="true">
 	<div class="xTimelineWideShell" :class="$style.shell">
-		<main :class="$style.main">
+		<main :class="$style.main" @wheel.passive="onMainWheel">
 			<header :class="$style.tabs" role="tablist" :aria-label="i18n.ts.home">
 				<button
 					v-for="tab in homeTabs"
@@ -58,7 +58,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			/>
 		</main>
 
-		<aside :class="$style.rightRail">
+		<aside ref="rightRailEl" :class="$style.rightRail" @wheel="onRightRailWheel">
 			<form :class="$style.searchBox" @submit.prevent="submitSidebarSearch">
 				<MkInput v-model="sidebarSearchQuery" type="search" :placeholder="i18n.ts.search">
 					<template #prefix><i class="ti ti-search"></i></template>
@@ -81,10 +81,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</section>
 
-			<section v-if="discoverySections.channels.length > 0" :class="$style.sideCard">
+			<section v-if="visibleChannels.length > 0" :class="$style.sideCard">
 				<div :class="$style.sideCardTitle">{{ i18n.ts.recommendedChannels }}</div>
 				<div :class="$style.sideList">
-					<MkA v-for="channel in discoverySections.channels" :key="channel.id" :to="`/channels/${channel.id}`" :class="$style.channelRow">
+					<MkA v-for="channel in visibleChannels" :key="channel.id" :to="`/channels/${channel.id}`" :class="$style.channelRow">
 						<span :class="$style.channelIcon" :style="{ background: channel.color }"><i class="ti ti-device-tv"></i></span>
 						<span :class="$style.channelBody">
 							<span :class="$style.channelName">{{ channel.name }}</span>
@@ -94,10 +94,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</section>
 
-			<section v-if="recommendedUsers.length > 0" :class="$style.sideCard">
+			<section v-if="visibleRecommendedUsers.length > 0" :class="$style.sideCard">
 				<div :class="$style.sideCardTitle">{{ i18n.ts.whoToFollow }}</div>
 				<div :class="$style.sideList">
-					<div v-for="user in recommendedUsers" :key="user.id" :class="$style.userRow">
+					<div v-for="user in visibleRecommendedUsers" :key="user.id" :class="$style.userRow">
 						<MkAvatar :user="user" :class="$style.userAvatar" link preview/>
 						<MkA :to="userPage(user)" :class="$style.userBody">
 							<MkUserName :user="user" :nowrap="true" :class="$style.userName"/>
@@ -108,10 +108,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</section>
 
-			<section v-if="discoverySections.tutorialNotes.length > 0" :class="$style.sideCard">
+			<section v-if="visibleTutorialNotes.length > 0" :class="$style.sideCard">
 				<div :class="$style.sideCardTitle">{{ i18n.ts.tutorialsAndResources }}</div>
 				<div :class="$style.sideList">
-					<MkA v-for="note in discoverySections.tutorialNotes" :key="note.id" :to="`/notes/${note.id}`" :class="$style.noteTeaser">
+					<MkA v-for="note in visibleTutorialNotes" :key="note.id" :to="`/notes/${note.id}`" :class="$style.noteTeaser">
 						<span :class="$style.noteTeaserText">{{ summarizeNote(note) }}</span>
 						<span :class="$style.noteTeaserMeta">{{ i18n.tsx.noteStats({ replies: note.repliesCount, renotes: note.renoteCount }) }}</span>
 					</MkA>
@@ -123,7 +123,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, onActivated, onMounted, provide, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, onActivated, onMounted, onUnmounted, provide, ref, useTemplateRef, watch } from 'vue';
 import type * as Misskey from 'misskey-js';
 import MkTimeline from '@/components/MkTimeline.vue';
 import MkInput from '@/components/MkInput.vue';
@@ -142,9 +142,21 @@ provide('shouldOmitHeaderTitle', true);
 type HomeTab = 'forYou' | 'following' | 'latestReplies';
 type DiscoverySections = Misskey.Endpoints['notes/discovery-sections']['res'];
 
+const sidebarLimits = {
+	trends: 4,
+	channels: 3,
+	users: 3,
+	tutorialNotes: 2,
+} as const;
+
 const router = useRouter();
 const tlComponent = useTemplateRef('tlComponent');
 const pageComponent = useTemplateRef('pageComponent');
+const rightRailEl = useTemplateRef('rightRailEl');
+let rightRailResizeObserver: ResizeObserver | undefined;
+let rightRailOffset = 0;
+let rightRailMaxOffset = 0;
+let rightRailOffsetInitialized = false;
 
 const homeTab = ref<HomeTab>('forYou');
 const queue = ref(0);
@@ -202,8 +214,6 @@ const timelineKey = computed(() => [
 ].join(':'));
 
 const trendRows = computed(() => {
-	// Show every trend the API returns (no fixed cap) — the rail's own single
-	// scrollbar handles overflow. De-dupe terms that appear in multiple buckets.
 	const rows: { type: 'search' | 'tag'; term: string; label: string }[] = [];
 	const seen = new Set<string>();
 	const push = (type: 'search' | 'tag', term: string, label: string) => {
@@ -215,8 +225,11 @@ const trendRows = computed(() => {
 	for (const term of searchTrends.value.popularSearches) push('search', term, i18n.ts.popularSearches);
 	for (const term of searchTrends.value.hashtags) push('tag', term, i18n.ts.popularTags);
 	for (const term of searchTrends.value.recentTerms) push('search', term, i18n.ts.recentContentTerms);
-	return rows;
+	return rows.slice(0, sidebarLimits.trends);
 });
+const visibleChannels = computed(() => discoverySections.value.channels.slice(0, sidebarLimits.channels));
+const visibleRecommendedUsers = computed(() => recommendedUsers.value.slice(0, sidebarLimits.users));
+const visibleTutorialNotes = computed(() => discoverySections.value.tutorialNotes.slice(0, sidebarLimits.tutorialNotes));
 
 watch(homeTab, () => {
 	queue.value = 0;
@@ -224,10 +237,23 @@ watch(homeTab, () => {
 
 onMounted(() => {
 	loadSidebarData();
+	nextTick(() => {
+		installRightRailStickyObserver();
+		syncRightRailStickyBounds();
+	});
+	window.addEventListener('resize', syncRightRailStickyBounds);
+	window.visualViewport?.addEventListener('resize', syncRightRailStickyBounds);
 });
 
 onActivated(() => {
 	loadSidebarData();
+	nextTick(syncRightRailStickyBounds);
+});
+
+onUnmounted(() => {
+	rightRailResizeObserver?.disconnect();
+	window.removeEventListener('resize', syncRightRailStickyBounds);
+	window.visualViewport?.removeEventListener('resize', syncRightRailStickyBounds);
 });
 
 function queueUpdated(q: number): void {
@@ -258,13 +284,74 @@ function openTrend(type: 'search' | 'tag', term: string): void {
 	}
 }
 
+function getRightRailPageScroller(): HTMLElement | null {
+	return rightRailEl.value?.closest<HTMLElement>('._pageScrollable, ._pageScrollableReversed') ?? null;
+}
+
+function syncRightRailStickyBounds(): void {
+	const rail = rightRailEl.value;
+	const scroller = getRightRailPageScroller();
+	if (!rail || !scroller) return;
+	const nextMaxOffset = Math.max(0, rail.offsetHeight - scroller.clientHeight);
+	if (!rightRailOffsetInitialized || rightRailOffset === rightRailMaxOffset) {
+		rightRailOffset = nextMaxOffset;
+		rightRailOffsetInitialized = true;
+	} else {
+		rightRailOffset = Math.min(rightRailOffset, nextMaxOffset);
+	}
+	rightRailMaxOffset = nextMaxOffset;
+	applyRightRailStickyTop();
+}
+
+function applyRightRailStickyTop(): void {
+	rightRailEl.value?.style.setProperty('--right-rail-sticky-top', `${-rightRailOffset}px`);
+}
+
+function installRightRailStickyObserver(): void {
+	const rail = rightRailEl.value;
+	const scroller = getRightRailPageScroller();
+	if (!rail || !scroller) return;
+	rightRailResizeObserver?.disconnect();
+	rightRailResizeObserver = new ResizeObserver(syncRightRailStickyBounds);
+	rightRailResizeObserver.observe(rail);
+	rightRailResizeObserver.observe(scroller);
+}
+
+function normalizeWheelDeltaY(ev: WheelEvent, scroller: HTMLElement): number {
+	if (ev.deltaMode === WheelEvent.DOM_DELTA_LINE) return ev.deltaY * 16;
+	if (ev.deltaMode === WheelEvent.DOM_DELTA_PAGE) return ev.deltaY * scroller.clientHeight;
+	return ev.deltaY;
+}
+
+function shiftRightRailOffset(deltaY: number): number {
+	const previous = rightRailOffset;
+	rightRailOffset = Math.min(rightRailMaxOffset, Math.max(0, rightRailOffset + deltaY));
+	applyRightRailStickyTop();
+	return rightRailOffset - previous;
+}
+
+function onRightRailWheel(ev: WheelEvent): void {
+	if (ev.ctrlKey) return;
+	const scroller = getRightRailPageScroller();
+	if (!scroller) return;
+	ev.preventDefault();
+	const deltaY = normalizeWheelDeltaY(ev, scroller);
+	const rightRailShift = shiftRightRailOffset(deltaY);
+	scroller.scrollTop += rightRailShift === 0 ? deltaY : rightRailShift * 0.22;
+}
+
+function onMainWheel(ev: WheelEvent): void {
+	if (ev.ctrlKey) return;
+	const scroller = getRightRailPageScroller();
+	if (!scroller) return;
+	shiftRightRailOffset(normalizeWheelDeltaY(ev, scroller));
+}
+
 async function loadSidebarData(): Promise<void> {
 	const [sections, users] = await Promise.all([
-		// Request the endpoint's max (10) so every rail pane is fully populated;
-		// the rail's single scrollbar handles the overflow.
-		misskeyApi<DiscoverySections>('notes/discovery-sections', { limit: 10 }).catch(() => null),
+		misskeyApi<DiscoverySections>('notes/discovery-sections', { limit: 4 }).catch(() => null),
 		misskeyApi<Misskey.entities.UserDetailed[]>('users', {
-			limit: 10,
+			limit: sidebarLimits.users,
 			origin: 'local',
 			sort: '+follower',
 			state: 'alive',
@@ -278,6 +365,8 @@ async function loadSidebarData(): Promise<void> {
 	} else {
 		recommendedUsers.value = users;
 	}
+	await nextTick();
+	syncRightRailStickyBounds();
 }
 
 function summarizeNote(note: Misskey.entities.Note): string {
@@ -408,44 +497,26 @@ definePage(() => ({
 	padding: 0 12px;
 }
 
-/* ---------- right rail ----------
-   Independent scroll region (like X): the rail is pinned to the viewport and
-   scrolls its OWN content with its own scrollbar — the feed underneath does NOT
-   move when you wheel over the rail.
-
-   The earlier dead-zone bug had two causes, both fixed here:
-   1. The rail is `display:flex; column`, so its children were SHRINKING to fit
-      the fixed height — scrollHeight collapsed to clientHeight and there was
-      nothing to scroll (the wheel had nowhere to go, so it felt frozen). Fix:
-      `flex-shrink: 0` on every child (see .rightRail > * below) so the content
-      keeps its natural height and genuinely overflows.
-   2. It must be a FIXED height (not max-height that the flex box can collapse).
-   `overscroll-behavior: contain` keeps the wheel inside the rail so it never
-   chains to the page feed. */
+/* ---------- right rail ---------- */
 .rightRail {
 	position: sticky;
-	top: 0;
+	top: var(--right-rail-sticky-top, 0px);
 	box-sizing: border-box;
-	height: 100dvh;
+	height: auto;
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
-	overflow-y: auto;
-	overscroll-behavior: contain;
-	scrollbar-gutter: stable;
+	gap: 12px;
+	overflow: visible;
+	overscroll-behavior: auto;
+	scrollbar-gutter: auto;
 	padding: 8px 0 24px;
 }
 
-// Keep panes at their natural height so the rail actually overflows & scrolls
-// (without this, flex shrinks them to fit and the scrollbar never appears).
 .rightRail > * {
 	flex: 0 0 auto;
 }
 
 .searchBox {
-	position: sticky;
-	top: 0;
-	z-index: 11;
 	padding-bottom: 8px;
 	background: var(--MI_THEME-bg);
 
