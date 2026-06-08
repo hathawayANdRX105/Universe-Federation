@@ -47,10 +47,75 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</MkInput>
 						</div>
 
-						<MkTextarea v-model="publicPermissionsText" code>
-							<template #label>允许普通开发者使用的权限范围</template>
-							<template #caption>每行或逗号分隔一个 scope。admin 权限不建议放进这里。</template>
-						</MkTextarea>
+						<section :class="$style.permissionPanel" aria-labelledby="api-public-permissions-title">
+							<div :class="$style.permissionHeader">
+								<div>
+									<div id="api-public-permissions-title" :class="$style.permissionTitle">允许普通开发者使用的权限范围</div>
+									<div :class="$style.permissionCaption">权限范围已选择 {{ selectedPublicPermissionCount }} 项。普通开发者只能申请这里开放的 scope，admin 权限不会出现在公共选项里。</div>
+								</div>
+								<MkButton rounded small @click="restoreDefaultPublicPermissions">恢复推荐默认权限</MkButton>
+							</div>
+
+							<div :class="$style.permissionGroups">
+								<section v-for="group in publicPermissionGroups" :key="group.key" :class="$style.permissionGroup">
+									<div :class="$style.permissionGroupHeader">
+										<div :class="$style.permissionGroupTitle">
+											<i :class="group.icon"></i>
+											<strong>{{ group.title }}</strong>
+										</div>
+										<div class="_buttons">
+											<MkButton rounded small @click="selectPermissionGroup(group)">全选</MkButton>
+											<MkButton rounded small @click="clearPermissionGroup(group)">清空</MkButton>
+										</div>
+									</div>
+									<div :class="$style.permissionOptions">
+										<button
+											v-for="permission in group.permissions"
+											:key="permission.scope"
+											type="button"
+											class="_button"
+											:class="[$style.permissionOption, { [$style.permissionOptionActive]: isPermissionSelected(permission.scope) }]"
+											:aria-pressed="isPermissionSelected(permission.scope)"
+											@click="togglePermission(permission.scope)"
+										>
+											<span :class="$style.permissionCheck"><i :class="isPermissionSelected(permission.scope) ? 'ti ti-check' : 'ti ti-plus'"></i></span>
+											<span :class="$style.permissionBody">
+												<strong>{{ permission.label }}</strong>
+												<code>{{ permission.scope }}</code>
+												<small>{{ permission.description }}</small>
+											</span>
+										</button>
+									</div>
+								</section>
+
+								<section v-if="unknownPublicPermissions.length > 0" :class="$style.permissionGroup">
+									<div :class="$style.permissionGroupHeader">
+										<div :class="$style.permissionGroupTitle">
+											<i class="ti ti-dots"></i>
+											<strong>其他权限</strong>
+										</div>
+									</div>
+									<div :class="$style.permissionOptions">
+										<button
+											v-for="scope in unknownPublicPermissions"
+											:key="scope"
+											type="button"
+											class="_button"
+											:class="[$style.permissionOption, $style.permissionOptionActive]"
+											aria-pressed="true"
+											@click="togglePermission(scope)"
+										>
+											<span :class="$style.permissionCheck"><i class="ti ti-check"></i></span>
+											<span :class="$style.permissionBody">
+												<strong>保留未知权限</strong>
+												<code>{{ scope }}</code>
+												<small>后端返回的兼容 scope，保存时会继续保留；点击可从公共权限中移除。</small>
+											</span>
+										</button>
+									</div>
+								</section>
+							</div>
+						</section>
 
 						<div class="_buttons">
 							<MkButton primary rounded :wait="savingSettings" @click="saveSettings"><i class="ti ti-device-floppy"></i> 保存设置</MkButton>
@@ -146,7 +211,6 @@ import MkInfo from '@/components/MkInfo.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkSelect from '@/components/MkSelect.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
-import MkTextarea from '@/components/MkTextarea.vue';
 import FormSuspense from '@/components/form/suspense.vue';
 import { definePage } from '@/page.js';
 import * as os from '@/os.js';
@@ -201,8 +265,98 @@ type ApiSummary = {
 	tokens: { active: number; suspended: number; revoked: number; };
 };
 
+type PermissionOption = {
+	scope: string;
+	label: string;
+	description: string;
+};
+
+type PermissionGroup = {
+	key: string;
+	title: string;
+	icon: string;
+	permissions: PermissionOption[];
+};
+
+const publicPermissionGroups = [
+	{
+		key: 'account',
+		title: '登录资料',
+		icon: 'ti ti-user-circle',
+		permissions: [
+			{ scope: 'read:account', label: '读取账号资料', description: '用于快捷登录时读取用户 ID、昵称、头像等基础资料。' },
+		],
+	},
+	{
+		key: 'notes',
+		title: '发帖/删帖',
+		icon: 'ti ti-message-circle',
+		permissions: [
+			{ scope: 'write:notes', label: '发布与删除帖子', description: '允许创建帖子，并删除当前用户有权限删除的帖子。' },
+		],
+	},
+	{
+		key: 'drive',
+		title: '附件上传',
+		icon: 'ti ti-cloud-upload',
+		permissions: [
+			{ scope: 'read:drive', label: '读取云盘文件', description: '读取当前用户云盘文件和附件元数据。' },
+			{ scope: 'write:drive', label: '上传与管理文件', description: '上传附件、编辑文件信息或删除用户自己的文件。' },
+		],
+	},
+	{
+		key: 'channels',
+		title: '频道资源',
+		icon: 'ti ti-speakerphone',
+		permissions: [
+			{ scope: 'read:channels', label: '读取频道', description: '读取频道资料、频道帖子和资源列表。' },
+			{ scope: 'write:channels', label: '管理频道内容', description: '发布频道内容或按用户权限维护频道资源。' },
+		],
+	},
+	{
+		key: 'following',
+		title: '社交关系',
+		icon: 'ti ti-users',
+		permissions: [
+			{ scope: 'read:following', label: '读取关注关系', description: '读取当前用户的关注、粉丝和社交关系。' },
+			{ scope: 'write:following', label: '修改关注关系', description: '代表当前用户关注或取消关注其他账号。' },
+		],
+	},
+	{
+		key: 'moderation',
+		title: '屏蔽/静音',
+		icon: 'ti ti-shield',
+		permissions: [
+			{ scope: 'read:blocks', label: '读取屏蔽列表', description: '读取当前用户屏蔽的账号列表。' },
+			{ scope: 'write:blocks', label: '修改屏蔽列表', description: '代表当前用户屏蔽或解除屏蔽账号。' },
+			{ scope: 'read:mutes', label: '读取静音列表', description: '读取当前用户静音的账号或关键词。' },
+			{ scope: 'write:mutes', label: '修改静音列表', description: '代表当前用户添加或解除静音规则。' },
+		],
+	},
+	{
+		key: 'notifications',
+		title: '通知',
+		icon: 'ti ti-bell',
+		permissions: [
+			{ scope: 'read:notifications', label: '读取通知', description: '读取当前用户收到的通知和未读状态。' },
+			{ scope: 'write:notifications', label: '管理通知', description: '标记通知已读或清理通知状态。' },
+		],
+	},
+	{
+		key: 'chat',
+		title: '聊天',
+		icon: 'ti ti-messages',
+		permissions: [
+			{ scope: 'read:chat', label: '读取聊天', description: '读取当前用户可访问的聊天房间和消息。' },
+			{ scope: 'write:chat', label: '发送聊天消息', description: '代表当前用户发送聊天消息或维护聊天状态。' },
+		],
+	},
+] satisfies PermissionGroup[];
+
+const defaultPublicPermissions = publicPermissionGroups.flatMap(group => group.permissions.map(permission => permission.scope));
+const knownPublicPermissionScopes = new Set(defaultPublicPermissions);
+
 const settings = ref<ApiSettings | null>(null);
-const publicPermissionsText = ref('');
 const summary = ref<ApiSummary | null>(null);
 const accessRequests = ref<ApiAccessRequest[]>([]);
 const apps = ref<ApiApp[]>([]);
@@ -214,6 +368,9 @@ const modeCaption = computed(() => ({
 	open: '开放使用',
 	closed: '关闭使用',
 }[settings.value?.mode ?? 'open']));
+
+const selectedPublicPermissionCount = computed(() => settings.value?.publicPermissions.length ?? 0);
+const unknownPublicPermissions = computed(() => (settings.value?.publicPermissions ?? []).filter(scope => !knownPublicPermissionScopes.has(scope) && !isAdminScope(scope)));
 
 async function init() {
 	await reload();
@@ -228,8 +385,10 @@ async function reload() {
 		misskeyApi<ApiApp[]>('admin/api/apps/list', { status: 'pending', limit: 50 }),
 		misskeyApi<ApiToken[]>('admin/api/tokens/list', { limit: 50 }),
 	]);
-	settings.value = settingsResult;
-	publicPermissionsText.value = settingsResult.publicPermissions.join('\n');
+	settings.value = {
+		...settingsResult,
+		publicPermissions: normalizePublicPermissionSelection(settingsResult.publicPermissions),
+	};
 	summary.value = summaryResult;
 	accessRequests.value = requestsResult;
 	apps.value = Array.from(new Map([...pendingAppsResult, ...appsResult].map(app => [app.id, app])).values());
@@ -242,14 +401,58 @@ async function saveSettings() {
 	try {
 		settings.value = await misskeyApi<ApiSettings>('admin/api/settings/update', {
 			...settings.value,
-			publicPermissions: publicPermissionsText.value.split(/[\n,]/).map(scope => scope.trim()).filter(Boolean),
+			publicPermissions: normalizePublicPermissionSelection(settings.value.publicPermissions),
 		});
-		publicPermissionsText.value = settings.value.publicPermissions.join('\n');
+		settings.value.publicPermissions = normalizePublicPermissionSelection(settings.value.publicPermissions);
 		os.toast('API 设置已保存');
 		await reload();
 	} finally {
 		savingSettings.value = false;
 	}
+}
+
+function normalizePublicPermissionSelection(scopes: string[]): string[] {
+	return Array.from(new Set(scopes.map(scope => scope.trim()).filter(scope => scope.length > 0 && !isAdminScope(scope))));
+}
+
+function isAdminScope(scope: string): boolean {
+	return scope.startsWith('admin:') || scope.startsWith('read:admin:') || scope.startsWith('write:admin:');
+}
+
+function setPublicPermissions(scopes: string[]) {
+	if (!settings.value) return;
+	settings.value.publicPermissions = normalizePublicPermissionSelection(scopes);
+}
+
+function isPermissionSelected(scope: string): boolean {
+	return settings.value?.publicPermissions.includes(scope) ?? false;
+}
+
+function togglePermission(scope: string) {
+	if (!settings.value || isAdminScope(scope)) return;
+	if (isPermissionSelected(scope)) {
+		setPublicPermissions(settings.value.publicPermissions.filter(permission => permission !== scope));
+	} else {
+		setPublicPermissions([...settings.value.publicPermissions, scope]);
+	}
+}
+
+function selectPermissionGroup(group: PermissionGroup) {
+	if (!settings.value) return;
+	setPublicPermissions([
+		...settings.value.publicPermissions,
+		...group.permissions.map(permission => permission.scope),
+	]);
+}
+
+function clearPermissionGroup(group: PermissionGroup) {
+	if (!settings.value) return;
+	const groupScopes = new Set(group.permissions.map(permission => permission.scope));
+	setPublicPermissions(settings.value.publicPermissions.filter(scope => !groupScopes.has(scope)));
+}
+
+function restoreDefaultPublicPermissions() {
+	setPublicPermissions(defaultPublicPermissions);
 }
 
 async function reviewAccess(id: string, action: 'approve' | 'reject' | 'suspend') {
@@ -345,6 +548,135 @@ definePage(() => ({
 	overflow-wrap: anywhere;
 }
 
+.permissionPanel {
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 8px;
+	background: var(--MI_THEME-panel);
+	padding: 14px;
+}
+
+.permissionHeader {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 14px;
+}
+
+.permissionTitle {
+	font-weight: 700;
+}
+
+.permissionCaption {
+	margin-top: 4px;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.9em;
+	line-height: 1.5;
+}
+
+.permissionGroups {
+	display: grid;
+	gap: 12px;
+}
+
+.permissionGroup {
+	border-top: 1px solid var(--MI_THEME-divider);
+	padding-top: 12px;
+}
+
+.permissionGroupHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 10px;
+}
+
+.permissionGroupTitle {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.permissionGroupTitle i {
+	color: var(--MI_THEME-accent);
+}
+
+.permissionOptions {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+	gap: 10px;
+}
+
+.permissionOption {
+	display: grid;
+	grid-template-columns: 28px minmax(0, 1fr);
+	gap: 10px;
+	min-height: 94px;
+	padding: 10px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 8px;
+	background: var(--MI_THEME-bg);
+	color: var(--MI_THEME-fg);
+	text-align: left;
+	transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.permissionOption:hover,
+.permissionOption:focus-visible {
+	border-color: var(--MI_THEME-accent);
+}
+
+.permissionOptionActive {
+	border-color: var(--MI_THEME-accent);
+	background: color-mix(in srgb, var(--MI_THEME-accent) 9%, var(--MI_THEME-panel));
+}
+
+.permissionCheck {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	margin-top: 2px;
+	border-radius: 999px;
+	background: var(--MI_THEME-buttonBg);
+	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.permissionOptionActive .permissionCheck {
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
+}
+
+.permissionBody {
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+}
+
+.permissionBody strong,
+.permissionBody code,
+.permissionBody small {
+	overflow-wrap: anywhere;
+}
+
+.permissionBody code {
+	width: fit-content;
+	max-width: 100%;
+	border-radius: 4px;
+	background: var(--MI_THEME-bg);
+	padding: 2px 6px;
+	color: var(--MI_THEME-accent);
+	font-size: 0.82em;
+}
+
+.permissionBody small {
+	color: var(--MI_THEME-fgTransparentWeak);
+	line-height: 1.45;
+}
+
 .empty {
 	padding: 14px;
 	color: var(--MI_THEME-fgTransparentWeak);
@@ -355,6 +687,16 @@ definePage(() => ({
 	.item {
 		align-items: stretch;
 		flex-direction: column;
+	}
+
+	.permissionHeader,
+	.permissionGroupHeader {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.permissionOptions {
+		grid-template-columns: 1fr;
 	}
 }
 </style>
