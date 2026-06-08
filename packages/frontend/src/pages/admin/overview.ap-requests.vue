@@ -215,7 +215,7 @@ onMounted(async () => {
 						unit: 'day',
 						displayFormats: {
 							day: 'M/d',
-							month: 'Y/M',
+								month: 'y/M',
 						},
 					},
 					grid: {
