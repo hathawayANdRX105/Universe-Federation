@@ -6,8 +6,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import type { AppsRepository, AccessTokensRepository, AuthSessionsRepository } from '@/models/_.js';
+import type { MiMeta } from '@/models/Meta.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { DI } from '@/di-symbols.js';
+import { apiAccessErrors } from '@/server/api/api-access-utils.js';
 import { ApiError } from '../../../error.js';
 
 export const meta = {
@@ -71,6 +73,9 @@ export const paramDef = {
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
+		@Inject(DI.meta)
+		private readonly instanceMeta: MiMeta,
+
 		@Inject(DI.appsRepository)
 		private appsRepository: AppsRepository,
 
@@ -90,6 +95,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (app == null) {
 				throw new ApiError(meta.errors.noSuchApp);
+			}
+
+			if (this.instanceMeta.apiAccessMode === 'closed') {
+				throw new ApiError(apiAccessErrors.apiClosed);
+			}
+
+			if (app.status !== 'approved') {
+				throw new ApiError(apiAccessErrors.apiAppUnavailable);
 			}
 
 			// Fetch token

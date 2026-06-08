@@ -31,6 +31,7 @@ export const DI = {
 	aiMessagesRepository: Symbol('aiMessagesRepository'),
 	announcementsRepository: Symbol('announcementsRepository'),
 	announcementReadsRepository: Symbol('announcementReadsRepository'),
+	apiAccessGrantsRepository: Symbol('apiAccessGrantsRepository'),
 	appsRepository: Symbol('appsRepository'),
 	avatarDecorationsRepository: Symbol('avatarDecorationsRepository'),
 	latestNotesRepository: Symbol('latestNotesRepository'),

@@ -4,7 +4,7 @@
  */
 
 import { Entity, Column, PrimaryColumn, ManyToOne } from 'typeorm';
-import { type InstanceUnsignedFetchOption, instanceUnsignedFetchOptions } from '@/const.js';
+import { apiAccessModes, defaultApiPublicPermissions, type ApiAccessMode, type InstanceUnsignedFetchOption, instanceUnsignedFetchOptions } from '@/const.js';
 import { id } from './util/id.js';
 import { MiUser } from './User.js';
 
@@ -68,6 +68,45 @@ export class MiMeta {
 		default: true,
 	})
 	public disableRegistration: boolean;
+
+	@Column('enum', {
+		enum: apiAccessModes,
+		enumName: 'meta_apiaccessmode_enum',
+		default: 'open',
+	})
+	public apiAccessMode: ApiAccessMode;
+
+	@Column('boolean', {
+		default: true,
+	})
+	public enableOAuthLogin: boolean;
+
+	@Column('boolean', {
+		default: true,
+	})
+	public enableOidc: boolean;
+
+	@Column('boolean', {
+		default: false,
+	})
+	public apiRequireAppApproval: boolean;
+
+	@Column('varchar', {
+		length: 64,
+		array: true,
+		default: defaultApiPublicPermissions,
+	})
+	public apiPublicPermissions: string[];
+
+	@Column('integer', {
+		default: 60,
+	})
+	public apiDefaultTokenRateLimit: number;
+
+	@Column('integer', {
+		default: 20,
+	})
+	public apiWriteTokenRateLimit: number;
 
 	@Column('varchar', {
 		length: 1024, array: true, default: '{}',

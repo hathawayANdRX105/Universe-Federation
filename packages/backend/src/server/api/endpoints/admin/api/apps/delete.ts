@@ -1,0 +1,41 @@
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { AccessTokensRepository, AppsRepository } from '@/models/_.js';
+import { DI } from '@/di-symbols.js';
+
+export const meta = {
+	tags: ['admin', 'api'],
+
+	requireCredential: true,
+	requireAdmin: true,
+	kind: 'write:admin:api',
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		appId: { type: 'string', format: 'misskey:id' },
+	},
+	required: ['appId'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.appsRepository)
+		private readonly appsRepository: AppsRepository,
+
+		@Inject(DI.accessTokensRepository)
+		private readonly accessTokensRepository: AccessTokensRepository,
+	) {
+		super(meta, paramDef, async (ps) => {
+			await this.accessTokensRepository.update({ appId: ps.appId }, { status: 'revoked' });
+			await this.appsRepository.delete({ id: ps.appId });
+		});
+	}
+}

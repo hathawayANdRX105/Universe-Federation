@@ -1,0 +1,100 @@
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { Inject, Injectable } from '@nestjs/common';
+import { Endpoint } from '@/server/api/endpoint-base.js';
+import { ApiError } from '@/server/api/error.js';
+import type { ApiAccessGrantsRepository } from '@/models/_.js';
+import type { MiMeta } from '@/models/Meta.js';
+import { IdService } from '@/core/IdService.js';
+import { TimeService } from '@/global/TimeService.js';
+import { DI } from '@/di-symbols.js';
+import { apiAccessErrors } from '@/server/api/api-access-utils.js';
+
+export const meta = {
+	tags: ['api'],
+
+	requireCredential: true,
+	kind: 'write:account',
+
+	limit: {
+		duration: 1000 * 60,
+		max: 6,
+	},
+} as const;
+
+export const paramDef = {
+	type: 'object',
+	properties: {
+		reason: { type: 'string', minLength: 1, maxLength: 2000 },
+	},
+	required: ['reason'],
+} as const;
+
+@Injectable()
+export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
+	constructor(
+		@Inject(DI.meta)
+		private readonly instanceMeta: MiMeta,
+
+		@Inject(DI.apiAccessGrantsRepository)
+		private readonly apiAccessGrantsRepository: ApiAccessGrantsRepository,
+
+		private readonly idService: IdService,
+		private readonly timeService: TimeService,
+	) {
+		super(meta, paramDef, async (ps, me) => {
+			if (this.instanceMeta.apiAccessMode === 'closed') {
+				throw new ApiError(apiAccessErrors.apiClosed);
+			}
+
+			const now = this.timeService.date;
+			const current = await this.apiAccessGrantsRepository.findOneBy({ userId: me.id });
+
+			if (current == null) {
+				const grant = await this.apiAccessGrantsRepository.insertOne({
+					id: this.idService.gen(now.getTime()),
+					createdAt: now,
+					updatedAt: now,
+					userId: me.id,
+					status: this.instanceMeta.apiAccessMode === 'open' ? 'approved' : 'pending',
+					reason: ps.reason,
+				});
+
+				return {
+					id: grant.id,
+					status: grant.status,
+					reason: grant.reason,
+					reviewNote: grant.reviewNote,
+					createdAt: grant.createdAt.toISOString(),
+					updatedAt: grant.updatedAt.toISOString(),
+				};
+			}
+
+			if (current.status === 'suspended') {
+				throw new ApiError(apiAccessErrors.apiApprovalRequired);
+			}
+
+			const status = this.instanceMeta.apiAccessMode === 'open' ? 'approved' : 'pending';
+			await this.apiAccessGrantsRepository.update({ id: current.id }, {
+				updatedAt: now,
+				status,
+				reason: ps.reason,
+				reviewNote: null,
+				reviewerId: null,
+				reviewedAt: null,
+			});
+
+			return {
+				id: current.id,
+				status,
+				reason: ps.reason,
+				reviewNote: null,
+				createdAt: current.createdAt.toISOString(),
+				updatedAt: now.toISOString(),
+			};
+		});
+	}
+}

@@ -4,6 +4,7 @@
  */
 
 import { Entity, PrimaryColumn, Index, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { apiTokenStatuses, type ApiTokenStatus } from '@/const.js';
 import { id } from './util/id.js';
 import { MiUser } from './User.js';
 import { MiApp } from './App.js';
@@ -90,6 +91,25 @@ export class MiAccessToken {
 		default: false,
 	})
 	public fetched: boolean;
+
+	@Index()
+	@Column('enum', {
+		enum: apiTokenStatuses,
+		enumName: 'access_token_status_enum',
+		default: 'active',
+	})
+	public status: ApiTokenStatus;
+
+	@Column('integer', {
+		nullable: true,
+	})
+	public rateLimitPerMinute: number | null;
+
+	@Index()
+	@Column('boolean', {
+		default: false,
+	})
+	public isDeveloperToken: boolean;
 
 	@Column('enum', {
 		enum: accessTokenRanks,

@@ -7,10 +7,12 @@ import * as crypto from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import type { AuthSessionsRepository, AppsRepository, AccessTokensRepository } from '@/models/_.js';
+import type { MiMeta } from '@/models/Meta.js';
 import { IdService } from '@/core/IdService.js';
 import { TimeService } from '@/global/TimeService.js';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
 import { DI } from '@/di-symbols.js';
+import { apiAccessErrors } from '@/server/api/api-access-utils.js';
 import { ApiError } from '../../error.js';
 
 export const meta = {
@@ -46,6 +48,9 @@ export const paramDef = {
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
+		@Inject(DI.meta)
+		private readonly instanceMeta: MiMeta,
+
 		@Inject(DI.appsRepository)
 		private appsRepository: AppsRepository,
 
@@ -77,9 +82,15 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				},
 			});
 
-			if (!exist) {
-				const app = await this.appsRepository.findOneByOrFail({ id: session.appId });
+			const app = await this.appsRepository.findOneByOrFail({ id: session.appId });
+			if (this.instanceMeta.apiAccessMode === 'closed') {
+				throw new ApiError(apiAccessErrors.apiClosed);
+			}
+			if (app.status !== 'approved') {
+				throw new ApiError(apiAccessErrors.apiAppUnavailable);
+			}
 
+			if (!exist) {
 				// Generate Hash
 				const sha256 = crypto.createHash('sha256');
 				sha256.update(accessToken + app.secret);

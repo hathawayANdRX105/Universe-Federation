@@ -93,6 +93,8 @@ export const permissions = [
 	'write:admin:reject-quotes',
 	'write:admin:restart-migration',
 	'write:admin:meta',
+	'read:admin:api',
+	'write:admin:api',
 	'write:admin:user-note',
 	'write:admin:roles',
 	'read:admin:roles',

@@ -96,7 +96,7 @@ export class AuthenticateService {
 					() => this.appsRepository.findOneByOrFail({ id: accessToken.appId! }));
 
 				return [user, {
-					id: accessToken.id,
+					...accessToken,
 					permission: app.permission,
 					appId: app.id,
 					app,

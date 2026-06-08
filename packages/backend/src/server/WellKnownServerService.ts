@@ -116,6 +116,15 @@ export class WellKnownServerService {
 			return this.oauth2ProviderService.generateRFC8414();
 		});
 
+		fastify.get('/.well-known/openid-configuration', async (request, reply) => {
+			if (!this.meta.enableOAuthLogin || !this.meta.enableOidc) {
+				reply.code(404);
+				return;
+			}
+
+			return this.oauth2ProviderService.generateRFC8414();
+		});
+
 		/* TODO
 fastify.get('/.well-known/change-password', async (request, reply) => {
 });

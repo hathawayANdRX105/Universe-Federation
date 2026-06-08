@@ -44,7 +44,15 @@ export class AppEntityService {
 			id: app.id,
 			name: app.name,
 			callbackUrl: app.callbackUrl,
+			callbackUrls: app.callbackUrls?.length ? app.callbackUrls : (app.callbackUrl ? [app.callbackUrl] : []),
 			permission: app.permission,
+			status: app.status,
+			websiteUrl: app.websiteUrl,
+			iconUrl: app.iconUrl,
+			rateLimitPerMinute: app.rateLimitPerMinute,
+			reviewNote: app.reviewNote,
+			approvedAt: app.approvedAt?.toISOString() ?? null,
+			suspendedAt: app.suspendedAt?.toISOString() ?? null,
 			...(opts.includeSecret ? { secret: app.secret } : {}),
 			...(me ? {
 				isAuthorized: await this.accessTokensRepository.countBy({

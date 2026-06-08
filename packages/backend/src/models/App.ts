@@ -4,6 +4,7 @@
  */
 
 import { Entity, PrimaryColumn, Column, Index, ManyToOne } from 'typeorm';
+import { apiAppStatuses, type ApiAppStatus } from '@/const.js';
 import { id } from './util/id.js';
 import { MiUser } from './User.js';
 
@@ -56,4 +57,50 @@ export class MiApp {
 		comment: 'The callbackUrl of the App.',
 	})
 	public callbackUrl: string | null;
+
+	@Column('varchar', {
+		length: 512, array: true, default: '{}',
+		comment: 'Allowed OAuth/OIDC redirect URIs.',
+	})
+	public callbackUrls: string[];
+
+	@Index()
+	@Column('enum', {
+		enum: apiAppStatuses,
+		enumName: 'app_status_enum',
+		default: 'approved',
+	})
+	public status: ApiAppStatus;
+
+	@Column('varchar', {
+		length: 1024,
+		nullable: true,
+	})
+	public websiteUrl: string | null;
+
+	@Column('varchar', {
+		length: 512,
+		nullable: true,
+	})
+	public iconUrl: string | null;
+
+	@Column('integer', {
+		nullable: true,
+	})
+	public rateLimitPerMinute: number | null;
+
+	@Column('timestamp with time zone', {
+		nullable: true,
+	})
+	public approvedAt: Date | null;
+
+	@Column('timestamp with time zone', {
+		nullable: true,
+	})
+	public suspendedAt: Date | null;
+
+	@Column('text', {
+		nullable: true,
+	})
+	public reviewNote: string | null;
 }

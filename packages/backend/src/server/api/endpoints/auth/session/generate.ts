@@ -7,9 +7,11 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import type { AppsRepository, AuthSessionsRepository } from '@/models/_.js';
+import type { MiMeta } from '@/models/Meta.js';
 import { IdService } from '@/core/IdService.js';
 import type { Config } from '@/config.js';
 import { DI } from '@/di-symbols.js';
+import { apiAccessErrors } from '@/server/api/api-access-utils.js';
 import { ApiError } from '../../../error.js';
 
 export const meta = {
@@ -59,6 +61,9 @@ export const paramDef = {
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
+		@Inject(DI.meta)
+		private readonly instanceMeta: MiMeta,
+
 		@Inject(DI.config)
 		private config: Config,
 
@@ -78,6 +83,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (app == null) {
 				throw new ApiError(meta.errors.noSuchApp);
+			}
+
+			if (this.instanceMeta.apiAccessMode === 'closed') {
+				throw new ApiError(apiAccessErrors.apiClosed);
+			}
+
+			if (app.status !== 'approved') {
+				throw new ApiError(apiAccessErrors.apiAppUnavailable);
 			}
 
 			// Generate token

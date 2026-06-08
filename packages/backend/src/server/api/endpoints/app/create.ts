@@ -5,12 +5,15 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
+import { ApiError } from '@/server/api/error.js';
 import type { AppsRepository } from '@/models/_.js';
+import type { MiMeta } from '@/models/Meta.js';
 import { IdService } from '@/core/IdService.js';
 import { unique } from '@/misc/prelude/array.js';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
 import { AppEntityService } from '@/core/entities/AppEntityService.js';
 import { DI } from '@/di-symbols.js';
+import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope } from '@/server/api/api-access-utils.js';
 
 export const meta = {
 	tags: ['app'],
@@ -46,6 +49,9 @@ export const paramDef = {
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
+		@Inject(DI.meta)
+		private readonly instanceMeta: MiMeta,
+
 		@Inject(DI.appsRepository)
 		private appsRepository: AppsRepository,
 
@@ -53,11 +59,20 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private idService: IdService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
+			if (this.instanceMeta.apiAccessMode !== 'open' || this.instanceMeta.apiRequireAppApproval) {
+				throw new ApiError(apiAccessErrors.apiApprovalRequired);
+			}
+
 			// Generate secret
 			const secret = secureRndstr(32);
 
 			// for backward compatibility
-			const permission = unique(ps.permission.map(v => v.replace(/^(.+)(\/|-)(read|write)$/, '$3:$1')));
+			const publicPermissions = getApiPublicPermissions(this.instanceMeta);
+			const permission = unique(ps.permission.map(v => v.replace(/^(.+)(\/|-)(read|write)$/, '$3:$1')))
+				.filter(scope => !isAdminApiScope(scope) && publicPermissions.includes(scope));
+			if (permission.length === 0) {
+				throw new ApiError(apiAccessErrors.apiScopeDisabled);
+			}
 
 			// Create account
 			const app = await this.appsRepository.insertOne({
@@ -67,6 +82,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				description: ps.description,
 				permission,
 				callbackUrl: ps.callbackUrl,
+				callbackUrls: ps.callbackUrl ? [ps.callbackUrl] : [],
+				status: 'approved',
+				approvedAt: new Date(),
 				secret: secret,
 			});
 

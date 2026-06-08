@@ -24,6 +24,7 @@ import { MiAiProvider } from '@/models/AiProvider.js';
 import { MiAnnouncement } from '@/models/Announcement.js';
 import { MiAnnouncementRead } from '@/models/AnnouncementRead.js';
 import { MiAntenna } from '@/models/Antenna.js';
+import { MiApiAccessGrant } from '@/models/ApiAccessGrant.js';
 import { MiApp } from '@/models/App.js';
 import { MiAvatarDecoration } from '@/models/AvatarDecoration.js';
 import { MiAuthSession } from '@/models/AuthSession.js';
@@ -232,6 +233,7 @@ export const entities = [
 	MiAnnouncementRead,
 	MiMeta,
 	MiInstance,
+	MiApiAccessGrant,
 	MiApp,
 	MiAvatarDecoration,
 	MiAuthSession,

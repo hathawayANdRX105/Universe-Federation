@@ -82,6 +82,37 @@ export type InstanceUnsignedFetchOption = (typeof instanceUnsignedFetchOptions)[
 export const userUnsignedFetchOptions = ['never', 'always', 'essential', 'staff'] as const;
 export type UserUnsignedFetchOption = (typeof userUnsignedFetchOptions)[number];
 
+export const apiAccessModes = ['approval', 'open', 'closed'] as const;
+export type ApiAccessMode = typeof apiAccessModes[number];
+
+export const apiAccessGrantStatuses = ['none', 'pending', 'approved', 'rejected', 'suspended'] as const;
+export type ApiAccessGrantStatus = typeof apiAccessGrantStatuses[number];
+
+export const apiAppStatuses = ['pending', 'approved', 'suspended', 'rejected'] as const;
+export type ApiAppStatus = typeof apiAppStatuses[number];
+
+export const apiTokenStatuses = ['active', 'suspended', 'revoked'] as const;
+export type ApiTokenStatus = typeof apiTokenStatuses[number];
+
+export const defaultApiPublicPermissions = [
+	'read:account',
+	'write:notes',
+	'read:drive',
+	'write:drive',
+	'read:channels',
+	'write:channels',
+	'read:following',
+	'write:following',
+	'read:blocks',
+	'write:blocks',
+	'read:mutes',
+	'write:mutes',
+	'read:notifications',
+	'write:notifications',
+	'read:chat',
+	'write:chat',
+] as const;
+
 // Keep in sync with frontend consts.ts
 export const permissions = [
 	'read:account',
@@ -153,6 +184,8 @@ export const permissions = [
 	'write:admin:reject-quotes',
 	'write:admin:restart-migration',
 	'write:admin:meta',
+	'read:admin:api',
+	'write:admin:api',
 	'write:admin:user-note',
 	'write:admin:roles',
 	'read:admin:roles',

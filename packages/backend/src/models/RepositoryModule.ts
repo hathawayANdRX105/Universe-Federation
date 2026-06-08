@@ -16,6 +16,7 @@ import {
 	MiAnnouncement,
 	MiAnnouncementRead,
 	MiAntenna,
+	MiApiAccessGrant,
 	MiApp,
 	MiAuthSession,
 	MiAvatarDecoration,
@@ -134,6 +135,12 @@ const $announcementsRepository: Provider = {
 const $announcementReadsRepository: Provider = {
 	provide: DI.announcementReadsRepository,
 	useFactory: (db: DataSource) => db.getRepository(MiAnnouncementRead).extend(miRepository as MiRepository<MiAnnouncementRead>),
+	inject: [DI.db],
+};
+
+const $apiAccessGrantsRepository: Provider = {
+	provide: DI.apiAccessGrantsRepository,
+	useFactory: (db: DataSource) => db.getRepository(MiApiAccessGrant).extend(miRepository as MiRepository<MiApiAccessGrant>),
 	inject: [DI.db],
 };
 
@@ -608,6 +615,7 @@ export const repositoryProviders: Provider[] = [
 		$aiMessagesRepository,
 		$announcementsRepository,
 		$announcementReadsRepository,
+		$apiAccessGrantsRepository,
 		$appsRepository,
 		$avatarDecorationsRepository,
 		$latestNotesRepository,

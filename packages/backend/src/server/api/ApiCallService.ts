@@ -21,6 +21,7 @@ import type { Config } from '@/config.js';
 import { sendRateLimitHeaders } from '@/misc/rate-limit-utils.js';
 import { SkRateLimiterService } from '@/server/SkRateLimiterService.js';
 import { ServerUtilityService } from '@/server/ServerUtilityService.js';
+import type { ApiAccessGrantsRepository } from '@/models/_.js';
 import { TimeService } from '@/global/TimeService.js';
 import { CacheManagementService, type ManagedMemoryKVCache } from '@/global/CacheManagementService.js';
 import { EnvService } from '@/global/EnvService.js';
@@ -29,6 +30,7 @@ import { renderFullError } from '@/misc/render-full-error.js';
 import { ApiError } from './error.js';
 import { ApiLoggerService } from './ApiLoggerService.js';
 import { AuthenticateService, AuthenticationError } from './AuthenticateService.js';
+import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope, isWriteApiScope } from './api-access-utils.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { IEndpointMeta, IEndpoint } from './endpoints.js';
 
@@ -52,6 +54,9 @@ export class ApiCallService {
 
 		@Inject(DI.userIpsRepository)
 		private userIpsRepository: UserIpsRepository,
+
+		@Inject(DI.apiAccessGrantsRepository)
+		private apiAccessGrantsRepository: ApiAccessGrantsRepository,
 
 		private authenticateService: AuthenticateService,
 		private rateLimiterService: SkRateLimiterService,
@@ -419,6 +424,10 @@ export class ApiCallService {
 			});
 		}
 
+		if (token) {
+			await this.assertDeveloperApiAccess(ep, user, token, reply);
+		}
+
 		// Cast non JSON input
 		if ((ep.meta.requireFile || request.method === 'GET') && ep.params.properties) {
 			for (const k of Object.keys(ep.params.properties)) {
@@ -449,6 +458,63 @@ export class ApiCallService {
 		} else {
 			return await ep.exec(data, user, token, file, request.ip, request.headers)
 				.catch((err: Error) => this.#onExecError(ep, data, err, user?.id));
+		}
+	}
+
+	@bindThis
+	private async assertDeveloperApiAccess(
+		ep: IEndpoint,
+		user: MiLocalUser | null | undefined,
+		token: MiAccessToken,
+		reply: FastifyReply,
+	): Promise<void> {
+		if (token.status && token.status !== 'active') {
+			throw new ApiError(apiAccessErrors.apiTokenUnavailable);
+		}
+
+		if (token.app && token.app.status !== 'approved') {
+			throw new ApiError(apiAccessErrors.apiAppUnavailable);
+		}
+
+		if (this.meta.apiAccessMode === 'closed') {
+			throw new ApiError(apiAccessErrors.apiClosed);
+		}
+
+		const developerUserId = token.app ? token.app.userId : token.userId;
+		if (this.meta.apiAccessMode === 'approval' && developerUserId != null && this.meta.rootUserId !== developerUserId) {
+			const grant = await this.apiAccessGrantsRepository.findOneBy({ userId: developerUserId });
+			if (grant?.status !== 'approved') {
+				throw new ApiError(apiAccessErrors.apiApprovalRequired);
+			}
+		}
+
+		if (ep.meta.kind && !isAdminApiScope(ep.meta.kind)) {
+			const allowedPermissions = getApiPublicPermissions(this.meta);
+			if (!allowedPermissions.includes(ep.meta.kind)) {
+				throw new ApiError(apiAccessErrors.apiScopeDisabled);
+			}
+		}
+
+		const rateLimitPerMinute = token.rateLimitPerMinute
+			?? token.app?.rateLimitPerMinute
+			?? (isWriteApiScope(ep.meta.kind) ? this.meta.apiWriteTokenRateLimit : this.meta.apiDefaultTokenRateLimit);
+		if (rateLimitPerMinute > 0 && this.envService.env.NODE_ENV !== 'test') {
+			const info = await this.rateLimiterService.limit({
+				key: `developer-api:${token.id}:${isWriteApiScope(ep.meta.kind) ? 'write' : 'read'}`,
+				duration: 1000 * 60,
+				max: Math.max(1, rateLimitPerMinute),
+			}, user ?? token.userId);
+
+			sendRateLimitHeaders(reply, info);
+
+			if (info.blocked) {
+				throw new ApiError({
+					message: 'API token rate limit exceeded. Please try again later.',
+					code: 'API_TOKEN_RATE_LIMIT_EXCEEDED',
+					id: 'e7f8be2a-01ec-47dc-bd34-420d9f8ecb57',
+					httpStatusCode: 429,
+				}, info);
+			}
 		}
 	}
 }
