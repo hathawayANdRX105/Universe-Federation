@@ -151,6 +151,12 @@ describe('chat room scroll state', () => {
 		assert.match(roomSource, /const sinceId = findNewestPersistedMessageId\(\);[\s\S]*flushIncomingMessagesNow\(\);[\s\S]*scrollToLatest\('instant', \{ flushReadReceipt: true \}\);[\s\S]*await fetchLatestGap\(sinceId\);[\s\S]*await scrollToLatestAfterLayout\(\{ flushReadReceipt: true, fillHistory: true \}\);/);
 	});
 
+	test('keeps initial latest scrolling isolated from history observers', () => {
+		assert.match(roomSource, /async function scrollToLatestAfterLayout\(options\?: \{ flushReadReceipt\?: boolean; fillHistory\?: boolean \}\) \{[\s\S]*beginScrollRestoration\(\);[\s\S]*try \{[\s\S]*scrollToLatest\('instant'\);[\s\S]*await fillInitialScrollableHistory\(\);[\s\S]*\} finally \{[\s\S]*endScrollRestoration\(\);[\s\S]*\}/);
+		assert.match(roomSource, /if \(!isRestoringHistoryScroll\.value && canFetchMore\.value && !moreFetching\.value && messages\.value\.length > 0 && historyFetchArmed && historyDistance < SCROLL_HISTORY_THRESHOLD\) \{/);
+		assert.match(roomSource, /if \(!isRestoringHistoryScroll\.value && canFetchNewer\.value && !newerFetching\.value && messages\.value\.length > 0 && newerFetchArmed && latestDistance < SCROLL_TAIL_THRESHOLD\) \{/);
+	});
+
 	test('does not treat hidden chat tabs as being at latest', () => {
 		assert.match(roomSource, /const tab = ref\('chat'\);/);
 		assert.match(roomSource, /function canUseChatScrollMetrics\(\) \{[\s\S]*tab\.value === 'chat'[\s\S]*chatPaneEl\.value != null[\s\S]*chatPaneEl\.value\.clientHeight > 0/);

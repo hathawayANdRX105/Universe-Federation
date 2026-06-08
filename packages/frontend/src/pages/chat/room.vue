@@ -1178,32 +1178,38 @@ async function finishInitializeRender() {
 }
 
 async function scrollToLatestAfterLayout(options?: { flushReadReceipt?: boolean; fillHistory?: boolean }) {
-	let stableFrames = 0;
-	let previousMaxScrollTop = -1;
+	beginScrollRestoration();
 
-	for (let i = 0; i < 10; i++) {
-		await nextTick();
-		await waitAnimationFrame();
+	try {
+		let stableFrames = 0;
+		let previousMaxScrollTop = -1;
 
-		const scrollContainer = timelineEl.value == null ? null : getScrollContainer(timelineEl.value);
-		if (scrollContainer == null) continue;
-		if (scrollContainer.clientHeight <= 0) continue;
+		for (let i = 0; i < 10; i++) {
+			await nextTick();
+			await waitAnimationFrame();
 
-		const { maxScrollTop } = getChatScrollMetrics(scrollContainer);
-		scrollToLatest('instant');
+			const scrollContainer = timelineEl.value == null ? null : getScrollContainer(timelineEl.value);
+			if (scrollContainer == null) continue;
+			if (scrollContainer.clientHeight <= 0) continue;
 
-		if (maxScrollTop === previousMaxScrollTop) {
-			stableFrames++;
-			if (stableFrames >= 2) break;
-		} else {
-			stableFrames = 0;
-			previousMaxScrollTop = maxScrollTop;
+			const { maxScrollTop } = getChatScrollMetrics(scrollContainer);
+			scrollToLatest('instant');
+
+			if (maxScrollTop === previousMaxScrollTop) {
+				stableFrames++;
+				if (stableFrames >= 2) break;
+			} else {
+				stableFrames = 0;
+				previousMaxScrollTop = maxScrollTop;
+			}
 		}
-	}
 
-	scrollToLatest('instant', { flushReadReceipt: options?.flushReadReceipt });
-	if (options?.fillHistory === true) {
-		await fillInitialScrollableHistory();
+		scrollToLatest('instant', { flushReadReceipt: options?.flushReadReceipt });
+		if (options?.fillHistory === true) {
+			await fillInitialScrollableHistory();
+		}
+	} finally {
+		endScrollRestoration();
 	}
 }
 
