@@ -28,6 +28,7 @@ export type Keys = (
 	'themeId' |
 	'customCss' |
 	'chatMessageDrafts' |
+	'exploreSearchHistory' |
 	'scratchpad' |
 	'debug' |
 	'preferences' |

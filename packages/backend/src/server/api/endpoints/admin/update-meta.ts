@@ -12,6 +12,7 @@ import { MAX_CHAT_ROOM_MEMBER_LIMIT, MIN_CHAT_ROOM_MEMBER_LIMIT } from '@/core/C
 import { instanceUnsignedFetchOptions } from '@/const.js';
 import { DI } from '@/di-symbols.js';
 import { normalizeForSearch } from '@/misc/normalize-for-search.js';
+import { SearchTrendService } from '@/core/SearchTrendService.js';
 
 export const meta = {
 	tags: ['admin'],
@@ -31,6 +32,11 @@ export const paramDef = {
 			},
 		},
 		hiddenTags: {
+			type: 'array', nullable: true, items: {
+				type: 'string',
+			},
+		},
+		hiddenSearchTrendTerms: {
 			type: 'array', nullable: true, items: {
 				type: 'string',
 			},
@@ -247,6 +253,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 		private metaService: MetaService,
 		private moderationLogService: ModerationLogService,
+		private searchTrendService: SearchTrendService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			const set = {} as Partial<MiMeta>;
@@ -263,6 +270,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				set.hiddenTags = Array.from(new Set(ps.hiddenTags
 					.map(x => normalizeForSearch(x.trim().replace(/^#+/, '')))
 					.filter(Boolean)));
+			}
+
+			if (Array.isArray(ps.hiddenSearchTrendTerms)) {
+				set.hiddenSearchTrendTerms = this.searchTrendService.normalizeHiddenTerms(ps.hiddenSearchTrendTerms);
 			}
 
 			if (Array.isArray(ps.blockedHosts)) {
@@ -826,6 +837,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			const before = Object.assign({}, this.serverSettings);
 			const after = await this.metaService.update(set);
+
+			if (set.hiddenSearchTrendTerms != null) {
+				await Promise.all(set.hiddenSearchTrendTerms.map(term => this.searchTrendService.removeTermFromCurrentRankings(term)));
+			}
 
 			this.moderationLogService.log(me, 'updateServerSettings', {
 				before: sanitize(before),

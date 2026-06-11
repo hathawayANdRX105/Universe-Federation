@@ -75,8 +75,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 						:class="$style.trendRow"
 						@click="openTrend(trend.type, trend.term)"
 					>
-						<span :class="$style.trendMeta">{{ trend.label }}</span>
-						<span :class="$style.trendTitle">{{ trend.type === 'tag' ? `#${trend.term}` : trend.term }}</span>
+						<span :class="$style.trendBody">
+							<span :class="$style.trendMeta">{{ trend.label }}</span>
+							<span :class="$style.trendTitle">{{ trend.type === 'tag' ? `#${trend.term}` : trend.term }}</span>
+						</span>
+						<button
+							v-if="iAmAdmin"
+							class="_button"
+							:class="$style.trendHideButton"
+							type="button"
+							title="隐藏热词"
+							@click.stop="hideTrend(trend.term)"
+						>
+							<i class="ti ti-x"></i>
+						</button>
 					</button>
 				</div>
 			</section>
@@ -131,11 +143,13 @@ import MkFollowButton from '@/components/MkFollowButton.vue';
 import MkPostForm from '@/components/MkPostForm.vue';
 import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
-import { $i } from '@/i.js';
+import { $i, iAmAdmin } from '@/i.js';
 import { definePage } from '@/page.js';
 import { useRouter } from '@/router';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { userPage } from '@/filters/user.js';
+import * as os from '@/os.js';
+import { buildSearchTrendRows } from '@/utility/search-trends.js';
 
 provide('shouldOmitHeaderTitle', true);
 
@@ -143,7 +157,7 @@ type HomeTab = 'forYou' | 'following' | 'latestReplies';
 type DiscoverySections = Misskey.Endpoints['notes/discovery-sections']['res'];
 
 const sidebarLimits = {
-	trends: 4,
+	trends: 10,
 	channels: 3,
 	users: 3,
 	tutorialNotes: 2,
@@ -213,20 +227,7 @@ const timelineKey = computed(() => [
 	homeTab.value === 'following' ? 'strictFollowing' : 'withFollowedChannels',
 ].join(':'));
 
-const trendRows = computed(() => {
-	const rows: { type: 'search' | 'tag'; term: string; label: string }[] = [];
-	const seen = new Set<string>();
-	const push = (type: 'search' | 'tag', term: string, label: string) => {
-		const key = `${type}:${term}`;
-		if (seen.has(key)) return;
-		seen.add(key);
-		rows.push({ type, term, label });
-	};
-	for (const term of searchTrends.value.popularSearches) push('search', term, i18n.ts.popularSearches);
-	for (const term of searchTrends.value.hashtags) push('tag', term, i18n.ts.popularTags);
-	for (const term of searchTrends.value.recentTerms) push('search', term, i18n.ts.recentContentTerms);
-	return rows.slice(0, sidebarLimits.trends);
-});
+const trendRows = computed(() => buildSearchTrendRows(searchTrends.value, sidebarLimits.trends));
 const visibleChannels = computed(() => discoverySections.value.channels.slice(0, sidebarLimits.channels));
 const visibleRecommendedUsers = computed(() => recommendedUsers.value.slice(0, sidebarLimits.users));
 const visibleTutorialNotes = computed(() => discoverySections.value.tutorialNotes.slice(0, sidebarLimits.tutorialNotes));
@@ -282,6 +283,30 @@ function openTrend(type: 'search' | 'tag', term: string): void {
 	} else {
 		router.push(`/explore?query=${encodeURIComponent(term)}`);
 	}
+}
+
+async function hideTrend(term: string): Promise<void> {
+	if (!iAmAdmin) return;
+	const { canceled } = await os.confirm({
+		type: 'warning',
+		title: '隐藏热词',
+		text: `只会从热门讨论、首页搜索推荐和探索页展示中隐藏“${term}”，不会删除帖子，也不影响手动搜索。`,
+		okText: i18n.ts.hide,
+	});
+	if (canceled) return;
+
+	removeLocalTrend(term);
+	await os.apiWithDialog<{ hiddenSearchTrendTerms: string[] }, 'admin/search-trends/hide'>('admin/search-trends/hide', { term });
+	await loadSidebarData();
+}
+
+function removeLocalTrend(term: string): void {
+	const remove = (items: string[]) => items.filter(item => item !== term);
+	searchTrends.value = {
+		popularSearches: remove(searchTrends.value.popularSearches),
+		recentTerms: remove(searchTrends.value.recentTerms),
+		hashtags: remove(searchTrends.value.hashtags),
+	};
 }
 
 function getRightRailPageScroller(): HTMLElement | null {
@@ -349,7 +374,7 @@ function onMainWheel(ev: WheelEvent): void {
 
 async function loadSidebarData(): Promise<void> {
 	const [sections, users] = await Promise.all([
-		misskeyApi<DiscoverySections>('notes/discovery-sections', { limit: 4 }).catch(() => null),
+		misskeyApi<DiscoverySections>('notes/discovery-sections', { limit: 10 }).catch(() => null),
 		misskeyApi<Misskey.entities.UserDetailed[]>('users', {
 			limit: sidebarLimits.users,
 			origin: 'local',
@@ -560,24 +585,48 @@ definePage(() => ({
 
 /* trends */
 .trendRow {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
 	width: 100%;
-	gap: 2px;
+	gap: 8px;
 	padding: 10px 16px;
 	text-align: left;
+}
+
+.trendBody {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
 }
 
 .trendTitle {
 	font-weight: 700;
 	font-size: .98em;
 	color: var(--MI_THEME-fg);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .trendMeta {
 	font-size: .8em;
 	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.trendHideButton {
+	display: grid;
+	place-items: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 999px;
+	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.trendHideButton:hover {
+	color: var(--MI_THEME-error);
+	background: color-mix(in srgb, var(--MI_THEME-error) 10%, transparent);
 }
 
 /* channels */

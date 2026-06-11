@@ -17,6 +17,7 @@ import { TimeService } from '@/global/TimeService.js';
 import { DI } from '@/di-symbols.js';
 
 const DISCOVERY_WINDOW = 1000 * 60 * 60 * 24 * 7;
+const DISCOVERY_FRESH_PRIORITY_HOURS = 48;
 
 export const meta = {
 	tags: ['notes'],
@@ -152,67 +153,92 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	}
 
 	private async getCoverNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1]) {
-		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 48);
+		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * DISCOVERY_FRESH_PRIORITY_HOURS);
+		const fresh3dId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 3);
 		const query = this.baseNotesQuery(sinceId, me)
 			.andWhere('note.fileIds != \'{}\'')
 			.andWhere('user.isBot = FALSE')
+			.andWhere(new Brackets(qb => {
+				qb.orWhere('note.id > :fresh3dId');
+				qb.orWhere('note."repliesCount" + note."renoteCount" + note."clippedCount" >= 2');
+				qb.orWhere('note.id = ANY(COALESCE(channel."pinnedNoteIds", ARRAY[]::varchar[]))');
+			}))
 			.orderBy(`(
-				note."repliesCount" * 5
-				+ note."renoteCount" * 4
-				+ note."clippedCount" * 5
-				+ CASE WHEN note.id > :fresh48hId THEN 10 ELSE -12 END
+				note."repliesCount" * 4
+				+ note."renoteCount" * 3
+				+ note."clippedCount" * 4
+				+ CASE WHEN note.id > :fresh48hId THEN 46 ELSE -34 END
+				+ CASE WHEN note.id > :fresh3dId THEN 12 ELSE -18 END
 			)`, 'DESC')
 			.addOrderBy('note.id', 'DESC')
 			.setParameter('fresh48hId', fresh48hId)
+			.setParameter('fresh3dId', fresh3dId)
 			.limit(limit);
 		return this.noteEntityService.packMany(await query.getMany(), me);
 	}
 
 	private async getHotNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1]) {
-		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 48);
+		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * DISCOVERY_FRESH_PRIORITY_HOURS);
+		const fresh3dId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 3);
 		const query = this.baseNotesQuery(sinceId, me)
 			.andWhere('user.isBot = FALSE')
 			.andWhere('LENGTH(COALESCE(note.text, \'\')) >= 20')
 			.andWhere(new Brackets(qb => {
+				qb.orWhere('note.id > :fresh48hId');
 				qb.orWhere('note."repliesCount" > 0');
 				qb.orWhere('note."renoteCount" > 0');
 				qb.orWhere('note."clippedCount" > 0');
 				qb.orWhere('note."channelId" IS NOT NULL');
 			}))
+			.andWhere(new Brackets(qb => {
+				qb.orWhere('note.id > :fresh3dId');
+				qb.orWhere('note."repliesCount" + note."renoteCount" + note."clippedCount" >= 2');
+				qb.orWhere('note.id = ANY(COALESCE(channel."pinnedNoteIds", ARRAY[]::varchar[]))');
+			}))
 			.orderBy(`(
-				note."repliesCount" * 6
-				+ note."renoteCount" * 5
-				+ note."clippedCount" * 6
+				note."repliesCount" * 5
+				+ note."renoteCount" * 4
+				+ note."clippedCount" * 5
 				+ CASE WHEN note."channelId" IS NOT NULL THEN 8 ELSE 0 END
-				+ CASE WHEN note.id > :fresh48hId THEN 14 ELSE -18 END
+				+ CASE WHEN note.id > :fresh48hId THEN 52 ELSE -38 END
+				+ CASE WHEN note.id > :fresh3dId THEN 12 ELSE -18 END
 				+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|求助|ai|claude|codex|gpt)' THEN 12 ELSE 0 END
 			)`, 'DESC')
 			.addOrderBy('note.id', 'DESC')
 			.setParameter('fresh48hId', fresh48hId)
+			.setParameter('fresh3dId', fresh3dId)
 			.limit(limit);
 		return this.noteEntityService.packMany(await query.getMany(), me);
 	}
 
 	private async getTutorialNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1]) {
-		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 48);
+		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * DISCOVERY_FRESH_PRIORITY_HOURS);
+		const fresh3dId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 3);
 		const query = this.baseNotesQuery(sinceId, me)
 			.andWhere('user.isBot = FALSE')
 			.andWhere(new Brackets(qb => {
 				qb.orWhere('note.tags && CAST(:tutorialTags AS varchar[])');
 				qb.orWhere('LOWER(COALESCE(note.text, \'\')) ~ :tutorialPattern');
 			}))
+			.andWhere(new Brackets(qb => {
+				qb.orWhere('note.id > :fresh3dId');
+				qb.orWhere('note."repliesCount" + note."renoteCount" + note."clippedCount" >= 2');
+				qb.orWhere('LENGTH(COALESCE(note.text, \'\')) >= 120');
+			}))
 			.setParameter('tutorialTags', ['教程', 'AI', 'ai', 'Token', 'token', '资源', '指南', 'Bug', 'bug', '问题', '讨论'])
 			.setParameter('tutorialPattern', '教程|指南|配置|部署|api|claude|codex|ai|gpt|token|key|资源|问题|讨论|求助')
 			.orderBy(`(
-				note."repliesCount" * 5
-				+ note."renoteCount" * 4
-				+ note."clippedCount" * 5
+				note."repliesCount" * 4
+				+ note."renoteCount" * 3
+				+ note."clippedCount" * 4
 				+ CASE WHEN note."channelId" IS NOT NULL THEN 10 ELSE 0 END
-				+ CASE WHEN note.id > :fresh48hId THEN 10 ELSE -10 END
+				+ CASE WHEN note.id > :fresh48hId THEN 46 ELSE -36 END
+				+ CASE WHEN note.id > :fresh3dId THEN 12 ELSE -18 END
 				+ CASE WHEN LENGTH(COALESCE(note.text, '')) >= 80 THEN 10 ELSE 0 END
 			)`, 'DESC')
 			.addOrderBy('note.id', 'DESC')
 			.setParameter('fresh48hId', fresh48hId)
+			.setParameter('fresh3dId', fresh3dId)
 			.limit(limit);
 		return this.noteEntityService.packMany(await query.getMany(), me);
 	}

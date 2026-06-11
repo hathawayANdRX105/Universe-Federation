@@ -218,6 +218,14 @@ export type Endpoints = Overwrite<
 			req: EmptyRequest;
 			res: AiProvider[];
 		},
+		'admin/search-trends/hide': {
+			req: {
+				term: string;
+			};
+			res: {
+				hiddenSearchTrendTerms: string[];
+			};
+		},
 		'admin/ai/providers/create': {
 			req: {
 				name: string;

@@ -24,6 +24,7 @@ const SEARCH_WINDOW_TTL_SEC = 60 * 60 * 24 * 3;
 const SEARCH_MIN_SCORE = 2;
 const POST_TERMS_WINDOW_MS = 1000 * 60 * 60 * 24 * 3;
 const LOW_VALUE_TERMS = new Set(['签到', '打卡']);
+const MAX_HIDDEN_SEARCH_TREND_TERMS = 200;
 
 @Injectable()
 export class SearchTrendService {
@@ -67,6 +68,34 @@ export class SearchTrendService {
 		]);
 
 		return { popularSearches, recentTerms, hashtags };
+	}
+
+	@bindThis
+	public async hideTerm(rawTerm: string): Promise<string[]> {
+		const term = this.normalizeTerm(rawTerm, { ignoreHidden: true });
+		if (term == null) return this.normalizeHiddenTerms(this.meta.hiddenSearchTrendTerms ?? []);
+
+		return this.normalizeHiddenTerms([
+			...(this.meta.hiddenSearchTrendTerms ?? []),
+			term,
+		]);
+	}
+
+	@bindThis
+	public async removeTermFromCurrentRankings(rawTerm: string): Promise<void> {
+		const term = this.normalizeTerm(rawTerm, { ignoreHidden: true });
+		if (term == null) return;
+
+		const currentWindow = this.getCurrentSearchWindow();
+		const redisPipeline = this.redisClient.pipeline();
+		for (const key of [
+			`searchTrend:hour:${currentWindow}`,
+			`searchTrend:hour:${currentWindow - 1}`,
+			`searchTrend:day:${this.getCurrentUtcDay()}`,
+		]) {
+			redisPipeline.zrem(key, term);
+		}
+		await redisPipeline.exec();
 	}
 
 	private async getPopularSearches(limit: number): Promise<string[]> {
@@ -163,15 +192,32 @@ export class SearchTrendService {
 		return [...terms].slice(0, 12);
 	}
 
-	private normalizeTerm(rawTerm: string): string | null {
+	private normalizeTerm(rawTerm: string, options?: { ignoreHidden?: boolean }): string | null {
 		const term = normalizeForSearch(rawTerm.replace(/^#/, '').trim()).slice(0, 40);
 		if (term.length < 2) return null;
 		if (LOW_VALUE_TERMS.has(term)) return null;
 		if (/^https?:\/\//i.test(term)) return null;
 		if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(term)) return null;
 		if (this.meta.hiddenTags.map(t => normalizeForSearch(t)).includes(term)) return null;
+		if (!options?.ignoreHidden && this.isHiddenTerm(term)) return null;
 		if (this.utilityService.isKeyWordIncluded(term, this.meta.sensitiveWords)) return null;
 		return term;
+	}
+
+	public normalizeHiddenTerms(terms: string[]): string[] {
+		const normalized = new Set<string>();
+		for (const term of terms) {
+			const value = this.normalizeTerm(term, { ignoreHidden: true });
+			if (value != null) normalized.add(value);
+			if (normalized.size >= MAX_HIDDEN_SEARCH_TREND_TERMS) break;
+		}
+		return [...normalized];
+	}
+
+	private isHiddenTerm(term: string): boolean {
+		const hidden = this.meta.hiddenSearchTrendTerms ?? [];
+		if (hidden.length === 0) return false;
+		return hidden.map(t => normalizeForSearch(t)).includes(term);
 	}
 
 	private getCurrentSearchWindow(): number {

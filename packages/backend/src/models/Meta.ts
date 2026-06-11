@@ -126,6 +126,11 @@ export class MiMeta {
 	@Column('varchar', {
 		length: 1024, array: true, default: '{}',
 	})
+	public hiddenSearchTrendTerms: string[];
+
+	@Column('varchar', {
+		length: 1024, array: true, default: '{}',
+	})
 	public blockedHosts: string[];
 
 	@Column('varchar', {

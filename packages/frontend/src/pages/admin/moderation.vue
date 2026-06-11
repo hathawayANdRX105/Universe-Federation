@@ -128,6 +128,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</MkFolder>
 
 				<MkFolder>
+					<template #icon><i class="ti ti-search-off"></i></template>
+					<template #label>隐藏的搜索热词</template>
+
+					<div class="_gaps">
+						<MkTextarea v-model="hiddenSearchTrendTerms">
+							<template #caption>每行一个。这里只影响热门讨论、首页搜索推荐和探索页展示，不删除帖子，也不影响手动搜索。</template>
+						</MkTextarea>
+						<MkButton primary @click="save_hiddenSearchTrendTerms">{{ i18n.ts.save }}</MkButton>
+					</div>
+				</MkFolder>
+
+				<MkFolder>
 					<template #icon><i class="ti ti-eye-off"></i></template>
 					<template #label>{{ i18n.ts.silencedInstances }}</template>
 
@@ -212,6 +224,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	const prohibitedWords = ref<string>('');
 	const prohibitedWordsForNameOfUser = ref<string>('');
 	const hiddenTags = ref<string>('');
+	const hiddenSearchTrendTerms = ref<string>('');
 	const preservedUsernames = ref<string>('');
 	const bubbleTimeline = ref<string>('');
 	const trustedLinkUrlPatterns = ref<string>('');
@@ -229,6 +242,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		prohibitedWords.value = meta.prohibitedWords.join('\n');
 		prohibitedWordsForNameOfUser.value = meta.prohibitedWordsForNameOfUser.join('\n');
 		hiddenTags.value = meta.hiddenTags.join('\n');
+		hiddenSearchTrendTerms.value = (meta.hiddenSearchTrendTerms ?? []).join('\n');
 		preservedUsernames.value = meta.preservedUsernames.join('\n');
 		bubbleTimeline.value = meta.bubbleInstances.join('\n');
 		trustedLinkUrlPatterns.value = meta.trustedLinkUrlPatterns.join('\n');
@@ -330,6 +344,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 			hiddenTags: normalizedHiddenTags,
 		}).then(() => {
 			hiddenTags.value = normalizedHiddenTags.join('\n');
+			fetchInstance(true);
+		});
+	}
+
+	function save_hiddenSearchTrendTerms() {
+		const normalizedHiddenSearchTrendTerms = Array.from(new Set(hiddenSearchTrendTerms.value
+			.split('\n')
+			.map(x => x.trim().replace(/^#+/, ''))
+			.map(x => x.normalize('NFKC').toLowerCase())
+			.filter(Boolean)));
+
+		os.apiWithDialog('admin/update-meta', {
+			hiddenSearchTrendTerms: normalizedHiddenSearchTrendTerms,
+		}).then(() => {
+			hiddenSearchTrendTerms.value = normalizedHiddenSearchTrendTerms.join('\n');
 			fetchInstance(true);
 		});
 	}
