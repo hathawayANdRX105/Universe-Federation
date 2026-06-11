@@ -932,3 +932,83 @@ bdi.block { display: block }
 [class*="navbar-root-"][class*="navbar-iconOnly-"] button[data-cy-open-post-form][data-cy-open-post-form]:hover::before {
 	background: #1a8cd8 !important;
 }
+
+/* Keep the X-style desktop navbar on one alignment system. Some injected
+   legacy CSS gives the home/notification SVG masks and moved post button
+   different icon boxes, which makes the first rows drift horizontally. */
+@media (min-width: 1280px) {
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > [class*="navbar-item-"],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > [class*="navbar-item-"],
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > [class*="navbar-item-"],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > [class*="navbar-item-"],
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > button[data-cy-open-post-form],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > button[data-cy-open-post-form],
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > button[data-cy-open-post-form],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > button[data-cy-open-post-form] {
+		display: grid !important;
+		grid-template-columns: 28px max-content !important;
+		column-gap: 10px !important;
+		align-items: center !important;
+		justify-content: start !important;
+		justify-items: start !important;
+		width: fit-content !important;
+		max-width: calc(100% - 28px) !important;
+		min-height: 52px !important;
+		height: 52px !important;
+		padding: 0 18px !important;
+		line-height: 1 !important;
+		box-sizing: border-box !important;
+	}
+
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > [class*="navbar-item-"] > [class*="navbar-itemIcon-"],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > [class*="navbar-item-"] > [class*="navbar-itemIcon-"],
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > [class*="navbar-item-"] > [class*="navbar-itemIcon-"],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > [class*="navbar-item-"] > [class*="navbar-itemIcon-"],
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > button[data-cy-open-post-form] > [class*="navbar-postIcon-"],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > button[data-cy-open-post-form] > [class*="navbar-postIcon-"],
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > button[data-cy-open-post-form] > [class*="navbar-postIcon-"],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > button[data-cy-open-post-form] > [class*="navbar-postIcon-"] {
+		display: inline-flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+		width: 28px !important;
+		min-width: 28px !important;
+		max-width: 28px !important;
+		height: 28px !important;
+		margin: 0 !important;
+		flex: 0 0 28px !important;
+		line-height: 1 !important;
+		text-align: center !important;
+		vertical-align: middle !important;
+	}
+
+	[class^="navbar-middle-"] > a[href="/"] > i,
+	[class*=" navbar-middle-"] > a[href="/"] > i,
+	[class^="navbar-middle-"] > a[href="/my/notifications"] > i,
+	[class*=" navbar-middle-"] > a[href="/my/notifications"] > i,
+	[class^="navbar-middle-"] > a[href="/notifications"] > i,
+	[class*=" navbar-middle-"] > a[href="/notifications"] > i {
+		width: 28px !important;
+		min-width: 28px !important;
+		max-width: 28px !important;
+		height: 28px !important;
+		margin: 0 !important;
+		flex: 0 0 28px !important;
+		-webkit-mask-size: 20px 20px !important;
+		mask-size: 20px 20px !important;
+	}
+
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > [class*="navbar-item-"] > [class*="navbar-itemText-"],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > [class*="navbar-item-"] > [class*="navbar-itemText-"],
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > [class*="navbar-item-"] > [class*="navbar-itemText-"],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > [class*="navbar-item-"] > [class*="navbar-itemText-"],
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > button[data-cy-open-post-form] > [class*="navbar-postText-"],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class^="navbar-middle-"] > button[data-cy-open-post-form] > [class*="navbar-postText-"],
+	[class^="navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > button[data-cy-open-post-form] > [class*="navbar-postText-"],
+	[class*=" navbar-root-"]:not([class*="navbar-iconOnly-"]) [class*=" navbar-middle-"] > button[data-cy-open-post-form] > [class*="navbar-postText-"] {
+		display: block !important;
+		margin: 0 !important;
+		line-height: 1 !important;
+		text-align: left !important;
+	}
+}
