@@ -14,7 +14,7 @@ import { unique } from '@/misc/prelude/array.js';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
 import { AppEntityService } from '@/core/entities/AppEntityService.js';
 import { DI } from '@/di-symbols.js';
-import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope } from '@/server/api/api-access-utils.js';
+import { apiAccessErrors, getApiPublicPermissions, hasUnsafeOAuthRedirectUri, isAdminApiScope, normalizeOAuthRedirectUris } from '@/server/api/api-access-utils.js';
 
 export const meta = {
 	tags: ['api', 'app'],
@@ -34,8 +34,8 @@ export const paramDef = {
 		name: { type: 'string', minLength: 1, maxLength: 128 },
 		description: { type: 'string', maxLength: 512, default: '' },
 		permission: { type: 'array', uniqueItems: true, items: { type: 'string' } },
-		callbackUrls: { type: 'array', uniqueItems: true, maxItems: 20, items: { type: 'string', maxLength: 512 } },
 		callbackUrl: { type: 'string', nullable: true, maxLength: 512 },
+		callbackUrls: { type: 'array', uniqueItems: true, maxItems: 20, items: { type: 'string', maxLength: 512 } },
 		websiteUrl: { type: 'string', nullable: true, maxLength: 1024 },
 		iconUrl: { type: 'string', nullable: true, maxLength: 512 },
 	},
@@ -77,10 +77,20 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(apiAccessErrors.apiScopeDisabled);
 			}
 
-			const callbackUrls = unique([
-				...(ps.callbackUrls ?? []),
-				...(ps.callbackUrl ? [ps.callbackUrl] : []),
-			]).slice(0, 20);
+			const requestedCallbackUrls = ps.callbackUrls !== undefined
+				? ps.callbackUrls
+				: ps.callbackUrl !== undefined
+					? [ps.callbackUrl ?? '']
+					: [];
+			const rawCallbackUrls = unique(requestedCallbackUrls.map(url => url.trim())).slice(0, 20);
+			if (rawCallbackUrls.length === 0 || hasUnsafeOAuthRedirectUri(rawCallbackUrls)) {
+				throw new ApiError(apiAccessErrors.apiInvalidRedirectUri);
+			}
+			const callbackUrls = normalizeOAuthRedirectUris(rawCallbackUrls);
+			if (callbackUrls.length === 0) {
+				throw new ApiError(apiAccessErrors.apiInvalidRedirectUri);
+			}
+			const callbackUrl = callbackUrls[0];
 			const now = this.timeService.date;
 			const approved = !this.instanceMeta.apiRequireAppApproval;
 			const app = await this.appsRepository.insertOne({
@@ -89,7 +99,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				name: ps.name,
 				description: ps.description,
 				permission,
-				callbackUrl: callbackUrls[0] ?? null,
+				callbackUrl,
 				callbackUrls,
 				status: approved ? 'approved' : 'pending',
 				approvedAt: approved ? now : null,

@@ -9,6 +9,7 @@ import { ApiError } from '@/server/api/error.js';
 import type { AppsRepository } from '@/models/_.js';
 import { unique } from '@/misc/prelude/array.js';
 import { DI } from '@/di-symbols.js';
+import { apiAccessErrors, hasUnsafeOAuthRedirectUri, normalizeOAuthRedirectUris } from '@/server/api/api-access-utils.js';
 
 export const meta = {
 	tags: ['admin', 'api'],
@@ -55,9 +56,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (ps.description !== undefined) update.description = ps.description;
 			if (ps.permission !== undefined) update.permission = unique(ps.permission);
 			if (ps.callbackUrls !== undefined) {
-				const callbackUrls = unique(ps.callbackUrls).slice(0, 20);
+				const rawCallbackUrls = unique(ps.callbackUrls.map(url => url.trim())).slice(0, 20);
+				if (rawCallbackUrls.length === 0 || hasUnsafeOAuthRedirectUri(rawCallbackUrls)) {
+					throw new ApiError(apiAccessErrors.apiInvalidRedirectUri);
+				}
+				const callbackUrls = normalizeOAuthRedirectUris(rawCallbackUrls);
+				if (callbackUrls.length === 0) {
+					throw new ApiError(apiAccessErrors.apiInvalidRedirectUri);
+				}
 				update.callbackUrls = callbackUrls;
-				update.callbackUrl = callbackUrls[0] ?? null;
+				update.callbackUrl = callbackUrls[0];
 			}
 			if (ps.rateLimitPerMinute !== undefined) update.rateLimitPerMinute = ps.rateLimitPerMinute;
 			if (ps.reviewNote !== undefined) update.reviewNote = ps.reviewNote;

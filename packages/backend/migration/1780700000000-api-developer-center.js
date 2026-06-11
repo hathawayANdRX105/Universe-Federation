@@ -16,7 +16,7 @@ export class ApiDeveloperCenter1780700000000 {
 		await queryRunner.query(`ALTER TABLE "meta" ADD "enableOAuthLogin" boolean NOT NULL DEFAULT true`);
 		await queryRunner.query(`ALTER TABLE "meta" ADD "enableOidc" boolean NOT NULL DEFAULT true`);
 		await queryRunner.query(`ALTER TABLE "meta" ADD "apiRequireAppApproval" boolean NOT NULL DEFAULT false`);
-		await queryRunner.query(`ALTER TABLE "meta" ADD "apiPublicPermissions" character varying(64) array NOT NULL DEFAULT '{read:account,write:notes,read:drive,write:drive,read:channels,write:channels,read:following,write:following,read:blocks,write:blocks,read:mutes,write:mutes,read:notifications,write:notifications,read:chat,write:chat}'`);
+		await queryRunner.query(`ALTER TABLE "meta" ADD "apiPublicPermissions" character varying(64) array NOT NULL DEFAULT '{read:profile,write:notes,read:drive,write:drive,read:channels,write:channels,read:following,write:following,read:blocks,write:blocks,read:mutes,write:mutes,read:notifications,write:notifications,read:chat,write:chat}'`);
 		await queryRunner.query(`ALTER TABLE "meta" ADD "apiDefaultTokenRateLimit" integer NOT NULL DEFAULT 60`);
 		await queryRunner.query(`ALTER TABLE "meta" ADD "apiWriteTokenRateLimit" integer NOT NULL DEFAULT 20`);
 

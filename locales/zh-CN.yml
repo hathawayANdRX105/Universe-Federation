@@ -2333,6 +2333,7 @@ _2fa:
   backupCodesExhaustedWarning: "已使用完所有的备用代码。若验证器无法使用，则无法再访问您的账户。请重置验证器。"
   moreDetailedGuideHere: "此处为详细指南"
 _permissions:
+  "read:profile": "查看基础登录资料"
   "read:account": "查看账户信息"
   "write:account": "更改帐户信息"
   "read:blocks": "查看屏蔽列表"

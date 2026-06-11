@@ -117,7 +117,7 @@ export class WellKnownServerService {
 		});
 
 		fastify.get('/.well-known/openid-configuration', async (request, reply) => {
-			if (!this.meta.enableOAuthLogin || !this.meta.enableOidc) {
+			if (!this.meta.enableOAuthLogin || !this.meta.enableOidc || this.meta.apiAccessMode === 'closed') {
 				reply.code(404);
 				return;
 			}

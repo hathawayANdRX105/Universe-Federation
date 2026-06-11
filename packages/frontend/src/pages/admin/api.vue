@@ -16,6 +16,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<template #caption>{{ modeCaption }}</template>
 
 					<div v-if="settings" class="_gaps_m">
+						<MkInfo>OAuth/OIDC 回调地址由每个应用的所有者在开发者中心填写。管理员这里只控制 API 开放模式、审核和可申请权限。</MkInfo>
+
 						<MkSelect v-model="settings.mode">
 							<template #label>API 模式</template>
 							<option value="approval">申请使用</option>
@@ -131,68 +133,247 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div :class="$style.metric"><span>已暂停应用</span><strong>{{ summary.apps.suspended }}</strong></div>
 				</div>
 
-				<MkFolder :defaultOpen="accessRequests.length > 0">
+				<MkFolder :defaultOpen="true">
 					<template #icon><i class="ti ti-user-check"></i></template>
 					<template #label>开发者申请</template>
-					<template #caption>{{ accessRequests.length }} 条</template>
+					<template #caption>{{ accessRequestStatusFilterLabel }}</template>
 
-					<div v-if="accessRequests.length === 0" :class="$style.empty">暂无开发者申请。</div>
-					<div v-else class="_gaps_s">
-						<div v-for="request in accessRequests" :key="request.id" :class="$style.item">
-							<div>
-								<strong>{{ request.user?.name || request.user?.username || request.user?.id }}</strong>
-								<div :class="$style.meta">{{ request.status }} · {{ request.updatedAt }}</div>
-								<div :class="$style.meta">{{ request.reason || '无申请说明' }}</div>
+					<div class="_gaps_s">
+						<div :class="$style.listTools">
+							<div :class="$style.filterGrid">
+								<MkSelect v-model="accessRequestStatusFilter">
+									<template #label>申请状态</template>
+									<option value="pending">待审核</option>
+									<option value="approved">已通过</option>
+									<option value="rejected">已拒绝</option>
+									<option value="suspended">已暂停</option>
+									<option value="all">全部</option>
+								</MkSelect>
+								<MkInput v-model="accessRequestsState.queryInput" @keydown.enter.prevent="applyAccessRequestFilters">
+									<template #label>关键词</template>
+									<template #prefix><i class="ti ti-search"></i></template>
+								</MkInput>
+								<MkInput v-model="accessRequestsState.userIdInput" @keydown.enter.prevent="applyAccessRequestFilters">
+									<template #label>用户 ID</template>
+									<template #prefix><i class="ti ti-user"></i></template>
+								</MkInput>
 							</div>
 							<div class="_buttons">
-								<MkButton rounded primary @click="reviewAccess(request.id, 'approve')">通过</MkButton>
-								<MkButton rounded @click="reviewAccess(request.id, 'reject')">拒绝</MkButton>
-								<MkButton rounded danger @click="reviewAccess(request.id, 'suspend')">暂停</MkButton>
+								<MkButton rounded primary @click="applyAccessRequestFilters()"><i class="ti ti-search"></i> 查询</MkButton>
+								<MkButton rounded :disabled="!accessRequestFilterActive" @click="clearAccessRequestFilters()"><i class="ti ti-x"></i> 清空</MkButton>
+								<MkButton rounded :wait="accessRequestsState.loading" @click="loadAccessRequests()"><i class="ti ti-refresh"></i> 刷新</MkButton>
+							</div>
+						</div>
+
+						<div v-if="accessRequestsState.loading" :class="$style.loading"><MkLoading/></div>
+						<div v-else-if="accessRequestsState.error" :class="$style.listError">
+							<span>开发者申请加载失败。</span>
+							<MkButton rounded small @click="loadAccessRequests()">重试</MkButton>
+						</div>
+						<div v-else-if="accessRequestsState.items.length === 0" :class="$style.empty">暂无开发者申请。</div>
+						<div v-else class="_gaps_s">
+							<div v-for="request in accessRequestsState.items" :key="request.id" :class="$style.item">
+								<div :class="$style.itemBody">
+									<div :class="$style.itemHeader">
+										<strong>{{ userDisplayName(request.user) }}</strong>
+										<span :class="[$style.statusBadge, statusBadgeClass(request.status)]">{{ statusLabel(request.status) }}</span>
+									</div>
+									<div :class="$style.meta">申请人：<span class="_monospace">{{ userAcctLabel(request.user) }}</span> · 用户 ID：<span class="_monospace">{{ request.user?.id ?? '未知' }}</span></div>
+									<div :class="$style.meta">申请 ID：<span class="_monospace">{{ request.id }}</span></div>
+									<div :class="$style.meta">更新时间：{{ request.updatedAt }}</div>
+									<div :class="$style.meta">{{ request.reason || '无申请说明' }}</div>
+								</div>
+								<div class="_buttons">
+									<MkButton v-if="request.status !== 'approved'" rounded primary :wait="isReviewingAccess(request.id, 'approve')" @click="reviewAccess(request.id, 'approve')">通过</MkButton>
+									<MkButton v-if="request.status !== 'rejected'" rounded :wait="isReviewingAccess(request.id, 'reject')" @click="reviewAccess(request.id, 'reject')">拒绝</MkButton>
+									<MkButton v-if="request.status !== 'suspended'" rounded danger :wait="isReviewingAccess(request.id, 'suspend')" @click="reviewAccess(request.id, 'suspend')">暂停</MkButton>
+								</div>
+							</div>
+						</div>
+
+						<div v-if="!accessRequestsState.loading && !accessRequestsState.error" :class="$style.pager">
+							<div :class="$style.pagerSummary">共 {{ accessRequestsState.total }} 条，第 {{ accessRequestsState.page }} / {{ pageCount(accessRequestsState) }} 页<span v-if="accessRequestsState.total > 0">，当前 {{ pageRangeStart(accessRequestsState) }}-{{ pageRangeEnd(accessRequestsState) }} 条</span></div>
+							<div :class="$style.pagerControls">
+								<MkSelect :modelValue="accessRequestsState.pageSize" small @update:modelValue="(value) => setPageSize(accessRequestsState, loadAccessRequests, value)">
+									<template #label>每页数量</template>
+									<option v-for="size in pageSizeValues" :key="size" :value="size">{{ size }}</option>
+								</MkSelect>
+								<MkInput v-model="accessRequestsState.pageInput" type="number" :min="1" :max="pageCount(accessRequestsState)" @keydown.enter.prevent="jumpToPage(accessRequestsState, loadAccessRequests)">
+									<template #label>跳页</template>
+								</MkInput>
+								<div class="_buttons" :class="$style.pageButtons">
+									<MkButton rounded small @click="jumpToPage(accessRequestsState, loadAccessRequests)">跳转</MkButton>
+									<MkButton rounded small :disabled="accessRequestsState.page <= 1" @click="goToPage(accessRequestsState, loadAccessRequests, 1)">首页</MkButton>
+									<MkButton rounded small :disabled="accessRequestsState.page <= 1" @click="goToPage(accessRequestsState, loadAccessRequests, accessRequestsState.page - 1)">上一页</MkButton>
+									<MkButton rounded small :disabled="accessRequestsState.page >= pageCount(accessRequestsState)" @click="goToPage(accessRequestsState, loadAccessRequests, accessRequestsState.page + 1)">下一页</MkButton>
+									<MkButton rounded small :disabled="accessRequestsState.page >= pageCount(accessRequestsState)" @click="goToPage(accessRequestsState, loadAccessRequests, pageCount(accessRequestsState))">末页</MkButton>
+									</div>
 							</div>
 						</div>
 					</div>
 				</MkFolder>
 
-				<MkFolder :defaultOpen="apps.length > 0">
+				<MkFolder :defaultOpen="true">
 					<template #icon><i class="ti ti-apps"></i></template>
 					<template #label>OAuth 应用</template>
-					<template #caption>{{ apps.length }} 个</template>
+					<template #caption>{{ appStatusFilterLabel }}</template>
 
-					<div v-if="apps.length === 0" :class="$style.empty">暂无应用。</div>
-					<div v-else class="_gaps_s">
-						<div v-for="app in apps" :key="app.id" :class="$style.item">
-							<div>
-								<strong>{{ app.name }}</strong>
-								<div :class="$style.meta">{{ app.status }} · {{ app.user?.name || app.user?.username || '无所有者' }}</div>
-								<div :class="$style.meta">{{ (app.permission ?? []).join(', ') }}</div>
-								<div :class="$style.meta">{{ (app.callbackUrls ?? [app.callbackUrl]).filter(Boolean).join(', ') }}</div>
+					<div class="_gaps_s">
+						<div :class="$style.listTools">
+							<div :class="$style.filterGrid">
+								<MkSelect v-model="appStatusFilter">
+									<template #label>应用状态</template>
+									<option value="pending">待审核</option>
+									<option value="approved">已通过</option>
+									<option value="suspended">已暂停</option>
+									<option value="rejected">已拒绝</option>
+									<option value="all">全部</option>
+								</MkSelect>
+								<MkInput v-model="appsState.queryInput" @keydown.enter.prevent="applyAppFilters">
+									<template #label>关键词</template>
+									<template #prefix><i class="ti ti-search"></i></template>
+								</MkInput>
+								<MkInput v-model="appsState.userIdInput" @keydown.enter.prevent="applyAppFilters">
+									<template #label>用户 ID</template>
+									<template #prefix><i class="ti ti-user"></i></template>
+								</MkInput>
 							</div>
 							<div class="_buttons">
-								<MkButton rounded primary @click="reviewApp(app.id, 'approve')">通过</MkButton>
-								<MkButton rounded @click="reviewApp(app.id, 'reject')">拒绝</MkButton>
-								<MkButton rounded danger @click="reviewApp(app.id, app.status === 'suspended' ? 'unsuspend' : 'suspend')">{{ app.status === 'suspended' ? '恢复' : '暂停' }}</MkButton>
-								<MkButton rounded danger @click="deleteApp(app.id)">删除</MkButton>
+								<MkButton rounded primary @click="applyAppFilters()"><i class="ti ti-search"></i> 查询</MkButton>
+								<MkButton rounded :disabled="!appFilterActive" @click="clearAppFilters()"><i class="ti ti-x"></i> 清空</MkButton>
+								<MkButton rounded :wait="appsState.loading" @click="loadApps()"><i class="ti ti-refresh"></i> 刷新</MkButton>
+							</div>
+						</div>
+
+						<div v-if="appsState.loading" :class="$style.loading"><MkLoading/></div>
+						<div v-else-if="appsState.error" :class="$style.listError">
+							<span>OAuth 应用加载失败。</span>
+							<MkButton rounded small @click="loadApps()">重试</MkButton>
+						</div>
+						<div v-else-if="appsState.items.length === 0" :class="$style.empty">暂无应用。</div>
+						<div v-else class="_gaps_s">
+							<div v-for="app in appsState.items" :key="app.id" :class="$style.item">
+								<div :class="$style.itemBody">
+									<div :class="$style.itemHeader">
+										<strong>{{ app.name }}</strong>
+										<span :class="[$style.statusBadge, statusBadgeClass(app.status)]">{{ statusLabel(app.status) }}</span>
+									</div>
+									<div :class="$style.meta">申请人：<span class="_monospace">{{ userDisplayName(app.user) }}</span> · <span class="_monospace">{{ userAcctLabel(app.user) }}</span> · 用户 ID：<span class="_monospace">{{ app.user?.id ?? '无所有者' }}</span></div>
+									<div :class="$style.meta">应用 ID：<span class="_monospace">{{ app.id }}</span></div>
+									<div :class="$style.meta">权限：{{ (app.permission ?? []).join(', ') || '无' }}</div>
+									<div :class="$style.meta">回调：{{ (app.callbackUrls ?? [app.callbackUrl]).filter(Boolean).join(', ') || '未设置' }}</div>
+								</div>
+								<div class="_buttons">
+									<MkButton v-if="app.status !== 'approved'" rounded primary :wait="isReviewingApp(app.id, 'approve')" @click="reviewApp(app.id, 'approve')">通过</MkButton>
+									<MkButton v-if="app.status !== 'rejected' && app.status !== 'suspended'" rounded :wait="isReviewingApp(app.id, 'reject')" @click="reviewApp(app.id, 'reject')">拒绝</MkButton>
+									<MkButton rounded danger :wait="isReviewingApp(app.id, app.status === 'suspended' ? 'unsuspend' : 'suspend')" @click="reviewApp(app.id, app.status === 'suspended' ? 'unsuspend' : 'suspend')">{{ app.status === 'suspended' ? '恢复' : '暂停' }}</MkButton>
+									<MkButton rounded danger :wait="deletingAppId === app.id" @click="deleteApp(app.id)">删除</MkButton>
+								</div>
+							</div>
+						</div>
+
+						<div v-if="!appsState.loading && !appsState.error" :class="$style.pager">
+							<div :class="$style.pagerSummary">共 {{ appsState.total }} 条，第 {{ appsState.page }} / {{ pageCount(appsState) }} 页<span v-if="appsState.total > 0">，当前 {{ pageRangeStart(appsState) }}-{{ pageRangeEnd(appsState) }} 条</span></div>
+							<div :class="$style.pagerControls">
+								<MkSelect :modelValue="appsState.pageSize" small @update:modelValue="(value) => setPageSize(appsState, loadApps, value)">
+									<template #label>每页数量</template>
+									<option v-for="size in pageSizeValues" :key="size" :value="size">{{ size }}</option>
+								</MkSelect>
+								<MkInput v-model="appsState.pageInput" type="number" :min="1" :max="pageCount(appsState)" @keydown.enter.prevent="jumpToPage(appsState, loadApps)">
+									<template #label>跳页</template>
+								</MkInput>
+								<div class="_buttons" :class="$style.pageButtons">
+									<MkButton rounded small @click="jumpToPage(appsState, loadApps)">跳转</MkButton>
+									<MkButton rounded small :disabled="appsState.page <= 1" @click="goToPage(appsState, loadApps, 1)">首页</MkButton>
+									<MkButton rounded small :disabled="appsState.page <= 1" @click="goToPage(appsState, loadApps, appsState.page - 1)">上一页</MkButton>
+									<MkButton rounded small :disabled="appsState.page >= pageCount(appsState)" @click="goToPage(appsState, loadApps, appsState.page + 1)">下一页</MkButton>
+									<MkButton rounded small :disabled="appsState.page >= pageCount(appsState)" @click="goToPage(appsState, loadApps, pageCount(appsState))">末页</MkButton>
+									</div>
 							</div>
 						</div>
 					</div>
 				</MkFolder>
 
-				<MkFolder :defaultOpen="tokens.length > 0">
+				<MkFolder :defaultOpen="true">
 					<template #icon><i class="ti ti-key"></i></template>
-					<template #label>个人 Token</template>
-					<template #caption>{{ tokens.length }} 个</template>
+					<template #label>个人 API Token</template>
+					<template #caption>{{ tokenStatusFilterLabel }}</template>
 
-					<div v-if="tokens.length === 0" :class="$style.empty">暂无开发者 Token。</div>
-					<div v-else class="_gaps_s">
-						<div v-for="token in tokens" :key="token.id" :class="$style.item">
-							<div>
-								<strong>{{ token.name || token.id }}</strong>
-								<div :class="$style.meta">{{ token.status }} · {{ token.user?.name || token.user?.username || '未知用户' }}</div>
-								<div :class="$style.meta">{{ (token.permission ?? []).join(', ') }}</div>
+					<div class="_gaps_s">
+						<div :class="$style.listTools">
+							<div :class="$style.filterGrid">
+								<MkSelect v-model="tokenStatusFilter">
+									<template #label>Token 状态</template>
+									<option value="active">活跃</option>
+									<option value="suspended">已暂停</option>
+									<option value="revoked">已撤销</option>
+									<option value="all">全部</option>
+								</MkSelect>
+								<MkInput v-model="tokensState.queryInput" @keydown.enter.prevent="applyTokenFilters">
+									<template #label>关键词</template>
+									<template #prefix><i class="ti ti-search"></i></template>
+								</MkInput>
+								<MkInput v-model="tokensState.userIdInput" @keydown.enter.prevent="applyTokenFilters">
+									<template #label>用户 ID</template>
+									<template #prefix><i class="ti ti-user"></i></template>
+								</MkInput>
 							</div>
 							<div class="_buttons">
-								<MkButton rounded danger @click="suspendToken(token.id)">暂停</MkButton>
-								<MkButton rounded danger @click="revokeToken(token.id)">撤销</MkButton>
+								<MkButton rounded primary @click="applyTokenFilters()"><i class="ti ti-search"></i> 查询</MkButton>
+								<MkButton rounded :disabled="!tokenFilterActive" @click="clearTokenFilters()"><i class="ti ti-x"></i> 清空</MkButton>
+								<MkButton rounded :wait="tokensState.loading" @click="loadTokens()"><i class="ti ti-refresh"></i> 刷新</MkButton>
+							</div>
+						</div>
+
+						<div v-if="tokensState.loading" :class="$style.loading"><MkLoading/></div>
+						<div v-else-if="tokensState.error" :class="$style.listError">
+							<span>个人 API Token 加载失败。</span>
+							<MkButton rounded small @click="loadTokens()">重试</MkButton>
+						</div>
+						<div v-else-if="tokensState.items.length === 0" :class="$style.empty">暂无开发者 Token。</div>
+						<div v-else class="_gaps_s">
+							<div v-for="token in tokensState.items" :key="token.id" :class="$style.item">
+								<div :class="$style.itemBody">
+									<div :class="$style.itemHeader">
+										<strong>{{ token.name || token.id }}</strong>
+										<span :class="[$style.statusBadge, statusBadgeClass(token.status)]">{{ statusLabel(token.status) }}</span>
+									</div>
+									<div :class="$style.meta">持有人：<span class="_monospace">{{ userDisplayName(token.user) }}</span> · <span class="_monospace">{{ userAcctLabel(token.user) }}</span> · 用户 ID：<span class="_monospace">{{ token.user?.id ?? '未知' }}</span></div>
+									<div :class="$style.meta">Token ID：<span class="_monospace">{{ token.id }}</span></div>
+									<div :class="$style.meta" v-if="token.description">说明：{{ token.description }}</div>
+									<div :class="$style.meta">权限：{{ (token.permission ?? []).join(', ') || '无' }}</div>
+									<div :class="$style.tokenMetaGrid">
+										<span>创建：{{ token.createdAt }}</span>
+										<span>最近使用：{{ token.lastUsedAt ?? '无记录' }}</span>
+										<span>等级：{{ token.rank ?? '跟随用户' }}</span>
+										<span>限流：{{ token.rateLimitPerMinute ?? '默认' }}</span>
+										<span v-if="token.appName">应用：{{ token.appName }}</span>
+									</div>
+								</div>
+								<div class="_buttons">
+									<MkButton v-if="token.status !== 'suspended' && token.status !== 'revoked'" rounded danger :wait="suspendingTokenId === token.id" @click="suspendToken(token.id)">暂停</MkButton>
+									<MkButton v-if="token.status !== 'revoked'" rounded danger :wait="revokingTokenId === token.id" @click="revokeToken(token.id)">撤销</MkButton>
+								</div>
+							</div>
+						</div>
+
+						<div v-if="!tokensState.loading && !tokensState.error" :class="$style.pager">
+							<div :class="$style.pagerSummary">共 {{ tokensState.total }} 条，第 {{ tokensState.page }} / {{ pageCount(tokensState) }} 页<span v-if="tokensState.total > 0">，当前 {{ pageRangeStart(tokensState) }}-{{ pageRangeEnd(tokensState) }} 条</span></div>
+							<div :class="$style.pagerControls">
+								<MkSelect :modelValue="tokensState.pageSize" small @update:modelValue="(value) => setPageSize(tokensState, loadTokens, value)">
+									<template #label>每页数量</template>
+									<option v-for="size in pageSizeValues" :key="size" :value="size">{{ size }}</option>
+								</MkSelect>
+								<MkInput v-model="tokensState.pageInput" type="number" :min="1" :max="pageCount(tokensState)" @keydown.enter.prevent="jumpToPage(tokensState, loadTokens)">
+									<template #label>跳页</template>
+								</MkInput>
+								<div class="_buttons" :class="$style.pageButtons">
+									<MkButton rounded small @click="jumpToPage(tokensState, loadTokens)">跳转</MkButton>
+									<MkButton rounded small :disabled="tokensState.page <= 1" @click="goToPage(tokensState, loadTokens, 1)">首页</MkButton>
+									<MkButton rounded small :disabled="tokensState.page <= 1" @click="goToPage(tokensState, loadTokens, tokensState.page - 1)">上一页</MkButton>
+									<MkButton rounded small :disabled="tokensState.page >= pageCount(tokensState)" @click="goToPage(tokensState, loadTokens, tokensState.page + 1)">下一页</MkButton>
+									<MkButton rounded small :disabled="tokensState.page >= pageCount(tokensState)" @click="goToPage(tokensState, loadTokens, pageCount(tokensState))">末页</MkButton>
+								</div>
 							</div>
 						</div>
 					</div>
@@ -204,9 +385,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from 'vue';
+import { computed, reactive, ref, useCssModule, watch } from 'vue';
 import MkButton from '@/components/MkButton.vue';
 import MkFolder from '@/components/MkFolder.vue';
+import MkLoading from '@/components/global/MkLoading.vue';
 import MkInfo from '@/components/MkInfo.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkSelect from '@/components/MkSelect.vue';
@@ -230,11 +412,18 @@ type PackedUser = {
 	id: string;
 	username: string;
 	name?: string | null;
+	host?: string | null;
 };
+
+type ApiAccessStatusValue = 'pending' | 'approved' | 'rejected' | 'suspended';
+type ApiAppStatusValue = 'pending' | 'approved' | 'rejected' | 'suspended';
+type ApiTokenStatusValue = 'active' | 'suspended' | 'revoked';
+type FilterStatus<T extends string> = T | 'all';
+type ReviewAction = 'approve' | 'reject' | 'suspend' | 'unsuspend';
 
 type ApiAccessRequest = {
 	id: string;
-	status: string;
+	status: ApiAccessStatusValue;
 	reason: string | null;
 	reviewNote: string | null;
 	updatedAt: string;
@@ -244,7 +433,7 @@ type ApiAccessRequest = {
 type ApiApp = {
 	id: string;
 	name: string;
-	status: string;
+	status: ApiAppStatusValue;
 	callbackUrl: string | null;
 	callbackUrls?: string[];
 	permission: string[];
@@ -254,8 +443,15 @@ type ApiApp = {
 type ApiToken = {
 	id: string;
 	name: string | null;
-	status: string;
+	description: string | null;
+	createdAt: string;
+	lastUsedAt: string | null;
+	status: ApiTokenStatusValue;
 	permission: string[];
+	rank: string | null;
+	rateLimitPerMinute: number | null;
+	appId: string | null;
+	appName: string | null;
 	user: PackedUser | null;
 };
 
@@ -264,6 +460,34 @@ type ApiSummary = {
 	apps: { pending: number; approved: number; suspended: number; };
 	tokens: { active: number; suspended: number; revoked: number; };
 };
+
+type PageSize = '20' | '50' | '100';
+type AdminListEndpoint = 'admin/api/access-requests/list' | 'admin/api/apps/list' | 'admin/api/tokens/list';
+type ApiPagedResult<T> = {
+	items?: T[];
+	total?: number;
+} | T[];
+type NormalizedPagedResult<T> = {
+	items: T[];
+	total: number;
+};
+type PagedListState<T> = {
+	items: T[];
+	total: number;
+	page: number;
+	pageSize: PageSize;
+	pageInput: string;
+	query: string;
+	queryInput: string;
+	userId: string;
+	userIdInput: string;
+	loading: boolean;
+	error: boolean;
+};
+type LoadListOptions = {
+	resetPage?: boolean;
+};
+type LoadListFn = (options?: LoadListOptions) => Promise<void>;
 
 type PermissionOption = {
 	scope: string;
@@ -284,7 +508,8 @@ const publicPermissionGroups = [
 		title: '登录资料',
 		icon: 'ti ti-user-circle',
 		permissions: [
-			{ scope: 'read:account', label: '读取账号资料', description: '用于快捷登录时读取用户 ID、昵称、头像等基础资料。' },
+			{ scope: 'read:profile', label: '快捷登录资料', description: '仅用于 OAuth/OIDC userinfo，返回用户 ID、昵称、头像和主页链接。' },
+			{ scope: 'read:account', label: '读取账号 API 资料', description: '允许调用 /api/i 等账号接口，可能返回更多账号设置；只给可信开发者开放。' },
 		],
 	},
 	{
@@ -353,15 +578,42 @@ const publicPermissionGroups = [
 	},
 ] satisfies PermissionGroup[];
 
-const defaultPublicPermissions = publicPermissionGroups.flatMap(group => group.permissions.map(permission => permission.scope));
-const knownPublicPermissionScopes = new Set(defaultPublicPermissions);
+const recommendedPublicPermissions = [
+	'read:profile',
+	'write:notes',
+	'read:drive',
+	'write:drive',
+	'read:channels',
+	'write:channels',
+	'read:following',
+	'write:following',
+	'read:blocks',
+	'write:blocks',
+	'read:mutes',
+	'write:mutes',
+	'read:notifications',
+	'write:notifications',
+	'read:chat',
+	'write:chat',
+];
+const knownPublicPermissionScopes = new Set(publicPermissionGroups.flatMap(group => group.permissions.map(permission => permission.scope)));
+const pageSizeValues = ['20', '50', '100'] satisfies PageSize[];
 
 const settings = ref<ApiSettings | null>(null);
 const summary = ref<ApiSummary | null>(null);
-const accessRequests = ref<ApiAccessRequest[]>([]);
-const apps = ref<ApiApp[]>([]);
-const tokens = ref<ApiToken[]>([]);
+const styles = useCssModule();
 const savingSettings = ref(false);
+const reviewingAccess = ref<string | null>(null);
+const reviewingApp = ref<string | null>(null);
+const deletingAppId = ref<string | null>(null);
+const suspendingTokenId = ref<string | null>(null);
+const revokingTokenId = ref<string | null>(null);
+const accessRequestStatusFilter = ref<FilterStatus<ApiAccessStatusValue>>('pending');
+const appStatusFilter = ref<FilterStatus<ApiAppStatusValue>>('pending');
+const tokenStatusFilter = ref<FilterStatus<ApiTokenStatusValue>>('active');
+const accessRequestsState = createPagedListState<ApiAccessRequest>();
+const appsState = createPagedListState<ApiApp>();
+const tokensState = createPagedListState<ApiToken>();
 
 const modeCaption = computed(() => ({
 	approval: '申请使用',
@@ -371,28 +623,43 @@ const modeCaption = computed(() => ({
 
 const selectedPublicPermissionCount = computed(() => settings.value?.publicPermissions.length ?? 0);
 const unknownPublicPermissions = computed(() => (settings.value?.publicPermissions ?? []).filter(scope => !knownPublicPermissionScopes.has(scope) && !isAdminScope(scope)));
+const accessRequestStatusFilterLabel = computed(() => adminListCaption(accessRequestStatusFilter.value, accessRequestsState));
+const appStatusFilterLabel = computed(() => adminListCaption(appStatusFilter.value, appsState));
+const tokenStatusFilterLabel = computed(() => {
+	return adminListCaption(tokenStatusFilter.value, tokensState);
+});
+const accessRequestFilterActive = computed(() => hasPagedListFilter(accessRequestsState));
+const appFilterActive = computed(() => hasPagedListFilter(appsState));
+const tokenFilterActive = computed(() => hasPagedListFilter(tokensState));
 
 async function init() {
-	await reload();
+	await Promise.all([
+		reloadAdminData(),
+		loadAccessRequests({ resetPage: true }),
+		loadApps({ resetPage: true }),
+		loadTokens({ resetPage: true }),
+	]);
 }
 
 async function reload() {
-	const [settingsResult, summaryResult, requestsResult, appsResult, pendingAppsResult, tokensResult] = await Promise.all([
+	await Promise.all([
+		reloadAdminData(),
+		loadAccessRequests(),
+		loadApps(),
+		loadTokens(),
+	]);
+}
+
+async function reloadAdminData() {
+	const [settingsResult, summaryResult] = await Promise.all([
 		misskeyApi<ApiSettings>('admin/api/settings/show', {}),
 		misskeyApi<ApiSummary>('admin/api/usage/summary', {}),
-		misskeyApi<ApiAccessRequest[]>('admin/api/access-requests/list', { limit: 50 }),
-		misskeyApi<ApiApp[]>('admin/api/apps/list', { limit: 50 }),
-		misskeyApi<ApiApp[]>('admin/api/apps/list', { status: 'pending', limit: 50 }),
-		misskeyApi<ApiToken[]>('admin/api/tokens/list', { limit: 50 }),
 	]);
 	settings.value = {
 		...settingsResult,
 		publicPermissions: normalizePublicPermissionSelection(settingsResult.publicPermissions),
 	};
 	summary.value = summaryResult;
-	accessRequests.value = requestsResult;
-	apps.value = Array.from(new Map([...pendingAppsResult, ...appsResult].map(app => [app.id, app])).values());
-	tokens.value = tokensResult;
 }
 
 async function saveSettings() {
@@ -452,17 +719,39 @@ function clearPermissionGroup(group: PermissionGroup) {
 }
 
 function restoreDefaultPublicPermissions() {
-	setPublicPermissions(defaultPublicPermissions);
+	setPublicPermissions(recommendedPublicPermissions);
 }
 
 async function reviewAccess(id: string, action: 'approve' | 'reject' | 'suspend') {
-	await misskeyApi(`admin/api/access-requests/${action}`, { id });
-	await reload();
+	const key = actionKey(id, action);
+	if (reviewingAccess.value) return;
+	reviewingAccess.value = key;
+	try {
+		await os.apiWithDialog(`admin/api/access-requests/${action}`, { id });
+		os.toast(`已${actionLabel(action)}申请`);
+		await Promise.all([
+			reloadAdminData(),
+			loadAccessRequests(),
+		]);
+	} finally {
+		reviewingAccess.value = null;
+	}
 }
 
 async function reviewApp(appId: string, action: 'approve' | 'reject' | 'suspend' | 'unsuspend') {
-	await misskeyApi(`admin/api/apps/${action}`, { appId });
-	await reload();
+	const key = actionKey(appId, action);
+	if (reviewingApp.value) return;
+	reviewingApp.value = key;
+	try {
+		await os.apiWithDialog(`admin/api/apps/${action}`, { appId });
+		os.toast(`已${actionLabel(action)}应用`);
+		await Promise.all([
+			reloadAdminData(),
+			loadApps(),
+		]);
+	} finally {
+		reviewingApp.value = null;
+	}
 }
 
 async function deleteApp(appId: string) {
@@ -472,13 +761,32 @@ async function deleteApp(appId: string) {
 		text: '应用删除后关联 Token 会被撤销。',
 	});
 	if (canceled) return;
-	await misskeyApi('admin/api/apps/delete', { appId });
-	await reload();
+	deletingAppId.value = appId;
+	try {
+		await os.apiWithDialog('admin/api/apps/delete', { appId });
+		os.toast('已删除应用');
+		await Promise.all([
+			reloadAdminData(),
+			loadApps(),
+		]);
+	} finally {
+		deletingAppId.value = null;
+	}
 }
 
 async function suspendToken(tokenId: string) {
-	await misskeyApi('admin/api/tokens/suspend', { tokenId });
-	await reload();
+	if (suspendingTokenId.value) return;
+	suspendingTokenId.value = tokenId;
+	try {
+		await os.apiWithDialog('admin/api/tokens/suspend', { tokenId });
+		os.toast('已暂停 Token');
+		await Promise.all([
+			reloadAdminData(),
+			loadTokens(),
+		]);
+	} finally {
+		suspendingTokenId.value = null;
+	}
 }
 
 async function revokeToken(tokenId: string) {
@@ -488,9 +796,286 @@ async function revokeToken(tokenId: string) {
 		text: '撤销后第三方程序会立即失效。',
 	});
 	if (canceled) return;
-	await misskeyApi('admin/api/tokens/revoke', { tokenId });
-	await reload();
+	revokingTokenId.value = tokenId;
+	try {
+		await os.apiWithDialog('admin/api/tokens/revoke', { tokenId });
+		os.toast('已撤销 Token');
+		await Promise.all([
+			reloadAdminData(),
+			loadTokens(),
+		]);
+	} finally {
+		revokingTokenId.value = null;
+	}
 }
+
+function createPagedListState<T>(): PagedListState<T> {
+	return reactive({
+		items: [] as T[],
+		total: 0,
+		page: 1,
+		pageSize: '20',
+		pageInput: '1',
+		query: '',
+		queryInput: '',
+		userId: '',
+		userIdInput: '',
+		loading: false,
+		error: false,
+	}) as PagedListState<T>;
+}
+
+async function loadAccessRequests(options: LoadListOptions = {}): Promise<void> {
+	await loadPagedList(accessRequestsState, 'admin/api/access-requests/list', filterStatusParam(accessRequestStatusFilter.value), options);
+}
+
+async function loadApps(options: LoadListOptions = {}): Promise<void> {
+	await loadPagedList(appsState, 'admin/api/apps/list', filterStatusParam(appStatusFilter.value), options);
+}
+
+async function loadTokens(options: LoadListOptions = {}): Promise<void> {
+	await loadPagedList(tokensState, 'admin/api/tokens/list', filterStatusParam(tokenStatusFilter.value), options);
+}
+
+async function loadPagedList<T>(
+	state: PagedListState<T>,
+	endpoint: AdminListEndpoint,
+	status: string | null,
+	options: LoadListOptions = {},
+): Promise<void> {
+	if (options.resetPage) {
+		state.page = 1;
+		state.pageInput = '1';
+	}
+
+	state.loading = true;
+	state.error = false;
+	try {
+		const result = normalizePagedResult(state, await requestPagedList(state, endpoint, status));
+		const maxPage = pageCountByTotal(result.total, state.pageSize);
+		if (state.page > maxPage) {
+			state.page = maxPage;
+			state.pageInput = String(state.page);
+			const adjustedResult = normalizePagedResult(state, await requestPagedList(state, endpoint, status));
+			assignPagedResult(state, adjustedResult);
+			return;
+		}
+
+		assignPagedResult(state, result);
+	} catch (err) {
+		state.error = true;
+		console.error(err);
+	} finally {
+		state.loading = false;
+	}
+}
+
+async function requestPagedList<T>(
+	state: PagedListState<T>,
+	endpoint: AdminListEndpoint,
+	status: string | null,
+): Promise<ApiPagedResult<T>> {
+	const limit = pageSizeNumber(state);
+	const page = Math.max(1, state.page);
+	state.page = page;
+	state.pageInput = String(page);
+	return await misskeyApi<ApiPagedResult<T>, string>(endpoint, {
+		status,
+		query: state.query || null,
+		userId: state.userId || null,
+		withTotal: true,
+		limit,
+		offset: (page - 1) * limit,
+	});
+}
+
+function normalizePagedResult<T>(state: PagedListState<T>, result: ApiPagedResult<T>): NormalizedPagedResult<T> {
+	const items = Array.isArray(result) ? result : (Array.isArray(result.items) ? result.items : []);
+	const limit = pageSizeNumber(state);
+	const offset = (state.page - 1) * limit;
+	const fallbackTotal = offset + items.length + (items.length >= limit ? 1 : 0);
+	const total = !Array.isArray(result) && Number.isFinite(result.total) ? Math.max(0, Math.trunc(result.total)) : fallbackTotal;
+
+	return { items, total };
+}
+
+function assignPagedResult<T>(state: PagedListState<T>, result: NormalizedPagedResult<T>): void {
+	state.items = result.items;
+	state.total = result.total;
+	state.pageInput = String(state.page);
+}
+
+async function applyAccessRequestFilters(): Promise<void> {
+	await applyPagedListFilters(accessRequestsState, loadAccessRequests);
+}
+
+async function clearAccessRequestFilters(): Promise<void> {
+	await clearPagedListFilters(accessRequestsState, loadAccessRequests);
+}
+
+async function applyAppFilters(): Promise<void> {
+	await applyPagedListFilters(appsState, loadApps);
+}
+
+async function clearAppFilters(): Promise<void> {
+	await clearPagedListFilters(appsState, loadApps);
+}
+
+async function applyTokenFilters(): Promise<void> {
+	await applyPagedListFilters(tokensState, loadTokens);
+}
+
+async function clearTokenFilters(): Promise<void> {
+	await clearPagedListFilters(tokensState, loadTokens);
+}
+
+async function applyPagedListFilters<T>(state: PagedListState<T>, loadList: LoadListFn): Promise<void> {
+	state.query = state.queryInput.trim();
+	state.userId = state.userIdInput.trim();
+	await loadList({ resetPage: true });
+}
+
+async function clearPagedListFilters<T>(state: PagedListState<T>, loadList: LoadListFn): Promise<void> {
+	const changed = hasPagedListFilter(state);
+	state.query = '';
+	state.queryInput = '';
+	state.userId = '';
+	state.userIdInput = '';
+	if (changed) {
+		await loadList({ resetPage: true });
+	}
+}
+
+async function setPageSize<T>(state: PagedListState<T>, loadList: LoadListFn, value: PageSize | string | number | null | boolean): Promise<void> {
+	const nextPageSize = normalizePageSize(String(value));
+	if (state.pageSize === nextPageSize) return;
+	state.pageSize = nextPageSize;
+	await loadList({ resetPage: true });
+}
+
+async function goToPage<T>(state: PagedListState<T>, loadList: LoadListFn, page: number): Promise<void> {
+	const nextPage = Math.max(1, Math.min(pageCount(state), Math.trunc(page)));
+	if (!Number.isFinite(nextPage) || state.page === nextPage) {
+		state.pageInput = String(state.page);
+		return;
+	}
+	state.page = nextPage;
+	state.pageInput = String(nextPage);
+	await loadList();
+}
+
+async function jumpToPage<T>(state: PagedListState<T>, loadList: LoadListFn): Promise<void> {
+	const nextPage = Number.parseInt(state.pageInput, 10);
+	await goToPage(state, loadList, Number.isFinite(nextPage) ? nextPage : state.page);
+}
+
+function adminListCaption<T>(status: FilterStatus<string>, state: PagedListState<T>): string {
+	const parts = [`状态：${statusLabel(status)}`];
+	if (state.query) parts.push(`关键词：${state.query}`);
+	if (state.userId) parts.push(`用户：${state.userId}`);
+	return parts.join(' · ');
+}
+
+function hasPagedListFilter<T>(state: PagedListState<T>): boolean {
+	return state.query.length > 0 ||
+		state.userId.length > 0 ||
+		state.queryInput.trim().length > 0 ||
+		state.userIdInput.trim().length > 0;
+}
+
+function pageSizeNumber<T>(state: PagedListState<T>): number {
+	return Number(state.pageSize);
+}
+
+function pageCount<T>(state: PagedListState<T>): number {
+	return pageCountByTotal(state.total, state.pageSize);
+}
+
+function pageCountByTotal(total: number, pageSize: PageSize): number {
+	return Math.max(1, Math.ceil(total / Number(pageSize)));
+}
+
+function pageRangeStart<T>(state: PagedListState<T>): number {
+	if (state.total === 0) return 0;
+	return (state.page - 1) * pageSizeNumber(state) + 1;
+}
+
+function pageRangeEnd<T>(state: PagedListState<T>): number {
+	return Math.min(state.total, state.page * pageSizeNumber(state));
+}
+
+function normalizePageSize(value: string): PageSize {
+	return pageSizeValues.includes(value as PageSize) ? value as PageSize : '20';
+}
+
+function actionKey(id: string, action: ReviewAction): string {
+	return `${id}:${action}`;
+}
+
+function isReviewingAccess(id: string, action: Exclude<ReviewAction, 'unsuspend'>): boolean {
+	return reviewingAccess.value === actionKey(id, action);
+}
+
+function isReviewingApp(id: string, action: ReviewAction): boolean {
+	return reviewingApp.value === actionKey(id, action);
+}
+
+function filterStatusParam<T extends string>(status: FilterStatus<T>): T | null {
+	return status === 'all' ? null : status;
+}
+
+function userDisplayName(user: PackedUser | null | undefined): string {
+	return user?.name || user?.username || user?.id || '未知用户';
+}
+
+function userAcctLabel(user: PackedUser | null | undefined): string {
+	if (!user) return '未知用户';
+	return `@${user.username}${user.host ? `@${user.host}` : ''}`;
+}
+
+function statusLabel(status: string): string {
+	return ({
+		pending: '待审核',
+		approved: '已通过',
+		rejected: '已拒绝',
+		suspended: '已暂停',
+		active: '活跃',
+		revoked: '已撤销',
+		all: '全部',
+	} as Record<string, string>)[status] ?? status;
+}
+
+function statusBadgeClass(status: string): string | undefined {
+	return ({
+		approved: styles.status_approved,
+		active: styles.status_active,
+		pending: styles.status_pending,
+		rejected: styles.status_rejected,
+		suspended: styles.status_suspended,
+		revoked: styles.status_revoked,
+	} as Record<string, string | undefined>)[status];
+}
+
+function actionLabel(action: ReviewAction): string {
+	return ({
+		approve: '通过',
+		reject: '拒绝',
+		suspend: '暂停',
+		unsuspend: '恢复',
+	} satisfies Record<ReviewAction, string>)[action];
+}
+
+watch(accessRequestStatusFilter, () => {
+	void loadAccessRequests({ resetPage: true });
+});
+
+watch(appStatusFilter, () => {
+	void loadApps({ resetPage: true });
+});
+
+watch(tokenStatusFilter, () => {
+	void loadTokens({ resetPage: true });
+});
 
 const headerActions = computed(() => []);
 const headerTabs = computed(() => []);
@@ -541,11 +1126,129 @@ definePage(() => ({
 	padding: 12px;
 }
 
+.itemBody {
+	min-width: 0;
+}
+
+.itemHeader {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.statusBadge {
+	display: inline-flex;
+	align-items: center;
+	min-height: 22px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 999px;
+	padding: 2px 8px;
+	background: var(--MI_THEME-buttonBg);
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.78em;
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.status_approved,
+.status_active {
+	border-color: color-mix(in srgb, var(--MI_THEME-success) 45%, var(--MI_THEME-divider));
+	background: color-mix(in srgb, var(--MI_THEME-success) 12%, transparent);
+	color: var(--MI_THEME-success);
+}
+
+.status_pending {
+	border-color: color-mix(in srgb, var(--MI_THEME-warn) 45%, var(--MI_THEME-divider));
+	background: color-mix(in srgb, var(--MI_THEME-warn) 12%, transparent);
+	color: var(--MI_THEME-warn);
+}
+
+.status_rejected,
+.status_suspended,
+.status_revoked {
+	border-color: color-mix(in srgb, var(--MI_THEME-error) 45%, var(--MI_THEME-divider));
+	background: color-mix(in srgb, var(--MI_THEME-error) 10%, transparent);
+	color: var(--MI_THEME-error);
+}
+
 .meta {
 	margin-top: 3px;
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 0.85em;
 	overflow-wrap: anywhere;
+}
+
+.listTools {
+	display: grid;
+	gap: 10px;
+}
+
+.filterGrid {
+	display: grid;
+	grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.5fr) minmax(220px, 1fr);
+	gap: 10px;
+	align-items: end;
+}
+
+.loading {
+	display: grid;
+	min-height: 120px;
+	place-items: center;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 8px;
+	background: var(--MI_THEME-panel);
+}
+
+.listError {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-error) 45%, var(--MI_THEME-divider));
+	border-radius: 8px;
+	padding: 12px;
+	background: color-mix(in srgb, var(--MI_THEME-error) 8%, var(--MI_THEME-panel));
+	color: var(--MI_THEME-error);
+}
+
+.pager {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px;
+	border: 1px solid var(--MI_THEME-divider);
+	border-radius: 8px;
+	padding: 12px;
+	background: var(--MI_THEME-panel);
+}
+
+.pagerSummary {
+	align-self: center;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.9em;
+	line-height: 1.5;
+}
+
+.pagerControls {
+	display: grid;
+	grid-template-columns: minmax(116px, auto) minmax(96px, auto) minmax(0, auto);
+	align-items: end;
+	gap: 8px;
+}
+
+.pageButtons {
+	align-items: end;
+}
+
+.tokenMetaGrid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 14px;
+	margin-top: 8px;
+	color: var(--MI_THEME-fgTransparentWeak);
+	font-size: 0.82em;
 }
 
 .permissionPanel {
@@ -689,8 +1392,14 @@ definePage(() => ({
 		flex-direction: column;
 	}
 
+	.filterGrid,
+	.pagerControls {
+		grid-template-columns: 1fr;
+	}
+
 	.permissionHeader,
-	.permissionGroupHeader {
+	.permissionGroupHeader,
+	.listError {
 		align-items: stretch;
 		flex-direction: column;
 	}

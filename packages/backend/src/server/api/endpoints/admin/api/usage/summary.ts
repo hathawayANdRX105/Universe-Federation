@@ -7,6 +7,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import type { AccessTokensRepository, ApiAccessGrantsRepository, AppsRepository } from '@/models/_.js';
 import { DI } from '@/di-symbols.js';
+import { IsNull } from 'typeorm';
 
 export const meta = {
 	tags: ['admin', 'api'],
@@ -50,7 +51,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				this.appsRepository.countBy({ status: 'pending' }),
 				this.appsRepository.countBy({ status: 'approved' }),
 				this.appsRepository.countBy({ status: 'suspended' }),
-				this.accessTokensRepository.countBy({ isDeveloperToken: true, status: 'active' }),
+				this.accessTokensRepository.countBy([
+					{ isDeveloperToken: true, status: 'active' },
+					{ appId: IsNull(), status: 'active' },
+				]),
 				this.accessTokensRepository.countBy({ isDeveloperToken: true, status: 'suspended' }),
 				this.accessTokensRepository.countBy({ isDeveloperToken: true, status: 'revoked' }),
 			]);

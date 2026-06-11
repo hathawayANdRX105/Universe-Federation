@@ -95,7 +95,7 @@ export const apiTokenStatuses = ['active', 'suspended', 'revoked'] as const;
 export type ApiTokenStatus = typeof apiTokenStatuses[number];
 
 export const defaultApiPublicPermissions = [
-	'read:account',
+	'read:profile',
 	'write:notes',
 	'read:drive',
 	'write:drive',
@@ -115,6 +115,7 @@ export const defaultApiPublicPermissions = [
 
 // Keep in sync with frontend consts.ts
 export const permissions = [
+	'read:profile',
 	'read:account',
 	'write:account',
 	'read:blocks',

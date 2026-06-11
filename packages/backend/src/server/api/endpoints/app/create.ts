@@ -13,7 +13,7 @@ import { unique } from '@/misc/prelude/array.js';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
 import { AppEntityService } from '@/core/entities/AppEntityService.js';
 import { DI } from '@/di-symbols.js';
-import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope } from '@/server/api/api-access-utils.js';
+import { apiAccessErrors, getApiPublicPermissions, hasUnsafeOAuthRedirectUri, isAdminApiScope, normalizeOAuthRedirectUris } from '@/server/api/api-access-utils.js';
 
 export const meta = {
 	tags: ['app'],
@@ -41,7 +41,8 @@ export const paramDef = {
 		permission: { type: 'array', uniqueItems: true, items: {
 			type: 'string',
 		} },
-		callbackUrl: { type: 'string', nullable: true },
+		callbackUrl: { type: 'string', nullable: true, maxLength: 512 },
+		callbackUrls: { type: 'array', uniqueItems: true, maxItems: 20, items: { type: 'string', maxLength: 512 } },
 	},
 	required: ['name', 'description', 'permission'],
 } as const;
@@ -78,6 +79,21 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(apiAccessErrors.apiScopeDisabled);
 			}
 
+			const requestedCallbackUrls = ps.callbackUrls !== undefined
+				? ps.callbackUrls
+				: ps.callbackUrl !== undefined
+					? [ps.callbackUrl ?? '']
+					: [];
+			const rawCallbackUrls = unique(requestedCallbackUrls.map(url => url.trim())).slice(0, 20);
+			if (rawCallbackUrls.length === 0 || hasUnsafeOAuthRedirectUri(rawCallbackUrls)) {
+				throw new ApiError(apiAccessErrors.apiInvalidRedirectUri);
+			}
+			const callbackUrls = normalizeOAuthRedirectUris(rawCallbackUrls);
+			if (callbackUrls.length === 0) {
+				throw new ApiError(apiAccessErrors.apiInvalidRedirectUri);
+			}
+			const callbackUrl = callbackUrls[0];
+
 			// Create account
 			const app = await this.appsRepository.insertOne({
 				id: this.idService.gen(),
@@ -85,8 +101,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				name: ps.name,
 				description: ps.description,
 				permission,
-				callbackUrl: ps.callbackUrl,
-				callbackUrls: ps.callbackUrl ? [ps.callbackUrl] : [],
+				callbackUrl,
+				callbackUrls,
 				status: 'approved',
 				approvedAt: new Date(),
 				secret: secret,

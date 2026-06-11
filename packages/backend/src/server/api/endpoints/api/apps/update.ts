@@ -11,7 +11,7 @@ import type { MiMeta } from '@/models/Meta.js';
 import { AppEntityService } from '@/core/entities/AppEntityService.js';
 import { unique } from '@/misc/prelude/array.js';
 import { DI } from '@/di-symbols.js';
-import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope } from '@/server/api/api-access-utils.js';
+import { apiAccessErrors, getApiPublicPermissions, hasUnsafeOAuthRedirectUri, isAdminApiScope, normalizeOAuthRedirectUris } from '@/server/api/api-access-utils.js';
 
 export const meta = {
 	tags: ['api', 'app'],
@@ -35,6 +35,7 @@ export const paramDef = {
 		name: { type: 'string', minLength: 1, maxLength: 128 },
 		description: { type: 'string', maxLength: 512 },
 		permission: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+		callbackUrl: { type: 'string', nullable: true, maxLength: 512 },
 		callbackUrls: { type: 'array', uniqueItems: true, maxItems: 20, items: { type: 'string', maxLength: 512 } },
 		websiteUrl: { type: 'string', nullable: true, maxLength: 1024 },
 		iconUrl: { type: 'string', nullable: true, maxLength: 512 },
@@ -62,11 +63,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const update: Record<string, unknown> = {};
 			if (ps.name !== undefined) update.name = ps.name;
 			if (ps.description !== undefined) update.description = ps.description;
-			if (ps.callbackUrls !== undefined) {
-				const callbackUrls = unique(ps.callbackUrls).slice(0, 20);
-				update.callbackUrls = callbackUrls;
-				update.callbackUrl = callbackUrls[0] ?? null;
-			}
 			if (ps.websiteUrl !== undefined) update.websiteUrl = ps.websiteUrl;
 			if (ps.iconUrl !== undefined) update.iconUrl = ps.iconUrl;
 			if (ps.permission !== undefined) {
@@ -77,6 +73,19 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					throw new ApiError(apiAccessErrors.apiScopeDisabled);
 				}
 				update.permission = permission;
+			}
+			if (ps.callbackUrls !== undefined || ps.callbackUrl !== undefined) {
+				const requestedCallbackUrls = ps.callbackUrls !== undefined ? ps.callbackUrls : [ps.callbackUrl ?? ''];
+				const rawCallbackUrls = unique(requestedCallbackUrls.map(url => url.trim())).slice(0, 20);
+				if (rawCallbackUrls.length === 0 || hasUnsafeOAuthRedirectUri(rawCallbackUrls)) {
+					throw new ApiError(apiAccessErrors.apiInvalidRedirectUri);
+				}
+				const callbackUrls = normalizeOAuthRedirectUris(rawCallbackUrls);
+				if (callbackUrls.length === 0) {
+					throw new ApiError(apiAccessErrors.apiInvalidRedirectUri);
+				}
+				update.callbackUrls = callbackUrls;
+				update.callbackUrl = callbackUrls[0];
 			}
 
 			if (Object.keys(update).length > 0) {

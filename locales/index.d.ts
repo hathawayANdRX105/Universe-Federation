@@ -9125,6 +9125,10 @@ export interface Locale extends ILocale {
     };
     "_permissions": {
         /**
+         * 基本的なログインプロフィールを見る
+         */
+        "read:profile": string;
+        /**
          * アカウントの情報を見る
          */
         "read:account": string;

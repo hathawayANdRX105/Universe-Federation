@@ -49,6 +49,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<FormSection>
 					<template #label><i class="ti ti-apps"></i> <SearchLabel>创建 OAuth/OIDC 登录应用</SearchLabel></template>
 					<div class="_gaps_m">
+						<MkInfo>每个应用必须填写自己的 OAuth/OIDC 回调地址。生产环境必须使用 HTTPS，本地开发可使用 localhost 或 127.0.0.1。</MkInfo>
+
 						<div :class="$style.templateGrid">
 							<button
 								v-for="template in appTemplates"
@@ -69,11 +71,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<template #prefix><i class="ti ti-tag"></i></template>
 								<template #label>应用名称</template>
 							</MkInput>
-							<MkInput v-model="newAppRedirectUri" placeholder="https://example.com/oauth/callback">
+							<MkInput v-model="newAppCallbackUrl" :placeholder="defaultAppCallbackPlaceholder">
 								<template #prefix><i class="ti ti-link"></i></template>
-								<template #label>回调地址</template>
+								<template #label>OAuth/OIDC 回调地址</template>
+								<template #caption>第三方网站发起 OAuth 登录时使用的 <code>redirect_uri</code>，必须与这里完全一致。这个地址由应用所有者填写，管理员不会代填。</template>
 							</MkInput>
 						</div>
+
 						<MkTextarea v-model="newAppDescription">
 							<template #label>应用说明</template>
 						</MkTextarea>
@@ -150,8 +154,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div :class="$style.docsGrid">
 							<div :class="$style.docCard">
 								<strong>快捷登录 OAuth/OIDC</strong>
-								<code>GET /oauth/authorize?client_id=...&response_type=code&scope=read:account&code_challenge=...</code>
-								<span>推荐使用 Authorization Code + PKCE，用户资料从 <code>/oauth/userinfo</code> 获取。</span>
+								<code>GET /oauth/authorize?client_id=...&response_type=code&scope=read:profile&code_challenge=...</code>
+								<span>推荐使用最小 <code>read:profile</code> 权限，用户资料只从 <code>/oauth/userinfo</code> 获取。</span>
 							</div>
 							<div :class="$style.docCard">
 								<strong>发帖 API</strong>
@@ -280,7 +284,7 @@ const creatingApp = ref(false);
 const creatingToken = ref(false);
 const accessReason = ref('');
 const newAppName = ref('');
-const newAppRedirectUri = ref('');
+const newAppCallbackUrl = ref('');
 const newAppDescription = ref('');
 const selectedTemplateKey = ref('login');
 
@@ -289,7 +293,7 @@ const appTemplates: Template[] = [{
 	title: '快捷登录',
 	caption: '第三方网站用本站账号登录',
 	icon: 'ti ti-login',
-	permissions: ['read:account'],
+	permissions: ['read:profile'],
 }, {
 	key: 'resources',
 	title: '发布资源/发帖',
@@ -314,7 +318,8 @@ const tokenTemplates = appTemplates.filter(template => template.key !== 'login')
 
 const selectedTemplate = computed(() => appTemplates.find(template => template.key === selectedTemplateKey.value) ?? appTemplates[0]);
 const needsApproval = computed(() => accessStatus.value?.mode === 'approval' && accessStatus.value.effectiveStatus !== 'approved');
-const canCreateApp = computed(() => Boolean(newAppName.value.trim() && newAppRedirectUri.value.trim() && accessStatus.value?.mode !== 'closed' && !needsApproval.value));
+const canCreateApp = computed(() => Boolean(newAppName.value.trim() && newAppCallbackUrl.value.trim() && accessStatus.value?.mode !== 'closed' && !needsApproval.value));
+const defaultAppCallbackPlaceholder = computed(() => `${window.location.origin}/oauth/callback`);
 const modeLabel = computed(() => ({
 	open: '开放使用',
 	approval: '申请使用',
@@ -359,8 +364,8 @@ async function createApp() {
 		const app = await misskeyApi<ApiApp>('api/apps/create', {
 			name: newAppName.value.trim(),
 			description: newAppDescription.value.trim(),
-			callbackUrls: [newAppRedirectUri.value.trim()],
 			permission: selectedTemplate.value.permissions,
+			callbackUrls: [newAppCallbackUrl.value.trim()],
 		});
 		await reload();
 		await os.alert({

@@ -24,6 +24,7 @@ export const followersVisibilities = ['public', 'followers', 'private'] as const
 
 // Keep in sync with const.ts in backend
 export const permissions = [
+	'read:profile',
 	'read:account',
 	'write:account',
 	'read:blocks',

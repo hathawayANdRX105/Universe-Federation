@@ -30,7 +30,7 @@ import { renderFullError } from '@/misc/render-full-error.js';
 import { ApiError } from './error.js';
 import { ApiLoggerService } from './ApiLoggerService.js';
 import { AuthenticateService, AuthenticationError } from './AuthenticateService.js';
-import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope, isWriteApiScope } from './api-access-utils.js';
+import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope, isDeveloperApiAccessApproved, isWriteApiScope } from './api-access-utils.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { IEndpointMeta, IEndpoint } from './endpoints.js';
 
@@ -481,11 +481,9 @@ export class ApiCallService {
 		}
 
 		const developerUserId = token.app ? token.app.userId : token.userId;
-		if (this.meta.apiAccessMode === 'approval' && developerUserId != null && this.meta.rootUserId !== developerUserId) {
-			const grant = await this.apiAccessGrantsRepository.findOneBy({ userId: developerUserId });
-			if (grant?.status !== 'approved') {
-				throw new ApiError(apiAccessErrors.apiApprovalRequired);
-			}
+		const developerApproved = await isDeveloperApiAccessApproved(this.meta, this.apiAccessGrantsRepository, developerUserId);
+		if (!developerApproved) {
+			throw new ApiError(apiAccessErrors.apiApprovalRequired);
 		}
 
 		if (ep.meta.kind && !isAdminApiScope(ep.meta.kind)) {

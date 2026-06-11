@@ -7,7 +7,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { ApiError } from '@/server/api/error.js';
 import type { AccessTokensRepository, ApiAccessGrantsRepository } from '@/models/_.js';
-import type { AccessTokenRank } from '@/models/AccessToken.js';
 import type { MiMeta } from '@/models/Meta.js';
 import { IdService } from '@/core/IdService.js';
 import { NotificationService } from '@/core/NotificationService.js';
@@ -100,8 +99,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				description: ps.description,
 				iconUrl: ps.iconUrl,
 				permission,
-				rank: ps.rank as AccessTokenRank | null,
-				rateLimitPerMinute: ps.rateLimitPerMinute,
+				rank: 'user',
+				rateLimitPerMinute: null,
 				status: 'active',
 				isDeveloperToken: true,
 				granteeIds: [],

@@ -11,6 +11,7 @@ import { IdService } from '@/core/IdService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { DI } from '@/di-symbols.js';
 import { promiseMap } from '@/misc/promise-map.js';
+import { sqlLikeEscape } from '@/misc/sql-like-escape.js';
 
 export const meta = {
 	tags: ['admin', 'api'],
@@ -23,7 +24,10 @@ export const meta = {
 export const paramDef = {
 	type: 'object',
 	properties: {
-		status: { type: 'string', enum: apiTokenStatuses, nullable: true },
+		status: { type: 'string', enum: [...apiTokenStatuses, null], nullable: true },
+		query: { type: 'string', nullable: true, maxLength: 128 },
+		userId: { type: 'string', nullable: true, format: 'misskey:id' },
+		withTotal: { type: 'boolean', default: false },
 		limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
 		offset: { type: 'integer', minimum: 0, default: 0 },
 	},
@@ -40,18 +44,40 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private readonly userEntityService: UserEntityService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
-			const tokens = await this.accessTokensRepository.find({
-				where: {
-					isDeveloperToken: true,
-					...(ps.status ? { status: ps.status } : {}),
-				},
-				relations: { user: true, app: true },
-				order: { id: 'DESC' },
-				take: ps.limit,
-				skip: ps.offset,
-			});
+			const query = this.accessTokensRepository.createQueryBuilder('token')
+				.leftJoinAndSelect('token.user', 'user')
+				.leftJoinAndSelect('token.app', 'app')
+				.where('(token."isDeveloperToken" = true OR token."appId" IS NULL)')
+				.orderBy('token.id', 'DESC')
+				.take(ps.limit)
+				.skip(ps.offset);
 
-			return await promiseMap(tokens, async token => ({
+			if (ps.status) {
+				query.andWhere('token.status = :status', { status: ps.status });
+			}
+
+			if (ps.userId) {
+				query.andWhere('token."userId" = :userId', { userId: ps.userId });
+			}
+
+			const q = ps.query?.trim();
+			if (q) {
+				const like = `%${sqlLikeEscape(q)}%`;
+				query.andWhere(`(
+					"token"."id" = :exactQuery OR
+					"token"."userId" = :exactQuery OR
+					"token"."appId" = :exactQuery OR
+					"token"."name" ILIKE :like OR
+					"token"."description" ILIKE :like OR
+					"app"."name" ILIKE :like OR
+					"user"."username" ILIKE :like OR
+					"user"."name" ILIKE :like
+				)`, { exactQuery: q, like });
+			}
+
+			const [tokens, total] = ps.withTotal ? await query.getManyAndCount() : [await query.getMany(), 0];
+
+			const items = await promiseMap(tokens, async token => ({
 				id: token.id,
 				name: token.name ?? token.app?.name ?? null,
 				description: token.description,
@@ -67,6 +93,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}), {
 				limiter: 4,
 			});
+
+			return ps.withTotal ? { items, total } : items;
 		});
 	}
 }

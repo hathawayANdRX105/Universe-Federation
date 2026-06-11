@@ -7,7 +7,7 @@ import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { MetaService } from '@/core/MetaService.js';
 import { apiAccessModes } from '@/const.js';
-import { getApiPublicPermissions } from '@/server/api/api-access-utils.js';
+import { getApiPublicPermissions, normalizeApiPermissions } from '@/server/api/api-access-utils.js';
 
 export const meta = {
 	tags: ['admin', 'api'],
@@ -42,7 +42,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				...(ps.oauthEnabled !== undefined ? { enableOAuthLogin: ps.oauthEnabled } : {}),
 				...(ps.oidcEnabled !== undefined ? { enableOidc: ps.oidcEnabled } : {}),
 				...(ps.requireAppApproval !== undefined ? { apiRequireAppApproval: ps.requireAppApproval } : {}),
-				...(ps.publicPermissions !== undefined ? { apiPublicPermissions: ps.publicPermissions } : {}),
+				...(ps.publicPermissions !== undefined ? { apiPublicPermissions: normalizeApiPermissions(ps.publicPermissions) } : {}),
 				...(ps.defaultTokenRateLimit !== undefined ? { apiDefaultTokenRateLimit: ps.defaultTokenRateLimit } : {}),
 				...(ps.writeTokenRateLimit !== undefined ? { apiWriteTokenRateLimit: ps.writeTokenRateLimit } : {}),
 			};

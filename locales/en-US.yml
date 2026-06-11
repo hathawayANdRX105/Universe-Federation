@@ -2345,6 +2345,7 @@ _2fa:
   backupCodesExhaustedWarning: "All backup codes have been used. Should you lose access to your two-factor authentification app, you will be unable to access this account. Please reconfigure two-factor authentification."
   moreDetailedGuideHere: "Here is detailed guide"
 _permissions:
+  "read:profile": "View basic login profile"
   "read:account": "View your account information"
   "write:account": "Edit your account information"
   "read:blocks": "View your list of blocked users"

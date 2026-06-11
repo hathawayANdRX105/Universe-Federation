@@ -2352,6 +2352,7 @@ _2fa:
   moreDetailedGuideHere: "詳細なガイドはこちら"
 
 _permissions:
+  "read:profile": "基本的なログインプロフィールを見る"
   "read:account": "アカウントの情報を見る"
   "write:account": "アカウントの情報を変更する"
   "read:blocks": "ブロックを見る"

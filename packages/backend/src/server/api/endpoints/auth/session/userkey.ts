@@ -5,11 +5,12 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
-import type { AppsRepository, AccessTokensRepository, AuthSessionsRepository } from '@/models/_.js';
+import type { AccessTokensRepository, ApiAccessGrantsRepository, AppsRepository, AuthSessionsRepository } from '@/models/_.js';
 import type { MiMeta } from '@/models/Meta.js';
-import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { DI } from '@/di-symbols.js';
-import { apiAccessErrors } from '@/server/api/api-access-utils.js';
+import { apiAccessErrors, isDeveloperApiAccessApproved } from '@/server/api/api-access-utils.js';
+import { packOidcUserinfo } from '@/server/oauth/OAuth2ProviderService.js';
+import type { Config } from '@/config.js';
 import { ApiError } from '../../../error.js';
 
 export const meta = {
@@ -29,7 +30,17 @@ export const meta = {
 			user: {
 				type: 'object',
 				optional: false, nullable: false,
-				ref: 'UserDetailedNotMe',
+				properties: {
+					id: { type: 'string' },
+					username: { type: 'string' },
+					host: { type: 'string', nullable: true },
+					avatarUrl: { type: 'string', nullable: true },
+					sub: { type: 'string' },
+					preferred_username: { type: 'string' },
+					name: { type: 'string' },
+					picture: { type: 'string', nullable: true },
+					profile: { type: 'string' },
+				},
 			},
 		},
 	},
@@ -73,6 +84,9 @@ export const paramDef = {
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
+		@Inject(DI.config)
+		private readonly config: Config,
+
 		@Inject(DI.meta)
 		private readonly instanceMeta: MiMeta,
 
@@ -82,10 +96,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		@Inject(DI.authSessionsRepository)
 		private authSessionsRepository: AuthSessionsRepository,
 
+		@Inject(DI.apiAccessGrantsRepository)
+		private readonly apiAccessGrantsRepository: ApiAccessGrantsRepository,
+
 		@Inject(DI.accessTokensRepository)
 		private accessTokensRepository: AccessTokensRepository,
-
-		private userEntityService: UserEntityService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			// Lookup app
@@ -104,6 +119,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (app.status !== 'approved') {
 				throw new ApiError(apiAccessErrors.apiAppUnavailable);
 			}
+			const developerApproved = await isDeveloperApiAccessApproved(this.instanceMeta, this.apiAccessGrantsRepository, app.userId);
+			if (!developerApproved) {
+				throw new ApiError(apiAccessErrors.apiApprovalRequired);
+			}
 
 			// Fetch token
 			const session = await this.authSessionsRepository.findOneBy({
@@ -120,19 +139,27 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			// Lookup access token
-			const accessToken = await this.accessTokensRepository.findOneByOrFail({
-				appId: app.id,
-				userId: session.userId,
+			const accessToken = await this.accessTokensRepository.findOneOrFail({
+				where: {
+					appId: app.id,
+					userId: session.userId,
+				},
+				relations: { user: true },
 			});
 
 			// Delete session
 			await this.authSessionsRepository.delete(session.id);
+			const userinfo = packOidcUserinfo(accessToken.user!, this.config.url);
 
 			return {
 				accessToken: accessToken.token,
-				user: await this.userEntityService.pack(session.userId, me, {
-					schema: 'UserDetailedNotMe',
-				}),
+				user: {
+					id: userinfo.sub,
+					username: userinfo.preferred_username,
+					host: null,
+					avatarUrl: userinfo.picture,
+					...userinfo,
+				},
 			};
 		});
 	}

@@ -115,6 +115,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				iconUrl: ps.iconUrl,
 				permission: ps.permission,
 				rank: ps.rank,
+				status: 'active',
+				isDeveloperToken: true,
 				granteeIds: ps.grantees,
 			});
 

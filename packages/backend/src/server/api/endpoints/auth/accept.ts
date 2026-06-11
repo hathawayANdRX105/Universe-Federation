@@ -6,13 +6,13 @@
 import * as crypto from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
-import type { AuthSessionsRepository, AppsRepository, AccessTokensRepository } from '@/models/_.js';
+import type { AccessTokensRepository, ApiAccessGrantsRepository, AppsRepository, AuthSessionsRepository } from '@/models/_.js';
 import type { MiMeta } from '@/models/Meta.js';
 import { IdService } from '@/core/IdService.js';
 import { TimeService } from '@/global/TimeService.js';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
 import { DI } from '@/di-symbols.js';
-import { apiAccessErrors } from '@/server/api/api-access-utils.js';
+import { apiAccessErrors, isDeveloperApiAccessApproved } from '@/server/api/api-access-utils.js';
 import { ApiError } from '../../error.js';
 
 export const meta = {
@@ -57,6 +57,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		@Inject(DI.authSessionsRepository)
 		private authSessionsRepository: AuthSessionsRepository,
 
+		@Inject(DI.apiAccessGrantsRepository)
+		private readonly apiAccessGrantsRepository: ApiAccessGrantsRepository,
+
 		@Inject(DI.accessTokensRepository)
 		private accessTokensRepository: AccessTokensRepository,
 
@@ -88,6 +91,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 			if (app.status !== 'approved') {
 				throw new ApiError(apiAccessErrors.apiAppUnavailable);
+			}
+			const developerApproved = await isDeveloperApiAccessApproved(this.instanceMeta, this.apiAccessGrantsRepository, app.userId);
+			if (!developerApproved) {
+				throw new ApiError(apiAccessErrors.apiApprovalRequired);
 			}
 
 			if (!exist) {

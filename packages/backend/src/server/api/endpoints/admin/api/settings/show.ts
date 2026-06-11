@@ -5,6 +5,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
+import type { MetasRepository } from '@/models/_.js';
 import type { MiMeta } from '@/models/Meta.js';
 import { DI } from '@/di-symbols.js';
 import { getApiPublicPermissions } from '@/server/api/api-access-utils.js';
@@ -26,18 +27,23 @@ export const paramDef = {
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
+		@Inject(DI.metasRepository)
+		private readonly metasRepository: MetasRepository,
+
 		@Inject(DI.meta)
 		private readonly instanceMeta: MiMeta,
 	) {
 		super(meta, paramDef, async () => {
+			const freshMeta = await this.metasRepository.findOneByOrFail({ id: this.instanceMeta.id });
+
 			return {
-				mode: this.instanceMeta.apiAccessMode,
-				oauthEnabled: this.instanceMeta.enableOAuthLogin,
-				oidcEnabled: this.instanceMeta.enableOidc,
-				requireAppApproval: this.instanceMeta.apiRequireAppApproval,
-				publicPermissions: getApiPublicPermissions(this.instanceMeta),
-				defaultTokenRateLimit: this.instanceMeta.apiDefaultTokenRateLimit,
-				writeTokenRateLimit: this.instanceMeta.apiWriteTokenRateLimit,
+				mode: freshMeta.apiAccessMode,
+				oauthEnabled: freshMeta.enableOAuthLogin,
+				oidcEnabled: freshMeta.enableOidc,
+				requireAppApproval: freshMeta.apiRequireAppApproval,
+				publicPermissions: getApiPublicPermissions(freshMeta),
+				defaultTokenRateLimit: freshMeta.apiDefaultTokenRateLimit,
+				writeTokenRateLimit: freshMeta.apiWriteTokenRateLimit,
 			};
 		});
 	}
