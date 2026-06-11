@@ -12,6 +12,13 @@ export type ChatTimelineIdentifiableMessage = {
 	id: string;
 };
 
+export type ChatTimelineWindowKeep = 'newest' | 'oldest';
+
+function limitChatTimelineWindow<T>(items: T[], limit: number | undefined, keep: ChatTimelineWindowKeep | undefined): T[] {
+	if (limit == null || items.length <= limit) return items;
+	return keep === 'oldest' ? items.slice(-limit) : items.slice(0, limit);
+}
+
 export function getChatScrollMetrics(scrollContainer: ChatScrollContainerMetrics): {
 	maxScrollTop: number;
 	scrollTop: number;
@@ -61,10 +68,12 @@ export function mergeChatMessagesForTimeline<T extends ChatTimelineSortableMessa
 	incoming: T[],
 	options?: {
 		limit?: number;
+		preserveExistingOrder?: boolean;
+		keep?: ChatTimelineWindowKeep;
 	},
 ): T[] {
 	if (incoming.length === 0) {
-		return options?.limit == null || current.length <= options.limit ? current : current.slice(0, options.limit);
+		return limitChatTimelineWindow(current, options?.limit, options?.keep);
 	}
 
 	const map = new Map<string, T>();
@@ -81,11 +90,29 @@ export function mergeChatMessagesForTimeline<T extends ChatTimelineSortableMessa
 	}
 
 	if (!hasNewMessage) {
-		return options?.limit == null || current.length <= options.limit ? current : current.slice(0, options.limit);
+		return limitChatTimelineWindow(current, options?.limit, options?.keep);
+	}
+
+	if (options?.preserveExistingOrder === true) {
+		const next = [...current];
+		const currentIds = new Set(current.map(message => message.id));
+		for (const message of incoming) {
+			if (currentIds.has(message.id)) continue;
+
+			if (next.length === 0 || message.id > next[0].id) {
+				next.unshift(message);
+			} else if (message.id < next[next.length - 1].id) {
+				next.push(message);
+			} else {
+				return limitChatTimelineWindow(sortChatMessagesForTimeline([...map.values()]), options?.limit, options?.keep);
+			}
+		}
+
+		return limitChatTimelineWindow(next, options?.limit, options?.keep);
 	}
 
 	const merged = sortChatMessagesForTimeline([...map.values()]);
-	return options?.limit == null || merged.length <= options.limit ? merged : merged.slice(0, options.limit);
+	return limitChatTimelineWindow(merged, options?.limit, options?.keep);
 }
 
 export function prependChatMessageForTimeline<T extends ChatTimelineSortableMessage>(
@@ -131,6 +158,35 @@ export function appendDetachedChatMessages<T extends ChatTimelineIdentifiableMes
 	}
 
 	return next;
+}
+
+export function findMissingChatMessageIdsInLatestWindow<T extends ChatTimelineIdentifiableMessage>(
+	local: T[],
+	latestWindow: ChatTimelineIdentifiableMessage[],
+	options: {
+		limit: number;
+		isPending?: (message: T) => boolean;
+	},
+): Set<string> {
+	const missingIds = new Set<string>();
+	if (local.length === 0) return missingIds;
+
+	const latestIds = new Set(latestWindow.map(message => message.id));
+	const coversAllHistory = latestWindow.length < options.limit;
+	const oldestCoveredId = latestWindow.reduce<string | null>((oldestId, message) => {
+		if (oldestId == null || message.id < oldestId) return message.id;
+		return oldestId;
+	}, null);
+
+	for (const message of local) {
+		if (options.isPending?.(message) === true) continue;
+		if (latestIds.has(message.id)) continue;
+		if (coversAllHistory || (oldestCoveredId != null && message.id >= oldestCoveredId)) {
+			missingIds.add(message.id);
+		}
+	}
+
+	return missingIds;
 }
 
 type ChatReadReceiptTimer = ReturnType<typeof setTimeout>;

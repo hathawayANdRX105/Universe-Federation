@@ -88,7 +88,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:animate="!isRestoringHistoryScroll && !isRoomChat"
 					tag="div" :class="$style.messageList"
 				>
-					<div v-for="item in timeline.toReversed()" :key="item.id" :class="[$style.messageItem, { [$style.contextTarget]: item.type === 'item' && item.id === contextTargetMessageId }]" :data-scroll-anchor="item.type === 'item' ? item.id : undefined">
+					<div v-for="item in visibleTimeline" :key="item.id" :class="[$style.messageItem, { [$style.contextTarget]: item.type === 'item' && item.id === contextTargetMessageId }]" :data-scroll-anchor="item.type === 'item' ? item.id : undefined">
 						<XMessage v-if="item.type === 'item'" :message="item.data" :enableReferenceActions="true" :enableRoomUserMute="true" :canDeleteAnyMessage="canDeleteAnyMessage" :canManageRoomUsers="canManageRoomUsers" @reply="setReplyTarget(item.data)" @quote="setQuoteTarget(item.data)" @mention="mentionUser" @muteUser="muteUserInRoom" @openReference="openReferenceMessage" @deletedMany="onDeletedMany"/>
 						<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
 							<span><i class="ti ti-chevron-up"></i> {{ item.nextText }}</span>
@@ -188,7 +188,7 @@ import MkInfo from '@/components/MkInfo.vue';
 import MkAcct from '@/components/global/MkAcct.vue';
 import { makeDateSeparatedTimelineComputedRef } from '@/utility/timeline-date-separate.js';
 import SkTransitionGroup from '@/components/SkTransitionGroup.vue';
-import { appendDetachedChatMessages, ChatAutoScrollState, ChatReadReceiptBatcher, getChatScrollMetrics, mergeChatMessagesForTimeline, prependChatMessageForTimeline } from './room-scroll.js';
+import { appendDetachedChatMessages, ChatAutoScrollState, ChatReadReceiptBatcher, findMissingChatMessageIdsInLatestWindow, getChatScrollMetrics, mergeChatMessagesForTimeline, prependChatMessageForTimeline } from './room-scroll.js';
 import { hasChatUserResolvedAvatar, mergeChatUserForCache } from './room-user-cache.js';
 
 const $i = ensureSignin();
@@ -237,6 +237,7 @@ const localTabsEl = ref<HTMLElement | null>(null);
 const timelineEl = ref<HTMLElement | null>(null);
 const formEl = ref<InstanceType<typeof XForm> | null>(null);
 const timeline = makeDateSeparatedTimelineComputedRef(messages);
+const visibleTimeline = computed(() => timeline.value.toReversed());
 const contextTargetMessageId = ref<string | null>(null);
 const pendingContextScrollId = ref<string | null>(null);
 const usersById = ref(new Map<string, Misskey.entities.UserLite>());
@@ -257,13 +258,19 @@ const SCROLL_HISTORY_THRESHOLD = 480;
 const SCROLL_TAIL_THRESHOLD = 480;
 const USER_SCROLL_INTERACTION_LOCK_MS = 1200;
 const TIMELINE_LIMIT = 20;
+const TIMELINE_RECONCILE_LIMIT = 100;
 const CONTEXT_LIMIT = 30;
 const INITIAL_HISTORY_FILL_LIMIT = 6;
-const MAX_ROOM_MESSAGES = 500;
+const MAX_ROOM_MESSAGES = 240;
+const MAX_CONTEXT_MESSAGES = 120;
 const STREAM_CONNECT_TIMEOUT = 5000;
-const STREAM_RECOVERY_DEBOUNCE_MS = 250;
-const STREAM_RECOVERY_POLL_INTERVAL_MS = 5000;
+const CHAT_RECONCILE_TIMEOUT_MS = 5000;
+const CHAT_RECOVERY_FETCH_TIMEOUT_MS = 10000;
+const STREAM_RECOVERY_DEBOUNCE_MS = 800;
+const STREAM_RECOVERY_POLL_INTERVAL_MS = 20000;
+const STREAM_RECOVERY_ERROR_RETRY_MS = 5000;
 const STREAM_LATEST_GAP_MAX_PAGES = 5;
+const STREAM_RECOVERY_STALE_MS = 60000;
 const CHAT_READ_RECEIPT_MIN_INTERVAL_MS = 2000;
 const CHAT_USER_REFRESH_BATCH_SIZE = 20;
 const CHAT_USER_REFRESH_DELAY_MS = 250;
@@ -296,6 +303,7 @@ let streamRecoverySinceId: string | undefined;
 let isRoomViewDisposed = false;
 let latestSyncPromise: Promise<void> | null = null;
 let latestSyncGeneration = 0;
+let latestStreamEventAt = Date.now();
 let historyFetchArmed = true;
 let newerFetchArmed = true;
 let scrollRestorationDepth = 0;
@@ -339,6 +347,12 @@ function canUseChatScrollMetrics() {
 
 function canSyncLatestMessages() {
 	return tab.value === 'chat' && !window.document.hidden && isActivated && !initializing.value && initializeError.value == null && joinRequiredRoom.value == null && !isContextMode.value && (props.userId != null ? user.value != null : room.value != null);
+}
+
+function isAbortError(err: unknown): boolean {
+	// Browser AbortError is expected when chat recovery requests are superseded.
+	return err instanceof DOMException && err.name === 'AbortError' ||
+		err instanceof Error && err.name === 'AbortError';
 }
 
 function beginScrollRestoration() {
@@ -400,6 +414,51 @@ function clearNewMessageIndicator() {
 
 	showIndicator.value = false;
 	newMessageCount.value = 0;
+}
+
+function decrementNewMessageIndicator(count: number) {
+	if (count <= 0 || newMessageCount.value === 0) return;
+
+	newMessageCount.value = Math.max(0, newMessageCount.value - count);
+	if (newMessageCount.value === 0) {
+		showIndicator.value = false;
+	}
+}
+
+function clearReferenceTargetsByIds(idSet: Set<string>) {
+	if (replyTarget.value != null && idSet.has(replyTarget.value.id)) {
+		replyTarget.value = null;
+	}
+	if (quoteTarget.value != null && idSet.has(quoteTarget.value.id)) {
+		quoteTarget.value = null;
+	}
+	if (contextTargetMessageId.value != null && idSet.has(contextTargetMessageId.value)) {
+		contextTargetMessageId.value = null;
+	}
+	if (pendingContextScrollId.value != null && idSet.has(pendingContextScrollId.value)) {
+		pendingContextScrollId.value = null;
+	}
+}
+
+function removeLocalChatMessagesByIds(ids: Iterable<string>) {
+	const idSet = new Set(ids);
+	if (idSet.size === 0) return;
+
+	messages.value = messages.value.filter(message => !idSet.has(message.id));
+	pendingIncomingMessages = pendingIncomingMessages.filter(message => !idSet.has(message.id));
+	if (pendingIncomingMessages.length === 0) {
+		pendingIncomingShouldStickToLatest = false;
+	}
+
+	const removedDetachedMessages: Misskey.entities.ChatMessageLite[] = [];
+	detachedIncomingMessages = detachedIncomingMessages.filter(message => {
+		if (!idSet.has(message.id)) return true;
+		removedDetachedMessages.push(message);
+		return false;
+	});
+
+	decrementNewMessageIndicator(removedDetachedMessages.filter(message => message.fromUserId !== $i.id).length);
+	clearReferenceTargetsByIds(idSet);
 }
 
 function scrollToLatest(behavior: ScrollBehavior = 'smooth', options?: { flushReadReceipt?: boolean }) {
@@ -916,13 +975,18 @@ function findOldestPersistedMessageId(): string | undefined {
 }
 
 function messageLimit(): number | undefined {
-	return isRoomChat.value && !isContextMode.value ? MAX_ROOM_MESSAGES : undefined;
+	if (isContextMode.value) return MAX_CONTEXT_MESSAGES;
+	return isRoomChat.value ? MAX_ROOM_MESSAGES : undefined;
 }
 
-function mergeMessages(...sources: NormalizedChatMessage[][]): NormalizedChatMessage[] {
+function mergeMessages(...sources: NormalizedChatMessage[][]): NormalizedChatMessage[];
+function mergeMessages(options: { keep?: 'newest' | 'oldest' }, ...sources: NormalizedChatMessage[][]): NormalizedChatMessage[];
+function mergeMessages(first: NormalizedChatMessage[] | { keep?: 'newest' | 'oldest' }, ...rest: NormalizedChatMessage[][]): NormalizedChatMessage[] {
+	const options = Array.isArray(first) ? { keep: 'newest' as const } : { keep: first.keep ?? 'newest' };
+	const sources = Array.isArray(first) ? [first, ...rest] : rest;
 	if (sources.length === 0) return [];
-	if (sources.length === 1) return mergeChatMessagesForTimeline([], sources[0], { limit: messageLimit() });
-	return mergeChatMessagesForTimeline(sources[0], sources[1], { limit: messageLimit() });
+	if (sources.length === 1) return mergeChatMessagesForTimeline([], sources[0], { limit: messageLimit(), keep: options.keep });
+	return mergeChatMessagesForTimeline(sources[0], sources[1], { limit: messageLimit(), keep: options.keep, preserveExistingOrder: isRoomChat.value });
 }
 
 function prependMessage(message: NormalizedChatMessage) {
@@ -930,6 +994,10 @@ function prependMessage(message: NormalizedChatMessage) {
 }
 
 function appendFetchedMessages(fetched: Misskey.entities.ChatMessageLite[]): NormalizedChatMessage[] {
+	return appendFetchedMessagesWithWindow(fetched, 'newest');
+}
+
+function appendFetchedMessagesWithWindow(fetched: Misskey.entities.ChatMessageLite[], keep: 'newest' | 'oldest'): NormalizedChatMessage[] {
 	const visible = filterMutedRoomMessages(fetched);
 	if (visible.length === 0) return [];
 
@@ -937,7 +1005,7 @@ function appendFetchedMessages(fetched: Misskey.entities.ChatMessageLite[]): Nor
 	const normalized = visible.map(x => normalizeMessage(x));
 	const newlyVisible = normalized.filter(message => !existingIds.has(message.id));
 	const current = removeMatchingPendingMessagesFrom(messages.value, normalized);
-	messages.value = mergeMessages(current, normalized);
+	messages.value = mergeMessages({ keep }, current, normalized);
 	return newlyVisible;
 }
 
@@ -955,6 +1023,52 @@ function bufferFetchedLatestMessages(fetched: Misskey.entities.ChatMessageLite[]
 		id: message.id,
 		fromUserId: message.fromUserId,
 	}));
+}
+
+async function fetchLatestTimelineWindow(signal?: AbortSignal): Promise<Misskey.entities.ChatMessageLite[]> {
+	if (props.userId) {
+		return await misskeyApi('chat/messages/user-timeline', {
+			userId: user.value!.id,
+			limit: TIMELINE_RECONCILE_LIMIT,
+		}, undefined, signal);
+	}
+
+	if (room.value == null) return [];
+
+	return await misskeyApi('chat/messages/room-timeline', {
+		roomId: room.value.id,
+		limit: TIMELINE_RECONCILE_LIMIT,
+	}, undefined, signal);
+}
+
+function reconcileLocalMessagesWithLatestWindow(latestWindow: Misskey.entities.ChatMessageLite[]) {
+	const missingIds = new Set<string>([
+		...findMissingChatMessageIdsInLatestWindow(messages.value, latestWindow, {
+			limit: TIMELINE_RECONCILE_LIMIT,
+			isPending: isPendingMessage,
+		}),
+		...findMissingChatMessageIdsInLatestWindow(pendingIncomingMessages, latestWindow, {
+			limit: TIMELINE_RECONCILE_LIMIT,
+		}),
+		...findMissingChatMessageIdsInLatestWindow(detachedIncomingMessages, latestWindow, {
+			limit: TIMELINE_RECONCILE_LIMIT,
+		}),
+	]);
+
+	removeLocalChatMessagesByIds(missingIds);
+}
+
+async function reconcileLatestTimelineWindow(): Promise<Misskey.entities.ChatMessageLite[]> {
+	const controller = new AbortController();
+	const timeoutId = window.setTimeout(() => controller.abort(), CHAT_RECONCILE_TIMEOUT_MS);
+
+	try {
+		const latestWindow = await fetchLatestTimelineWindow(controller.signal);
+		reconcileLocalMessagesWithLatestWindow(latestWindow);
+		return latestWindow;
+	} finally {
+		window.clearTimeout(timeoutId);
+	}
 }
 
 function replaceMessages(fetched: (Misskey.entities.ChatMessageLite | Misskey.entities.ChatMessage)[]) {
@@ -1087,7 +1201,11 @@ function clearStreamRecoveryPollingTimer() {
 	streamRecoveryPollingTimer = null;
 }
 
-function startStreamRecoveryPolling() {
+function markChatStreamEvent() {
+	latestStreamEventAt = Date.now();
+}
+
+function startStreamRecoveryPolling(delay = STREAM_RECOVERY_POLL_INTERVAL_MS) {
 	if (isRoomViewDisposed) return;
 	if (streamRecoveryPollingTimer != null) return;
 
@@ -1095,18 +1213,22 @@ function startStreamRecoveryPolling() {
 		streamRecoveryPollingTimer = null;
 		if (isRoomViewDisposed) return;
 
-		if (canSyncLatestMessages()) {
+		let retryDelay = STREAM_RECOVERY_POLL_INTERVAL_MS;
+		if (canSyncLatestMessages() && Date.now() - latestStreamEventAt >= STREAM_RECOVERY_STALE_MS) {
 			const shouldStickToLatest = shouldAutoRevealLatestMessages();
 			try {
 				await syncLatestMessages({ stickToLatest: shouldStickToLatest, flushReadReceipt: shouldStickToLatest });
 			} catch (err) {
-				console.warn('Failed to poll latest chat messages:', err);
+				if (!isAbortError(err)) {
+					console.warn('Failed to poll latest chat messages:', err);
+				}
+				retryDelay = STREAM_RECOVERY_ERROR_RETRY_MS;
 			}
 		}
 
 		if (isRoomViewDisposed) return;
-		startStreamRecoveryPolling();
-	}, STREAM_RECOVERY_POLL_INTERVAL_MS);
+		startStreamRecoveryPolling(retryDelay);
+	}, delay);
 }
 
 function rememberStreamRecoverySinceId(sinceId: string | undefined) {
@@ -1132,22 +1254,25 @@ function scheduleStreamRecovery(reason: 'connected' | 'visible' | 'manual' = 'ma
 			}
 			await syncLatestMessages({ stickToLatest: shouldStickToLatest, flushReadReceipt: shouldStickToLatest, sinceId });
 		} catch (err) {
-			console.warn('Failed to recover chat stream messages:', err);
+			if (!isAbortError(err)) {
+				console.warn('Failed to recover chat stream messages:', err);
+			}
 		}
 	}, STREAM_RECOVERY_DEBOUNCE_MS);
 }
 
 function onStreamConnected() {
+	markChatStreamEvent();
 	scheduleStreamRecovery('connected');
 	startStreamRecoveryPolling();
 }
 
 function onStreamDisconnected() {
 	showScrollToLatestButton.value = true;
-	startStreamRecoveryPolling();
+	startStreamRecoveryPolling(STREAM_RECOVERY_ERROR_RETRY_MS);
 }
 
-async function fetchLatestGap(sinceId = findNewestPersistedMessageId(), options?: { maxPages?: number; bufferOnly?: boolean }): Promise<LatestGapMessage[]> {
+async function fetchLatestGap(sinceId = findNewestPersistedMessageId(), options?: { maxPages?: number; bufferOnly?: boolean; signal?: AbortSignal }): Promise<LatestGapMessage[]> {
 	const maxPages = Math.max(1, options?.maxPages ?? 1);
 	let cursor = sinceId;
 	const newVisibleMessages: LatestGapMessage[] = [];
@@ -1157,11 +1282,11 @@ async function fetchLatestGap(sinceId = findNewestPersistedMessageId(), options?
 			userId: user.value!.id,
 			limit: TIMELINE_LIMIT,
 			...(cursor ? { sinceId: cursor } : {}),
-		}) : await misskeyApi('chat/messages/room-timeline', {
+		}, undefined, options?.signal) : await misskeyApi('chat/messages/room-timeline', {
 			roomId: room.value!.id,
 			limit: TIMELINE_LIMIT,
 			...(cursor ? { sinceId: cursor } : {}),
-		});
+		}, undefined, options?.signal);
 
 		if (options?.bufferOnly === true) {
 			newVisibleMessages.push(...bufferFetchedLatestMessages(newMessages));
@@ -1179,20 +1304,48 @@ async function fetchLatestGap(sinceId = findNewestPersistedMessageId(), options?
 	return newVisibleMessages;
 }
 
-async function syncLatestMessages(options?: { stickToLatest?: boolean; flushReadReceipt?: boolean; sinceId?: string }) {
+async function fetchLatestGapWithRecoveryTimeout(sinceId: string | undefined, options?: { maxPages?: number; bufferOnly?: boolean }): Promise<LatestGapMessage[]> {
+	const controller = new AbortController();
+	const timeoutId = window.setTimeout(() => controller.abort(), CHAT_RECOVERY_FETCH_TIMEOUT_MS);
+
+	try {
+		return await fetchLatestGap(sinceId, {
+			...options,
+			signal: controller.signal,
+		});
+	} finally {
+		window.clearTimeout(timeoutId);
+	}
+}
+
+async function syncLatestMessages(options?: { stickToLatest?: boolean; flushReadReceipt?: boolean; sinceId?: string; reconcileLatestWindow?: boolean }) {
 	if (!canSyncLatestMessages()) return;
 
 	const generation = ++latestSyncGeneration;
 	const run = async () => {
-		const sinceId = options?.sinceId ?? findNewestPersistedMessageId();
 		const shouldStickToLatest = options?.stickToLatest === true || shouldAutoRevealLatestMessages();
+		const initialSinceId = options?.sinceId ?? findNewestPersistedMessageId();
 		flushIncomingMessagesNow({ stickToLatest: shouldStickToLatest });
+
+		if (options?.reconcileLatestWindow !== false) {
+			try {
+				await reconcileLatestTimelineWindow();
+			} catch (err) {
+				if (!isAbortError(err)) {
+					console.warn('Failed to reconcile latest chat messages:', err);
+				}
+			}
+		}
+
+		const sinceId = options?.sinceId ?? findNewestPersistedMessageId() ?? initialSinceId;
 		let newVisibleMessages: LatestGapMessage[] = [];
 
 		try {
-			newVisibleMessages = await fetchLatestGap(sinceId, { maxPages: STREAM_LATEST_GAP_MAX_PAGES, bufferOnly: !shouldStickToLatest });
+			newVisibleMessages = await fetchLatestGapWithRecoveryTimeout(sinceId, { maxPages: STREAM_LATEST_GAP_MAX_PAGES, bufferOnly: !shouldStickToLatest });
 		} catch (err) {
-			console.warn('Failed to sync latest chat messages:', err);
+			if (!isAbortError(err)) {
+				console.warn('Failed to sync latest chat messages:', err);
+			}
 		}
 
 		const isLatestSync = generation === latestSyncGeneration;
@@ -1220,8 +1373,16 @@ async function syncLatestMessages(options?: { stickToLatest?: boolean; flushRead
 }
 
 async function showLatestMessages(behavior: ScrollBehavior = 'smooth') {
+	try {
+		await reconcileLatestTimelineWindow();
+	} catch (err) {
+		if (!isAbortError(err)) {
+			console.warn('Failed to reconcile latest chat messages before revealing:', err);
+		}
+	}
+
 	scrollToLatest(behavior, { flushReadReceipt: true });
-	await syncLatestMessages({ stickToLatest: true, flushReadReceipt: true });
+	await syncLatestMessages({ stickToLatest: true, flushReadReceipt: true, reconcileLatestWindow: false });
 }
 
 async function initializeContextTimeline(messageId: string) {
@@ -1261,7 +1422,6 @@ async function loadLatestTimeline() {
 		const m = await misskeyApi('chat/messages/user-timeline', { userId: props.userId, limit: TIMELINE_LIMIT });
 		appendFetchedMessages(m);
 		canFetchMore.value = m.length === TIMELINE_LIMIT;
-		await fetchLatestGap();
 		return;
 	}
 
@@ -1270,7 +1430,6 @@ async function loadLatestTimeline() {
 	const m = await misskeyApi('chat/messages/room-timeline', { roomId: room.value.id, limit: TIMELINE_LIMIT });
 	appendFetchedMessages(m);
 	canFetchMore.value = m.length === TIMELINE_LIMIT;
-	await fetchLatestGap();
 }
 
 async function loadMutedRoomUsers() {
@@ -1595,7 +1754,7 @@ async function fetchMore(options: { keepLatest?: boolean } = {}) {
 			untilId,
 		});
 
-		appendFetchedMessages(newMessages);
+		appendFetchedMessagesWithWindow(newMessages, 'oldest');
 
 		canFetchMore.value = newMessages.length === LIMIT;
 	} finally {
@@ -1813,27 +1972,26 @@ function flushIncomingMessagesNow(options?: { stickToLatest?: boolean }) {
 }
 
 function onMessage(message: Misskey.entities.ChatMessageLite) {
+	markChatStreamEvent();
 	pendingIncomingShouldStickToLatest = pendingIncomingShouldStickToLatest || shouldAutoRevealLatestMessages();
 	pendingIncomingMessages.push(message);
-	rememberStreamRecoverySinceId(findNewestPersistedMessageId());
 	if (pendingIncomingMessageFrame == null) {
 		pendingIncomingMessageFrame = window.requestAnimationFrame(flushIncomingMessages);
 	}
 }
 
 function onDeleted(id: string) {
-	const index = messages.value.findIndex(m => m.id === id);
-	if (index !== -1) {
-		messages.value.splice(index, 1);
-	}
+	markChatStreamEvent();
+	removeLocalChatMessagesByIds([id]);
 }
 
 function onDeletedMany(ids: string[]) {
-	const idSet = new Set(ids);
-	messages.value = messages.value.filter(message => !idSet.has(message.id));
+	markChatStreamEvent();
+	removeLocalChatMessagesByIds(ids);
 }
 
 function onCleared() {
+	markChatStreamEvent();
 	clearIncomingMessageQueue({ flushReadReceipt: true });
 	messages.value = [];
 	canFetchMore.value = false;
@@ -1846,6 +2004,7 @@ function onCleared() {
 }
 
 function onPruned(ctx: Parameters<Misskey.Channels['chatRoom']['events']['pruned']>[0]) {
+	markChatStreamEvent();
 	messages.value = messages.value.filter(message => message.id >= ctx.cutoffId);
 	if (messages.value.length === 0) {
 		canFetchMore.value = false;
@@ -1854,6 +2013,7 @@ function onPruned(ctx: Parameters<Misskey.Channels['chatRoom']['events']['pruned
 }
 
 function onReact(ctx: Parameters<Misskey.Channels['chatUser']['events']['react']>[0] | Parameters<Misskey.Channels['chatRoom']['events']['react']>[0]) {
+	markChatStreamEvent();
 	const message = messages.value.find(m => m.id === ctx.messageId);
 	if (message) {
 		if (room.value == null) { // 1on1の時はuserは省略される
@@ -1872,6 +2032,7 @@ function onReact(ctx: Parameters<Misskey.Channels['chatUser']['events']['react']
 }
 
 function onUnreact(ctx: Parameters<Misskey.Channels['chatUser']['events']['unreact']>[0] | Parameters<Misskey.Channels['chatRoom']['events']['unreact']>[0]) {
+	markChatStreamEvent();
 	const message = messages.value.find(m => m.id === ctx.messageId);
 	rememberUser(ctx.user);
 	if (message) {
@@ -1959,7 +2120,7 @@ function ensureSelectedChatTabVisible(behavior: ScrollBehavior = 'smooth') {
 function onVisibilitychange() {
 	if (window.document.hidden) return;
 	readReceiptBatcher.flush();
-	startStreamRecoveryPolling();
+	startStreamRecoveryPolling(STREAM_RECOVERY_ERROR_RETRY_MS);
 	scheduleStreamRecovery('visible');
 }
 
@@ -1969,7 +2130,7 @@ onMounted(() => {
 	window.addEventListener('resize', updateChatTabsScrollState);
 	useStream().on('_connected_', onStreamConnected);
 	useStream().on('_disconnected_', onStreamDisconnected);
-	startStreamRecoveryPolling();
+	startStreamRecoveryPolling(STREAM_RECOVERY_ERROR_RETRY_MS);
 	watch(timelineEl, () => nextTick(setupTimelineScrollListener), { immediate: true });
 	watch(headerTabs, () => {
 		showChatTabsScrollControls.value = false;
@@ -2110,13 +2271,23 @@ async function ensureLatestOnChatTabReturn(generation: number) {
 	if (generation !== chatTabLatestReturnGeneration || tab.value !== 'chat' || initializing.value || initializeError.value != null || joinRequiredRoom.value != null) return;
 
 	const sinceId = findNewestPersistedMessageId();
+	try {
+		await reconcileLatestTimelineWindow();
+	} catch (err) {
+		if (!isAbortError(err)) {
+			console.warn('Failed to reconcile latest chat messages after returning to chat tab:', err);
+		}
+	}
+
 	flushIncomingMessagesNow({ stickToLatest: true });
 	scrollToLatest('instant', { flushReadReceipt: true });
 
 	try {
-		await fetchLatestGap(sinceId);
+		await fetchLatestGapWithRecoveryTimeout(sinceId);
 	} catch (err) {
-		console.warn('Failed to refresh latest chat messages after returning to chat tab:', err);
+		if (!isAbortError(err)) {
+			console.warn('Failed to refresh latest chat messages after returning to chat tab:', err);
+		}
 	}
 
 	await nextTick();
