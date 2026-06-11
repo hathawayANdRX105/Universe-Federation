@@ -91,7 +91,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <XStreamIndicator/>
 
-<div v-if="pendingApiRequestsCount > 0" id="wait"></div>
+<div v-if="estimatedApiProgress != null" id="wait" role="progressbar" :aria-valuenow="estimatedApiProgress" aria-valuemin="0" aria-valuemax="100">
+	<div id="waitBar" :style="{ width: `${estimatedApiProgress}%` }"></div>
+	<span>{{ estimatedApiProgress }}%</span>
+</div>
 
 <div v-if="dev" id="devTicker"><span style="animation: dev-ticker-blink 2s infinite;">DEV BUILD</span></div>
 
@@ -106,7 +109,7 @@ import * as Misskey from 'misskey-js';
 import { swInject } from './sw-inject.js';
 import XNotification from './notification.vue';
 import { popups } from '@/os.js';
-import { pendingApiRequestsCount } from '@/utility/misskey-api.js';
+import { estimatedApiProgress } from '@/utility/misskey-api.js';
 import { uploads } from '@/utility/upload.js';
 import * as sound from '@/utility/sound.js';
 import { $i } from '@/i.js';
@@ -379,24 +382,38 @@ function getPointerEvents() {
 }
 
 #wait {
-	display: block;
+	display: flex;
+	align-items: center;
+	gap: 8px;
 	position: fixed;
 	z-index: 4000000;
-	top: 15px;
-	right: 15px;
+	top: 0;
+	left: 0;
+	right: 0;
 	pointer-events: none;
+	height: 3px;
+	background: color-mix(in srgb, var(--MI_THEME-accent) 12%, transparent);
 
-	&::before {
-		content: "";
-		display: block;
-		width: 18px;
-		height: 18px;
-		box-sizing: border-box;
-		border: solid 2px transparent;
-		border-top-color: var(--MI_THEME-accent);
-		border-left-color: var(--MI_THEME-accent);
-		border-radius: 50%;
-		animation: progress-spinner 400ms linear infinite;
+	> #waitBar {
+		height: 100%;
+		border-radius: 0 999px 999px 0;
+		background: linear-gradient(90deg, var(--MI_THEME-accent), var(--MI_THEME-accentLighten));
+		box-shadow: 0 0 12px color-mix(in srgb, var(--MI_THEME-accent) 50%, transparent);
+		transition: width 180ms ease;
+	}
+
+	> span {
+		position: absolute;
+		top: 6px;
+		right: 10px;
+		padding: 2px 6px;
+		border-radius: 999px;
+		background: var(--MI_THEME-panel);
+		color: var(--MI_THEME-accent);
+		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+		font-size: 10px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
 	}
 }
 

@@ -4,10 +4,63 @@
  */
 
 import type * as Misskey from 'misskey-js';
-import { ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { apiUrl } from '@@/js/config.js';
 import { $i } from '@/i.js';
 export const pendingApiRequestsCount = ref(0);
+
+type ApiProgressState = {
+	id: number;
+	progress: number;
+	startedAt: number;
+	done: boolean;
+	timer: number | null;
+};
+
+const API_PROGRESS_INITIAL = 8;
+const API_PROGRESS_SOFT_MAX = 85;
+let apiProgressId = 0;
+const pendingApiProgress = reactive(new Map<number, ApiProgressState>());
+
+function updateApiProgress(state: ApiProgressState): void {
+	if (state.done) return;
+	const elapsed = Date.now() - state.startedAt;
+	const next = API_PROGRESS_INITIAL + (API_PROGRESS_SOFT_MAX - API_PROGRESS_INITIAL) * (1 - Math.exp(-elapsed / 2600));
+	state.progress = Math.max(state.progress, Math.min(API_PROGRESS_SOFT_MAX, next));
+}
+
+function startApiProgress(): ApiProgressState {
+	const state = reactive({
+		id: ++apiProgressId,
+		progress: API_PROGRESS_INITIAL,
+		startedAt: Date.now(),
+		done: false,
+		timer: null,
+	}) as ApiProgressState;
+
+	state.timer = window.setInterval(() => updateApiProgress(state), 180);
+	pendingApiProgress.set(state.id, state);
+	return state;
+}
+
+function finishApiProgress(state: ApiProgressState): void {
+	state.done = true;
+	state.progress = 100;
+	if (state.timer != null) {
+		window.clearInterval(state.timer);
+		state.timer = null;
+	}
+	window.setTimeout(() => {
+		pendingApiProgress.delete(state.id);
+	}, 220);
+}
+
+export const estimatedApiProgress = computed(() => {
+	const values = [...pendingApiProgress.values()];
+	if (values.length === 0) return null;
+	const total = values.reduce((acc, state) => acc + state.progress, 0);
+	return Math.round(total / values.length);
+});
 
 export type Endpoint = keyof Misskey.Endpoints;
 
@@ -35,9 +88,11 @@ export function misskeyApi<
 ): Promise<_ResT> {
 	if (endpoint.includes('://')) throw new Error('invalid endpoint');
 	pendingApiRequestsCount.value++;
+	const progressState = startApiProgress();
 
 	const onFinally = () => {
 		pendingApiRequestsCount.value--;
+		finishApiProgress(progressState);
 	};
 
 	const promise = new Promise<_ResT>((resolve, reject) => {
@@ -98,9 +153,11 @@ export function misskeyApiGet<
 	signal?: AbortSignal,
 ): Promise<_ResT> {
 	pendingApiRequestsCount.value++;
+	const progressState = startApiProgress();
 
 	const onFinally = () => {
 		pendingApiRequestsCount.value--;
+		finishApiProgress(progressState);
 	};
 
 	const query = new URLSearchParams(data as any);

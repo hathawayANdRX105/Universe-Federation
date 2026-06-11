@@ -56,6 +56,14 @@ export const Mini = {
 		mini: true,
 	},
 } satisfies StoryObj<typeof MkLoading>;
+export const WithProgress = {
+	...Default,
+	args: {
+		...Default.args,
+		progress: 64,
+		label: 'Loading',
+	},
+} satisfies StoryObj<typeof MkLoading>;
 export const Em = {
 	...Default,
 	args: {

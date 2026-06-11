@@ -9,14 +9,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<li v-for="ctx in uploads" :key="ctx.id">
 			<div class="img" :style="{ backgroundImage: `url(${ ctx.img })` }"></div>
 			<div class="top">
-				<p class="name"><MkLoading :em="true"/>{{ ctx.name }}</p>
+				<p class="name">{{ ctx.name }}</p>
 				<p class="status">
 					<span v-if="ctx.progressValue === undefined" class="initing">{{ i18n.ts.uploading }}</span>
 					<span v-if="ctx.progressValue !== undefined" class="kb">{{ String(Math.floor(ctx.progressValue / 1024)).replace(/(\d)(?=(\d\d\d)+(?!\d))/g, '$1,') }}<i>KB</i> / {{ String(Math.floor(ctx.progressMax / 1024)).replace(/(\d)(?=(\d\d\d)+(?!\d))/g, '$1,') }}<i>KB</i></span>
 					<span v-if="ctx.progressValue !== undefined" class="percentage">{{ Math.floor((ctx.progressValue / ctx.progressMax) * 100) }}</span>
 				</p>
 			</div>
-			<progress :value="ctx.progressValue || 0" :max="ctx.progressMax || 0" :class="{ initing: ctx.progressValue === undefined, waiting: ctx.progressValue !== undefined && ctx.progressValue === ctx.progressMax }"></progress>
+			<MkLoading
+				:class="$style.uploadProgress"
+				mode="bar"
+				:label="i18n.ts.uploading"
+				:progress="ctx.progressValue !== undefined && ctx.progressMax !== undefined ? Math.floor((ctx.progressValue / ctx.progressMax) * 100) : undefined"
+			/>
 		</li>
 	</ol>
 </div>
@@ -27,6 +32,7 @@ import { } from 'vue';
 import * as os from '@/os.js';
 import { uploads } from '@/utility/upload.js';
 import { i18n } from '@/i18n.js';
+import MkLoading from '@/components/global/MkLoading.vue';
 
 const zIndex = os.claimZIndex('high');
 </script>
@@ -55,11 +61,11 @@ const zIndex = os.claimZIndex('high');
   display: grid;
   margin: 8px 0 0 0;
   padding: 0;
-  height: 36px;
+  min-height: 52px;
   width: 100%;
   border-top: solid 8px transparent;
   grid-template-columns: 36px calc(100% - 44px);
-  grid-template-rows: 1fr 8px;
+  grid-template-rows: 1fr auto;
   column-gap: 8px;
   box-sizing: content-box;
 }
@@ -112,23 +118,13 @@ const zIndex = os.claimZIndex('high');
 .mk-uploader > ol > li > .top > .status > .percentage:after {
   content: '%';
 }
-.mk-uploader > ol > li > progress {
-  display: block;
-  background: transparent;
-  border: none;
-  border-radius: var(--MI-radius-xs);
-  overflow: hidden;
-  grid-column: 2/3;
-  grid-row: 2/3;
-  z-index: 2;
+</style>
+
+<style lang="scss" module>
+.uploadProgress {
+	grid-column: 2/3;
+	grid-row: 2/3;
 	width: 100%;
-	height: 8px;
-}
-.mk-uploader > ol > li > progress::-webkit-progress-value {
-  background: var(--MI_THEME-accent);
-}
-.mk-uploader > ol > li > progress::-webkit-progress-bar {
-  //background: var(--MI_THEME-accentAlpha01);
-	background: transparent;
+	padding: 6px 0 0;
 }
 </style>

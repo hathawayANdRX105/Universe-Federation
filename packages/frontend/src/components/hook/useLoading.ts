@@ -12,6 +12,9 @@ export const useLoading = (props?: {
 	colored?: boolean;
 	mini?: boolean;
 	em?: boolean;
+	progress?: number | null;
+	mode?: 'auto' | 'bar' | 'spinner' | 'compact';
+	label?: string | null;
 }) => {
 	const showingCnt = ref(0);
 

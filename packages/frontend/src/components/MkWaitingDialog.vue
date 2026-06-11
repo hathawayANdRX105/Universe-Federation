@@ -5,19 +5,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <MkModal ref="modal" :preferType="'dialog'" :zPriority="'high'" @click="success ? done() : () => {}" @closed="emit('closed')">
-	<div :class="[$style.root, { [$style.iconOnly]: (text == null) || success }]">
+	<div :class="[$style.root, { [$style.iconOnly]: success }]">
 		<i v-if="success" :class="[$style.icon, $style.success]" class="ti ti-check"></i>
-		<MkLoading v-else :class="[$style.icon, $style.waiting]" :em="true"/>
-		<div v-if="text && !success" :class="$style.text">{{ text }}<MkEllipsis/></div>
+		<MkLoading v-else :class="[$style.icon, $style.waiting]" mode="bar" :label="text ?? i18n.ts.processing" :progress="estimatedProgress"/>
 	</div>
 </MkModal>
 </template>
 
 <script lang="ts" setup>
-import { watch, useTemplateRef } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch, useTemplateRef } from 'vue';
 import MkModal from '@/components/MkModal.vue';
+import { i18n } from '@/i18n.js';
 
 const modal = useTemplateRef('modal');
+const estimatedProgress = ref(8);
+let progressTimer: number | null = null;
 
 const props = defineProps<{
 	success: boolean;
@@ -37,6 +39,19 @@ function done() {
 
 watch(() => props.showing, () => {
 	if (!props.showing) done();
+});
+
+onMounted(() => {
+	progressTimer = window.setInterval(() => {
+		estimatedProgress.value = Math.min(88, estimatedProgress.value + Math.max(0.5, (88 - estimatedProgress.value) * 0.05));
+	}, 180);
+});
+
+onBeforeUnmount(() => {
+	if (progressTimer != null) {
+		window.clearInterval(progressTimer);
+		progressTimer = null;
+	}
 });
 </script>
 
@@ -70,10 +85,8 @@ watch(() => props.showing, () => {
 
 	&.waiting {
 		opacity: 0.7;
+		font-size: 14px;
 	}
 }
 
-.text {
-	margin-top: 16px;
-}
 </style>
