@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div :class="$style.root">
 	<div :class="$style.top">
-		<div :class="$style.banner" :style="{ backgroundImage: `url(${ instance.bannerUrl })` }"></div>
+		<div :class="$style.banner" :style="{ backgroundImage: `url(${ instanceBannerUrl })` }"></div>
 		<button class="_button" :class="$style.instance" @click="openInstanceMenu">
 			<img :src="instance.iconUrl || instance.sidebarLogoUrl || '/apple-touch-icon.png'" alt="" :class="$style.instanceIcon"/>
 		</button>
@@ -68,6 +68,7 @@ if ($i != null) {
 	}
 }
 const filteredMenu = computed(() => prefer.r.menu.value.filter(item => item !== 'search'));
+const instanceBannerUrl = computed(() => instance.bannerUrl || instance.backgroundImageUrl || '/client-assets/universe-federation-bg.svg');
 
 const otherMenuItemIndicated = computed(() => {
 	for (const def in navbarItemDef) {

@@ -20,6 +20,7 @@ import { IdentifiableError } from '@/misc/identifiable-error.js';
 import { LoggerService } from '@/core/LoggerService.js';
 import { TimeService } from '@/global/TimeService.js';
 import Logger from '@/logger.js';
+import { instanceBrandName } from '@/misc/brand-name.js';
 import type {
 	AuthenticationResponseJSON,
 	AuthenticatorTransportFuture,
@@ -58,7 +59,7 @@ export class WebAuthnService {
 		return {
 			origin: this.config.url,
 			rpId: this.config.hostname,
-			rpName: this.meta.name ?? this.config.host,
+			rpName: instanceBrandName(this.meta.name),
 			rpIcon: this.meta.iconUrl ?? undefined,
 		};
 	}

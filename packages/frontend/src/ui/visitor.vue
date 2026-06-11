@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div :class="$style.root">
 	<div v-if="!narrow && !isRoot" :class="$style.side">
-		<div :class="$style.banner" :style="{ backgroundImage: instance.backgroundImageUrl ? `url(${ instance.backgroundImageUrl })` : 'none' }"></div>
+		<div :class="$style.banner" :style="{ backgroundImage: `url(${ instance.backgroundImageUrl ?? '/client-assets/universe-federation-bg.webp' })` }"></div>
 		<div :class="$style.dashboard">
 			<MkVisitorDashboard/>
 		</div>

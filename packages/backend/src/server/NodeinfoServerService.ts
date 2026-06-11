@@ -15,6 +15,7 @@ import UsersChart from '@/core/chart/charts/users.js';
 import { DEFAULT_POLICIES } from '@/core/RoleService.js';
 import { SystemAccountService } from '@/core/SystemAccountService.js';
 import { InstanceStatsService } from '@/core/InstanceStatsService.js';
+import { normalizeInstanceBrandName } from '@/misc/brand-name.js';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 
 const nodeinfo2_1path = '/nodeinfo/2.1';
@@ -90,7 +91,7 @@ export class NodeinfoServerService {
 					localComments: 0,
 				},
 				metadata: {
-					nodeName: meta.name,
+					nodeName: normalizeInstanceBrandName(meta.name),
 					nodeDescription: meta.description,
 					nodeAdmins: [{
 						name: meta.maintainerName,
@@ -130,7 +131,7 @@ export class NodeinfoServerService {
 					enableEmail: meta.enableEmail,
 					enableServiceWorker: meta.enableServiceWorker,
 					proxyAccountName: proxyAccount.username,
-					themeColor: meta.themeColor ?? '#86b300',
+					themeColor: meta.themeColor ?? '#2AABEE',
 				},
 			};
 		};

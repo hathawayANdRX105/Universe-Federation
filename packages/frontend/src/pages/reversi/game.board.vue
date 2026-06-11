@@ -443,7 +443,7 @@ function autoplay() {
 
 function share() {
 	os.post({
-		initialText: `#hhhlReversi\n${url}/reversi/g/${game.value.id}`,
+		initialText: `#UniverseFederationReversi\n${url}/reversi/g/${game.value.id}`,
 		instant: true,
 	});
 }

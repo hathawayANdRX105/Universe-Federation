@@ -184,7 +184,7 @@
 
 		const locale = JSON.parse(localStorage.getItem('locale') || '{}');
 
-		const title = locale?._bootErrors?.title || 'Failed to initialize hhhl';
+		const title = locale?._bootErrors?.title || 'Failed to initialize Universe Federation';
 		const reload = locale?.reload || 'Reload';
 		const detailsText = details == null ? '' : (() => {
 			try {
@@ -199,7 +199,7 @@
 		document.body.innerHTML = `<main class="boot-error">
 		<div class="boot-error__mark">!</div>
 		<div class="message">${title}</div>
-		<div class="submessage">Failed to initialize hhhl</div>
+		<div class="submessage">Failed to initialize Universe Federation</div>
 		<div class="submessage">Error Code: ${code}</div>
 		<button onclick="location.reload(!0)">
 			<div>${reload}</div>

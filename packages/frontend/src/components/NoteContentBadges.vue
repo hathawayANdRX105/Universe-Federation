@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: hhhl contributors
+SPDX-FileCopyrightText: Universe Federation contributors
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 

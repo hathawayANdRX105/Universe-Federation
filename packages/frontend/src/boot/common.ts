@@ -7,7 +7,7 @@ import { watch, version as vueVersion } from 'vue';
 import { compareVersions } from 'compare-versions';
 import { version, lang, langsVersion, updateLocale, locale, apiUrl } from '@@/js/config.js';
 import defaultLightTheme from '@@/themes/l-light.json5';
-import defaultDarkTheme from '@@/themes/d-green-lime.json5';
+import defaultDarkTheme from '@@/themes/d-universe-federation.json5';
 import type { App } from 'vue';
 import widgets from '@/widgets/index.js';
 import directives from '@/directives/index.js';
@@ -30,7 +30,7 @@ import { $i } from '@/i.js';
 import { repairFrontendRuntimeCaches, restoreDisplayStateNow } from '@/utility/frontend-consistency.js';
 
 export async function common(createVue: () => Promise<App<Element>>) {
-	console.info(`hhhl v${version}`);
+	console.info(`Universe Federation v${version}`);
 
 	async function repairStartupCache(reason: unknown): Promise<void> {
 		console.warn('Frontend startup failed. Clearing stale client caches and reloading once.', reason);

@@ -56,6 +56,7 @@ import { UtilityService } from '@/core/UtilityService.js';
 import { InstanceStatsService } from '@/core/InstanceStatsService.js';
 import { ReversiGameEntityService } from '@/core/entities/ReversiGameEntityService.js';
 import { AnnouncementEntityService } from '@/core/entities/AnnouncementEntityService.js';
+import { instanceBrandName } from '@/misc/brand-name.js';
 import { FeedService } from './FeedService.js';
 import { UrlPreviewService } from './UrlPreviewService.js';
 import { ClientLoggerService } from './ClientLoggerService.js';
@@ -201,17 +202,36 @@ export class ClientServerService {
 		let manifest = {
 			// 空文字列の場合右辺を使いたいため
 			// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-			'short_name': this.meta.shortName || this.meta.name || this.config.host,
+			'short_name': instanceBrandName(this.meta.shortName || this.meta.name),
 			// 空文字列の場合右辺を使いたいため
 			// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-			'name': this.meta.name || this.config.host,
+			'name': instanceBrandName(this.meta.name),
 			'start_url': '/',
-			'display': 'browser',
-			'background_color': '#313a42',
+			'display': 'standalone',
+			'background_color': '#05070B',
 			// 空文字列の場合右辺を使いたいため
 			// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-			'theme_color': this.meta.themeColor || '#86b300',
-			'icons': [],
+			'theme_color': this.meta.themeColor || '#2AABEE',
+			'icons': [
+				{
+					src: this.meta.app192IconUrl || '/static-assets/icons/192.png',
+					sizes: '192x192',
+					type: 'image/png',
+					purpose: 'any maskable',
+				},
+				{
+					src: this.meta.app512IconUrl || '/static-assets/icons/512.png',
+					sizes: '512x512',
+					type: 'image/png',
+					purpose: 'any maskable',
+				},
+				{
+					src: this.meta.iconUrl || '/client-assets/about-icon.png',
+					sizes: '1254x1254',
+					type: 'image/png',
+					purpose: 'any',
+				},
+			],
 		};
 
 		manifest = {
@@ -264,14 +284,15 @@ export class ClientServerService {
 	private async generateCommonPugData(meta: MiMeta) {
 		return {
 			config: this.getCurrentFrontendRenderConfig(),
-			instanceName: meta.name ?? 'hhhl',
-			icon: meta.iconUrl,
-			appleTouchIcon: meta.app512IconUrl,
-			themeColor: meta.themeColor,
+			instanceName: instanceBrandName(meta.name),
+			icon: meta.iconUrl ?? '/favicon.ico',
+			appleTouchIcon: meta.app512IconUrl ?? '/apple-touch-icon.png',
+			themeColor: meta.themeColor ?? '#2AABEE',
 			serverErrorImageUrl: meta.serverErrorImageUrl ?? '/client-assets/status/error.png',
 			infoImageUrl: meta.infoImageUrl ?? '/client-assets/status/nothinghere.png',
 			notFoundImageUrl: meta.notFoundImageUrl ?? '/client-assets/status/missingpage.webp',
 			instanceUrl: this.config.url,
+			customHead: this.config.customHtml.head,
 			randomMOTD: this.config.customMOTD ? this.config.customMOTD[Math.floor(Math.random() * this.config.customMOTD.length)] : undefined,
 			metaJson: htmlSafeJsonStringify(await this.metaEntityService.packDetailed(meta)),
 			langs: Object.keys(locales),
@@ -290,6 +311,7 @@ export class ClientServerService {
 			defaultContext: {
 				version: this.config.version,
 				config: this.config,
+				customHead: this.config.customHtml.head,
 			},
 		});
 
@@ -512,7 +534,7 @@ export class ClientServerService {
 
 		// OpenSearch XML
 		fastify.get('/opensearch.xml', async (request, reply) => {
-			const name = this.meta.name ?? 'hhhl';
+			const name = instanceBrandName(this.meta.name);
 			let content = '';
 			content += '<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/" xmlns:moz="http://www.mozilla.org/2006/browser/search/">';
 			content += `<ShortName>${name}</ShortName>`;
@@ -531,9 +553,9 @@ export class ClientServerService {
 		const renderBase = async (reply: FastifyReply, data: { [key: string]: any } = {}) => {
 			reply.header('Cache-Control', 'no-cache, must-revalidate');
 			return await reply.view('base', {
-				img: this.meta.bannerUrl,
+				img: this.meta.bannerUrl ?? this.meta.backgroundImageUrl ?? '/client-assets/universe-federation-bg.webp',
 				url: this.config.url,
-				title: this.meta.name ?? 'hhhl',
+				title: instanceBrandName(this.meta.name),
 				desc: this.meta.description,
 				customHead: this.config.customHtml.head,
 				...await this.generateCommonPugData(this.meta),
@@ -925,7 +947,7 @@ export class ClientServerService {
 
 			reply.header('Cache-Control', 'public, max-age=3600');
 			return await reply.view('base-embed', {
-				title: this.meta.name ?? 'hhhl',
+				title: instanceBrandName(this.meta.name),
 				...commonData,
 				embedCtx: htmlSafeJsonStringify({
 					user: _user,
@@ -956,7 +978,7 @@ export class ClientServerService {
 
 			reply.header('Cache-Control', 'public, max-age=3600');
 			return await reply.view('base-embed', {
-				title: this.meta.name ?? 'hhhl',
+				title: instanceBrandName(this.meta.name),
 				...commonData,
 				embedCtx: htmlSafeJsonStringify({
 					note: _note,
@@ -987,7 +1009,7 @@ export class ClientServerService {
 
 			reply.header('Cache-Control', 'public, max-age=3600');
 			return await reply.view('base-embed', {
-				title: this.meta.name ?? 'hhhl',
+				title: instanceBrandName(this.meta.name),
 				...commonData,
 				embedCtx: htmlSafeJsonStringify({
 					clip: _clip,
@@ -1000,7 +1022,7 @@ export class ClientServerService {
 
 			reply.header('Cache-Control', 'public, max-age=3600');
 			return await reply.view('base-embed', {
-				title: this.meta.name ?? 'hhhl',
+				title: instanceBrandName(this.meta.name),
 				...await this.generateCommonPugData(this.meta),
 			});
 		});
@@ -1013,7 +1035,10 @@ export class ClientServerService {
 				version: this.config.version,
 				host: this.config.host,
 				url: this.config.url,
-				meta: this.meta,
+				meta: {
+					...this.meta,
+					name: instanceBrandName(this.meta.name),
+				},
 				originalUsersCount: stats.localUsers,
 				originalNotesCount: stats.localNotes,
 			});

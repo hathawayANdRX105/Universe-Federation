@@ -10,7 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div :class="$style.shape1"></div>
 	<div :class="$style.shape2"></div>
 	<div :class="$style.logoWrapper">
-		<div :class="$style.brand">hhhl</div>
+		<div :class="$style.brand">Universe Federation</div>
 	</div>
 	<div :class="$style.contents">
 		<MkVisitorDashboard/>

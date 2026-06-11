@@ -47,6 +47,7 @@ export const getBuiltinThemes = () => Promise.all(
 		'l-u0',
 
 		'd-dark',
+		'd-universe-federation',
 		'd-persimmon',
 		'd-astro',
 		'd-future',

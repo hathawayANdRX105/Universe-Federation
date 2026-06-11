@@ -22,6 +22,7 @@ import { CacheManagementService, type ManagedMemoryKVCache } from '@/global/Cach
 import { CacheService } from '@/core/CacheService.js';
 import { InternalEventService, InternalEventTypes } from '@/global/InternalEventService.js';
 import { TimeService } from '@/global/TimeService.js';
+import { instanceBrandName } from '@/misc/brand-name.js';
 
 export const SYSTEM_ACCOUNT_TYPES = ['actor', 'relay', 'proxy'] as const;
 
@@ -91,7 +92,7 @@ export class SystemAccountService implements OnApplicationShutdown {
 			} else {
 				const created = await this.createCorrespondingUser(type, {
 					username: `system.${type}`, // NOTE: (できれば避けたいが) . が含まれるかどうかでシステムアカウントかどうかを判定している処理もあるので変えないように
-					name: this.meta.name,
+					name: instanceBrandName(this.meta.name),
 				});
 				return created.id;
 			}

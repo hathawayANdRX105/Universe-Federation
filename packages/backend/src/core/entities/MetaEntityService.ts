@@ -15,6 +15,88 @@ import type { Config } from '@/config.js';
 import { DI } from '@/di-symbols.js';
 import { DEFAULT_POLICIES } from '@/core/RoleService.js';
 import { TimeService } from '@/global/TimeService.js';
+import { normalizeInstanceBrandName, normalizeInstanceBrandUrl } from '@/misc/brand-name.js';
+
+const UNIVERSE_FEDERATION_DARK_THEME = {
+	id: 'd-universe-federation',
+	name: 'Universe Federation Dark',
+	author: 'Universe Federation',
+	desc: 'Dark-first community theme with Telegram blue signals and X-style information density.',
+	base: 'dark',
+	props: {
+		accent: '#2AABEE',
+		accentedBg: ':alpha<0.17<@accent',
+		bg: '#05070B',
+		fg: '#E7EEF5',
+		fgHighlighted: '#FFFFFF',
+		fgOnAccent: '#FFFFFF',
+		fgOnWhite: '@accent',
+		divider: 'rgba(255, 255, 255, 0.11)',
+		indicator: '@accent',
+		panel: '#0D1118',
+		panelHighlight: '#141B24',
+		panelHeaderBg: '#101721',
+		panelHeaderFg: '@fg',
+		panelBorder: '" solid 1px rgba(255, 255, 255, 0.1)',
+		thread: '#182231',
+		windowHeader: 'rgba(13, 17, 24, 0.86)',
+		popup: '#111923',
+		shadow: 'rgba(0, 0, 0, 0.42)',
+		header: 'rgba(13, 17, 24, 0.76)',
+		navBg: '#06090E',
+		navFg: '#E7EEF5',
+		navActive: '#FFFFFF',
+		navIndicator: '@accent',
+		pageHeaderBg: '#05070B',
+		pageHeaderFg: '@fg',
+		link: '#2AABEE',
+		hashtag: '#29E6C8',
+		mention: '#2AABEE',
+		mentionMe: '#29E6C8',
+		renote: '#29E6C8',
+		modalBg: 'rgba(0, 0, 0, 0.58)',
+		scrollbarHandle: 'rgba(231, 238, 245, 0.22)',
+		scrollbarHandleHover: 'rgba(42, 171, 238, 0.48)',
+		dateLabelFg: '#94A3B8',
+		infoBg: '#0F2231',
+		infoFg: '#E8F7FF',
+		infoWarnBg: '#342A12',
+		infoWarnFg: '#FFD166',
+		folderHeaderBg: 'rgba(255, 255, 255, 0.05)',
+		folderHeaderHoverBg: 'rgba(255, 255, 255, 0.09)',
+		buttonBg: '#141B24',
+		buttonHoverBg: '#1A2531',
+		buttonGradateA: '#2AABEE',
+		buttonGradateB: '#29E6C8',
+		switchBg: 'rgba(255, 255, 255, 0.16)',
+		switchOffBg: 'rgba(255, 255, 255, 0.1)',
+		switchOffFg: ':alpha<0.8<@fg',
+		switchOnBg: ':alpha<0.2<@accent',
+		switchOnFg: '@accent',
+		inputBorder: 'rgba(255, 255, 255, 0.12)',
+		inputBorderHover: 'rgba(42, 171, 238, 0.42)',
+		driveFolderBg: ':alpha<0.25<@accent',
+		badge: '#29E6C8',
+		messageBg: '#05070B',
+		success: '#29E6C8',
+		error: '#F05252',
+		warn: '#FFD166',
+		htmlThemeColor: '#05070B',
+		codeString: '#98E6C7',
+		codeNumber: '#8BD3FF',
+		codeBoolean: '#D7B9FF',
+		deckBg: '#05070B',
+	},
+	codeHighlighter: {
+		base: 'dark-plus',
+	},
+};
+
+const DEFAULT_BRAND_THEME_COLOR = '#2AABEE';
+const DEFAULT_BRAND_ICON = '/client-assets/about-icon.png';
+const DEFAULT_BRAND_APP_192_ICON = '/static-assets/icons/192.png';
+const DEFAULT_BRAND_APP_512_ICON = '/static-assets/icons/512.png';
+const DEFAULT_BRAND_BACKGROUND = '/client-assets/universe-federation-bg.webp';
 
 @Injectable()
 export class MetaEntityService {
@@ -65,6 +147,8 @@ export class MetaEntityService {
 				defaultDarkTheme = JSON.stringify(JSON5.parse(instance.defaultDarkTheme));
 			} catch (e) {
 			}
+		} else {
+			defaultDarkTheme = JSON.stringify(UNIVERSE_FEDERATION_DARK_THEME);
 		}
 
 		const packed: Packed<'MetaLite'> = {
@@ -74,15 +158,15 @@ export class MetaEntityService {
 			version: this.config.version,
 			providesTarball: this.config.publishTarballInsteadOfProvideRepositoryUrl,
 
-			name: instance.name,
-			shortName: instance.shortName,
+			name: normalizeInstanceBrandName(instance.name),
+			shortName: normalizeInstanceBrandName(instance.shortName),
 			uri: this.config.url,
 			description: instance.description,
 			about: instance.about,
 			langs: instance.langs,
 			tosUrl: instance.termsOfServiceUrl,
-			repositoryUrl: instance.repositoryUrl,
-			feedbackUrl: instance.feedbackUrl,
+			repositoryUrl: normalizeInstanceBrandUrl(instance.repositoryUrl),
+			feedbackUrl: normalizeInstanceBrandUrl(instance.feedbackUrl),
 			impressumUrl: instance.impressumUrl,
 			donationUrl: instance.donationUrl,
 			privacyPolicyUrl: instance.privacyPolicyUrl,
@@ -105,15 +189,17 @@ export class MetaEntityService {
 			fcSiteKey: instance.fcSiteKey,
 			enableTestcaptcha: instance.enableTestcaptcha,
 			swPublickey: instance.swPublicKey,
-			themeColor: instance.themeColor,
+			themeColor: instance.themeColor ?? DEFAULT_BRAND_THEME_COLOR,
 			mascotImageUrl: instance.mascotImageUrl ?? '/assets/ai.png',
 			bannerUrl: instance.bannerUrl,
 			infoImageUrl: instance.infoImageUrl,
 			serverErrorImageUrl: instance.serverErrorImageUrl,
 			notFoundImageUrl: instance.notFoundImageUrl,
-			iconUrl: instance.iconUrl,
+			iconUrl: instance.iconUrl ?? DEFAULT_BRAND_ICON,
+			app192IconUrl: instance.app192IconUrl ?? DEFAULT_BRAND_APP_192_ICON,
+			app512IconUrl: instance.app512IconUrl ?? DEFAULT_BRAND_APP_512_ICON,
 			sidebarLogoUrl: instance.sidebarLogoUrl,
-			backgroundImageUrl: instance.backgroundImageUrl,
+			backgroundImageUrl: instance.backgroundImageUrl ?? DEFAULT_BRAND_BACKGROUND,
 			logoImageUrl: instance.logoImageUrl,
 			maxNoteTextLength: this.config.maxNoteLength,
 			maxRemoteNoteTextLength: this.config.maxRemoteNoteLength,

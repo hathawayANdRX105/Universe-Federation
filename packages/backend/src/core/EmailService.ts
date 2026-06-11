@@ -84,7 +84,7 @@ export class EmailService {
 
 			a {
 				text-decoration: none;
-				color: #86b300;
+				color: #2AABEE;
 			}
 			a:hover {
 				text-decoration: underline;
@@ -98,7 +98,7 @@ export class EmailService {
 			}
 				main > header {
 					padding: 32px;
-					background: #86b300;
+					background: #2AABEE;
 				}
 					main > header > img {
 						max-width: 128px;

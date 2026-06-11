@@ -13,6 +13,7 @@ import { instanceUnsignedFetchOptions } from '@/const.js';
 import { DI } from '@/di-symbols.js';
 import { normalizeForSearch } from '@/misc/normalize-for-search.js';
 import { SearchTrendService } from '@/core/SearchTrendService.js';
+import { normalizeInstanceBrandName, normalizeInstanceBrandUrl } from '@/misc/brand-name.js';
 
 export const meta = {
 	tags: ['admin'],
@@ -354,11 +355,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			if (ps.name !== undefined) {
-				set.name = ps.name;
+				set.name = normalizeInstanceBrandName(ps.name);
 			}
 
 			if (ps.shortName !== undefined) {
-				set.shortName = ps.shortName;
+				set.shortName = normalizeInstanceBrandName(ps.shortName);
 			}
 
 			if (ps.description !== undefined) {
@@ -526,11 +527,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			if (ps.repositoryUrl !== undefined) {
-				set.repositoryUrl = ps.repositoryUrl && URL.canParse(ps.repositoryUrl) ? ps.repositoryUrl : null;
+				const repositoryUrl = normalizeInstanceBrandUrl(ps.repositoryUrl);
+				set.repositoryUrl = repositoryUrl && URL.canParse(repositoryUrl) ? repositoryUrl : null;
 			}
 
 			if (ps.feedbackUrl !== undefined) {
-				set.feedbackUrl = ps.feedbackUrl;
+				set.feedbackUrl = normalizeInstanceBrandUrl(ps.feedbackUrl);
 			}
 
 			if (ps.impressumUrl !== undefined) {

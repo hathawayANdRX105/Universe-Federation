@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div :class="[$style.root, { [$style.iconOnly]: iconOnly }]">
 	<div :class="$style.body">
 		<div :class="$style.top">
-			<div :class="$style.banner" :style="{ backgroundImage: `url(${ instance.bannerUrl })` }"></div>
+			<div :class="$style.banner" :style="{ backgroundImage: `url(${ instanceBannerUrl })` }"></div>
 			<button v-tooltip.right="iconOnly ? instance.name ?? i18n.ts.instance : null" class="_button" :class="$style.instance" @click="openInstanceMenu">
 				<img :src="instance.sidebarLogoUrl && !iconOnly ? instance.sidebarLogoUrl : instance.iconUrl || '/favicon.ico'" alt="" :class="instance.sidebarLogoUrl && !iconOnly ? $style.wideInstanceIcon : $style.instanceIcon" style="viewTransitionName: navbar-serverIcon;"/>
 			</button>
@@ -114,6 +114,7 @@ if ($i != null) {
 	}
 }
 const filteredMenu = computed(() => prefer.r.menu.value.filter(item => item !== 'search'));
+const instanceBannerUrl = computed(() => instance.bannerUrl || instance.backgroundImageUrl || '/client-assets/universe-federation-bg.svg');
 
 const router = useRouter();
 

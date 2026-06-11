@@ -479,14 +479,14 @@ export class MiMeta {
 
 	@Column('varchar', {
 		length: 1024,
-		default: 'https://github.com/hhhl/hhhl',
+		default: 'https://github.com/universe-federation/universe-federation',
 		nullable: true,
 	})
 	public repositoryUrl: string | null;
 
 	@Column('varchar', {
 		length: 1024,
-		default: 'https://github.com/hhhl/hhhl/issues/new',
+		default: 'https://github.com/universe-federation/universe-federation/issues/new',
 		nullable: true,
 	})
 	public feedbackUrl: string | null;

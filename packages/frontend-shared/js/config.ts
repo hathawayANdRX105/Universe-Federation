@@ -24,7 +24,8 @@ const preParseLocale = localStorage.getItem('locale');
 export let locale: Locale = preParseLocale ? JSON.parse(preParseLocale) : {};
 export const i18n = markRaw(new I18n<Locale>(locale, _DEV_));
 export const version = _VERSION_;
-export const instanceName = (siteName === 'Sharkey' || siteName == null) ? host : siteName;
+export const BRAND_NAME = 'Universe Federation';
+export const instanceName = (siteName == null || ['Sharkey', 'hhhl'].includes(siteName)) ? BRAND_NAME : siteName;
 export const ui = localStorage.getItem('ui');
 export const debug = localStorage.getItem('debug') === 'true';
 

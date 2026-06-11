@@ -7,7 +7,7 @@ import { createHighlighterCore, bundledThemes, bundledThemesInfo, bundledLanguag
 import lightTheme from '@@/themes/_light.json5';
 import darkTheme from '@@/themes/_dark.json5';
 import defaultLightTheme from '@@/themes/l-light.json5';
-import defaultDarkTheme from '@@/themes/d-green-lime.json5';
+import defaultDarkTheme from '@@/themes/d-universe-federation.json5';
 import { unique } from './array.js';
 import { deepClone } from './clone.js';
 import { deepMerge } from './merge.js';

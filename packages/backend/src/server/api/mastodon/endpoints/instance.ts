@@ -12,6 +12,7 @@ import { MastodonConverters } from '@/server/api/mastodon/MastodonConverters.js'
 import { MastodonClientService } from '@/server/api/mastodon/MastodonClientService.js';
 import { InstanceStatsService } from '@/core/InstanceStatsService.js';
 import { RoleService } from '@/core/RoleService.js';
+import { instanceBrandName } from '@/misc/brand-name.js';
 import type { FastifyInstance } from 'fastify';
 import type { MastodonEntity } from 'megalodon';
 
@@ -42,17 +43,17 @@ export class ApiInstanceMastodon {
 			const instance = data.data;
 			const response: MastodonEntity.Instance = {
 				uri: this.config.host,
-					title: this.meta.name || 'hhhl',
-					description: this.meta.description || this.meta.about || 'This is a hhhl instance.',
+				title: instanceBrandName(this.meta.name),
+				description: this.meta.description || this.meta.about || 'This is a Universe Federation instance.',
 				email: instance.email || '',
-					version: `3.0.0 (compatible; hhhl ${this.config.version}; like Akkoma)`,
+				version: `3.0.0 (compatible; Universe Federation ${this.config.version}; like Akkoma)`,
 				urls: instance.urls,
 				stats: {
 					user_count: instance.stats.user_count,
 					status_count: instance.stats.status_count,
 					domain_count: instance.stats.domain_count,
 				},
-				thumbnail: this.meta.backgroundImageUrl || '/static-assets/transparent.png',
+				thumbnail: this.meta.backgroundImageUrl || '/client-assets/universe-federation-bg.webp',
 				languages: this.meta.langs,
 				registrations: !this.meta.disableRegistration || instance.registrations,
 				approval_required: this.meta.approvalRequiredForSignup,
@@ -106,29 +107,29 @@ export class ApiInstanceMastodon {
 			const instance = data.data;
 			const response: MastodonEntity.InstanceV2 = {
 				domain: this.config.host,
-					title: this.meta.name || 'hhhl',
-					version: `3.0.0 (compatible; hhhl ${this.config.version}; like Akkoma)`,
+				title: instanceBrandName(this.meta.name),
+				version: `3.0.0 (compatible; Universe Federation ${this.config.version}; like Akkoma)`,
 				source_url: this.meta.repositoryUrl,
-					description: this.meta.description || this.meta.about || 'This is a hhhl instance.',
+				description: this.meta.description || this.meta.about || 'This is a Universe Federation instance.',
 				usage: {
 					users: {
 						active_month: instanceStats.localUsersSixMonths,
 					},
 				},
 				thumbnail: {
-					url: this.meta.backgroundImageUrl || '/static-assets/transparent.png',
+					url: this.meta.backgroundImageUrl || '/client-assets/universe-federation-bg.webp',
 					blurhash: undefined,
 					versions: {
-						'@1x': this.meta.backgroundImageUrl || '/static-assets/transparent.png',
+						'@1x': this.meta.backgroundImageUrl || '/client-assets/universe-federation-bg.webp',
 					},
 				},
 				icon: [
 					{
-						src: this.meta.app192IconUrl || '/client-assets/about-icon.png',
+						src: this.meta.app192IconUrl || '/static-assets/icons/192.png',
 						size: '192x192',
 					},
 					{
-						src: this.meta.app512IconUrl || '/client-assets/about-icon.png',
+						src: this.meta.app512IconUrl || '/static-assets/icons/512.png',
 						size: '512x512',
 					},
 				],

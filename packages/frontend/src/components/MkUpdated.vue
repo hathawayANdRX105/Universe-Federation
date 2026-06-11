@@ -27,7 +27,7 @@ const modal = useTemplateRef('modal');
 
 const whatIsNew = () => {
 	modal.value?.close();
-	window.open(`https://github.com/hhhl/hhhl/releases/tag/${version}`, '_blank');
+	window.open(`https://github.com/universe-federation/universe-federation/releases/tag/${version}`, '_blank');
 };
 
 onMounted(() => {

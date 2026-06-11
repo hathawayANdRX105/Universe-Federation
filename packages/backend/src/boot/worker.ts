@@ -42,7 +42,7 @@ export async function workerMain(bootLogger?: Logger) {
 			maxBreadcrumbs: 0,
 
 			// Set release version
-			release: 'hhhl@' + (meta.gitVersion ?? meta.version),
+			release: 'Universe Federation@' + (meta.gitVersion ?? meta.version),
 
 			...config.sentryForBackend.options,
 		});

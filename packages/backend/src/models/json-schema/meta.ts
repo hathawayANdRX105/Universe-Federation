@@ -182,6 +182,14 @@ export const packedMetaLiteSchema = {
 			type: 'string',
 			optional: false, nullable: true,
 		},
+		app192IconUrl: {
+			type: 'string',
+			optional: false, nullable: true,
+		},
+		app512IconUrl: {
+			type: 'string',
+			optional: false, nullable: true,
+		},
 		sidebarLogoUrl: {
 			type: 'string',
 			optional: false, nullable: true,

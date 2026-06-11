@@ -5,8 +5,8 @@
  */
 
 html {
-	background-color: var(--MI_THEME-bg);
-	color: var(--MI_THEME-fg);
+	background-color: var(--MI_THEME-bg, #05070b);
+	color: var(--MI_THEME-fg, #e7eef5);
 }
 
 #splash {
@@ -17,7 +17,10 @@ html {
 	width: 100vw;
 	height: 100vh;
 	cursor: wait;
-	background-color: var(--MI_THEME-bg);
+	background:
+		linear-gradient(180deg, rgba(5, 7, 11, 0.62), rgba(5, 7, 11, 0.92)),
+		url('/client-assets/universe-federation-bg.webp') center / cover no-repeat,
+		var(--MI_THEME-bg, #05070b);
 	opacity: 1;
 	transition: opacity 0.5s ease;
 }
@@ -46,7 +49,7 @@ html {
 	width: 28px;
 	height: 28px;
 	transform: translateY(80px);
-	color: var(--MI_THEME-accent);
+	color: var(--MI_THEME-accent, #2aabee);
 }
 
 #splashSpinner > .spinner {

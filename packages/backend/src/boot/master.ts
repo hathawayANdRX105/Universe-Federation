@@ -40,14 +40,14 @@ function greet(bootLogger: Logger) {
 		bootLogger.info(themeColor('                                 |___/ '));
 		//#endregion
 
-		bootLogger.info(' hhhl is an open-source decentralized microblogging platform.');
+		bootLogger.info(' Universe Federation is an open-source decentralized microblogging platform.');
 
 		bootLogger.info('');
 		bootLogger.info(`--- ${os.hostname()} ${chalk.grey(`(PID: ${process.pid.toString()})`)} ---`);
 	}
 
-	bootLogger.info('Welcome to hhhl!');
-	bootLogger.info(`hhhl v${meta.gitVersion ?? meta.version}`, null, true);
+	bootLogger.info('Welcome to Universe Federation!');
+	bootLogger.info(`Universe Federation v${meta.gitVersion ?? meta.version}`, null, true);
 }
 
 /**
@@ -73,7 +73,7 @@ export async function masterMain(bootLogger?: Logger) {
 		process.exit(1);
 	}
 
-	bootLogger.info('hhhl initialized');
+	bootLogger.info('Universe Federation initialized');
 
 	if (config.sentryForBackend) {
 		Sentry.init({
@@ -90,7 +90,7 @@ export async function masterMain(bootLogger?: Logger) {
 			maxBreadcrumbs: 0,
 
 			// Set release version
-			release: 'hhhl@' + (meta.gitVersion ?? meta.version),
+			release: 'Universe Federation@' + (meta.gitVersion ?? meta.version),
 
 			...config.sentryForBackend.options,
 		});

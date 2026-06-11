@@ -57,7 +57,7 @@ export function getChartThemeColors(): ChartThemeColors {
 		gridColor: dividerColor,
 		borderColor: dividerColor,
 		vLineColor: 'rgba(0, 0, 0, 0.2)',
-		miniChartLineColor: getCssVariable('--MI_THEME-accent', '#86b300'),
+		miniChartLineColor: getCssVariable('--MI_THEME-accent', '#2AABEE'),
 		miniChartGridColor: 'rgba(0, 0, 0, 0.16)',
 		activityNotesColor: '#41ddde',
 		activityRepliesColor: '#ff7a70',

@@ -1,11 +1,11 @@
 {
-	"name": "hhhl",
+	"name": "universe-federation",
 	"version": "2025.5.2-dev",
 	"type": "module",
 	"codename": "shonk",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/hhhl/hhhl.git"
+		"url": "https://github.com/universe-federation/universe-federation.git"
 	},
 	"packageManager": "pnpm@10.26.2",
 	"workspaces": [

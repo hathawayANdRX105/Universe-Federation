@@ -12,6 +12,7 @@ import { DEFAULT_POLICIES } from '@/core/RoleService.js';
 import { instanceUnsignedFetchOptions } from '@/const.js';
 import { SystemAccountService } from '@/core/SystemAccountService.js';
 import { MiMeta } from '@/models/Meta.js';
+import { normalizeInstanceBrandName, normalizeInstanceBrandUrl } from '@/misc/brand-name.js';
 
 export const meta = {
 	tags: ['meta'],
@@ -697,15 +698,15 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				maintainerName: instance.maintainerName,
 				maintainerEmail: instance.maintainerEmail,
 				version: this.config.version,
-				name: instance.name,
-				shortName: instance.shortName,
+				name: normalizeInstanceBrandName(instance.name),
+				shortName: normalizeInstanceBrandName(instance.shortName),
 				uri: this.config.url,
 				description: instance.description,
 				about: instance.about,
 				langs: instance.langs,
 				tosUrl: instance.termsOfServiceUrl,
-				repositoryUrl: instance.repositoryUrl,
-				feedbackUrl: instance.feedbackUrl,
+				repositoryUrl: normalizeInstanceBrandUrl(instance.repositoryUrl),
+				feedbackUrl: normalizeInstanceBrandUrl(instance.feedbackUrl),
 				impressumUrl: instance.impressumUrl,
 				donationUrl: instance.donationUrl,
 				privacyPolicyUrl: instance.privacyPolicyUrl,

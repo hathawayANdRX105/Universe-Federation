@@ -6,7 +6,7 @@
 import { markRaw, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import lightTheme from '@@/themes/l-light.json5';
-import darkTheme from '@@/themes/d-green-lime.json5';
+import darkTheme from '@@/themes/d-universe-federation.json5';
 import { hemisphere } from '@@/js/intl-const.js';
 import type { DeviceKind } from '@/utility/device-kind.js';
 import type { Plugin } from '@/plugin.js';
@@ -83,7 +83,7 @@ export const store = markRaw(new Pizzax('base', {
 	},
 	darkMode: {
 		where: 'device',
-		default: false,
+		default: true,
 	},
 	recentlyUsedEmojis: {
 		where: 'device',
@@ -587,7 +587,7 @@ export class ColdDeviceStorage {
 	public static default = {
 		lightTheme, // TODO: 消す(preferに移行済みのため)
 		darkTheme, // TODO: 消す(preferに移行済みのため)
-		syncDeviceDarkMode: true, // TODO: 消す(preferに移行済みのため)
+		syncDeviceDarkMode: false, // TODO: 消す(preferに移行済みのため)
 		plugins: [] as Plugin[], // TODO: 消す(preferに移行済みのため)
 	};
 

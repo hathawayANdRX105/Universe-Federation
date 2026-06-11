@@ -203,7 +203,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, ref, watch } from 'vue';
 import JSON5 from 'json5';
 import defaultLightTheme from '@@/themes/l-light.json5';
-import defaultDarkTheme from '@@/themes/d-green-lime.json5';
+import defaultDarkTheme from '@@/themes/d-universe-federation.json5';
 import type { Theme } from '@/theme.js';
 import { applyTheme } from '@/theme.js';
 import MkSwitch from '@/components/MkSwitch.vue';
