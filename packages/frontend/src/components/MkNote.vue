@@ -61,6 +61,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="[$style.main, { [$style.clickToOpen]: prefer.s.clickToOpen }]" @click.stop="prefer.s.clickToOpen ? noteclick(appearNote.id) : undefined">
 			<MkNoteHeader :note="appearNote" :mini="true" @click.stop/>
 			<MkInstanceTicker v-if="showTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
+			<NoteContentBadges :note="appearNote"/>
 			<div style="container-type: inline-size;">
 				<bdi>
 				<p v-if="appearNote.cw != null" :class="$style.cw">
@@ -236,6 +237,7 @@ import { extractPreviewUrls } from '@/utility/extract-preview-urls.js';
 import SkUrlPreviewGroup from '@/components/SkUrlPreviewGroup.vue';
 import { sendRecommendationFeedback, setupRecommendationVisibilityFeedback } from '@/utility/recommendation-feedback.js';
 import { getNoteViewsCount } from '@/utility/get-note-views-count.js';
+import NoteContentBadges from '@/components/NoteContentBadges.vue';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;

@@ -66,6 +66,7 @@ Displays a note in the Sharkey style. Used to show the "main" note in a given co
 				<SkNoteHeader :note="appearNote" :mini="true"/>
 			</div>
 		</div>
+		<NoteContentBadges :note="appearNote"/>
 		<div :class="[{ [$style.clickToOpen]: prefer.s.clickToOpen }]" @click.stop="prefer.s.clickToOpen ? noteclick(appearNote.id) : undefined">
 			<div style="container-type: inline-size;">
 				<p v-if="appearNote.cw != null" :class="$style.cw">
@@ -238,6 +239,7 @@ import SkUrlPreviewGroup from '@/components/SkUrlPreviewGroup.vue';
 import MkNoteSub from '@/components/MkNoteSub.vue';
 import { sendRecommendationFeedback, setupRecommendationVisibilityFeedback } from '@/utility/recommendation-feedback.js';
 import { getNoteViewsCount } from '@/utility/get-note-views-count.js';
+import NoteContentBadges from '@/components/NoteContentBadges.vue';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;

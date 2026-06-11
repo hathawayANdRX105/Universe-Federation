@@ -27,18 +27,22 @@ type RecommendationSurface = typeof surfaceValues[number];
 type RecommendationCategory = typeof categoryValues[number];
 type RecommendationSort = typeof sortValues[number];
 type RecommendationRankMode = typeof rankModeValues[number];
-const CANDIDATE_WINDOW = 1000 * 60 * 60 * 24 * 14;
-const LOW_VALUE_TAGS = ['签到', '打卡', '水贴'];
-const QUALITY_TAGS = ['教程', 'ai', 'AI', '资源', '公告', 'Bug', 'bug'];
-const EXPLORE_SLOT_RATIO = 0.26;
+const CANDIDATE_WINDOW = 1000 * 60 * 60 * 24 * 7;
+const FRESH_PRIORITY_HOURS = 48;
+const OLD_CONTENT_HOURS = 72;
+const OLD_CONTENT_MAX_SCORE = 58;
+const LOW_VALUE_TAGS = ['签到', '打卡', '水贴', 'key', 'Key'];
+const QUALITY_TAGS = ['教程', 'ai', 'AI', '资源', '公告', 'Bug', 'bug', '问题', '讨论', '指南'];
+const LOW_VALUE_CHANNEL_NAME_PATTERN = '^(Key|白嫖|签到|打卡)$';
+const EXPLORE_SLOT_RATIO = 0.18;
 // Time-decayed hotness model (replaces the old exposure-divided engagement rate,
 // which collapsed to ~0 because the global exposure counter inflated ~100x faster
 // than engagement on a busy instance — burying genuinely hot new posts).
-const HOT_HALF_LIFE_HOURS = 18; // engagement+hotness decays by half every 18h → fresh content leads
-const HOTNESS_WEIGHT = 30; // weight of the time-decayed hotness in the final score
+const HOT_HALF_LIFE_HOURS = 12; // engagement+hotness decays by half every 12h so 48h content leads
+const HOTNESS_WEIGHT = 36; // weight of the time-decayed hotness in the final score
 const COLD_START_HOURS = 12; // posts younger than this get a guaranteed-delivery boost (age-based, not exposure-based)
-const COLD_START_BOOST = 26; // strength of the cold-start boost at age 0 (decays to 0 at COLD_START_HOURS)
-const FRESH_POOL_MULTIPLIER = 10;
+const COLD_START_BOOST = 18; // strength of the cold-start boost at age 0 (decays to 0 at COLD_START_HOURS)
+const FRESH_POOL_MULTIPLIER = 5;
 // De-duplication: a note delivered to this user within this many minutes is
 // demoted; the penalty fades linearly to 0 as it approaches the window edge,
 // so good content returns later (time-recovering de-dup, per user request).
@@ -46,14 +50,14 @@ const DEDUP_WINDOW_MINUTES = 360; // 6h: within this, a just-seen note is suppre
 const DEDUP_MAX_PENALTY = 90; // strength of the demotion for a just-now-delivered note (must outweigh hotness so the feed visibly rotates)
 // Random jitter to break ties / add variation between refreshes (kept small so it
 // only reorders near-equal scores, never lets junk leap to the top).
-const JITTER_AMPLITUDE = 6;
+const JITTER_AMPLITUDE = 3;
 // Author-level anti-flood: accounts that post a lot but earn almost no engagement per
 // post are spammers (e.g. grok/doubao/WindSurf — none flagged isBot, so withBots can't
 // catch them). Their notes get a frequency-scaled penalty so they can't dominate by volume.
 const AUTHOR_FLOOD_MIN_POSTS = 15; // below this post count an author is never treated as a flooder
-const AUTHOR_FLOOD_RATE_THRESHOLD = 0.4; // engagement-per-post below this + high volume = flood
-const AUTHOR_FLOOD_MAX_PENALTY = 30; // cap on the per-note flood penalty
-const AUTHOR_WINDOW = 1000 * 60 * 60 * 24 * 14; // window for measuring author posting frequency
+const AUTHOR_FLOOD_RATE_THRESHOLD = 0.8; // engagement-per-post below this + high volume = flood
+const AUTHOR_FLOOD_MAX_PENALTY = 46; // cap on the per-note flood penalty
+const AUTHOR_WINDOW = 1000 * 60 * 60 * 24 * 7; // window for measuring author posting frequency
 
 export const meta = {
 	tags: ['notes'],
@@ -208,37 +212,85 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 							LEAST("user"."followersCount", 5000) / 500
 						)
 						* CASE
-							WHEN note.id > :fresh24hId THEN 1.4
-							WHEN note.id > :fresh3dId THEN 1
-							WHEN note.id > :fresh7dId THEN 0.65
-							ELSE 0.35
+							WHEN note.id > :fresh24hId THEN 1.55
+							WHEN note.id > :fresh48hId THEN 1.2
+							WHEN note.id > :fresh3dId THEN 0.72
+							WHEN note.id > :fresh7dId THEN 0.35
+							ELSE 0.12
 						END
-						+ CASE WHEN note."fileIds" != '{}' THEN 6 ELSE 0 END
+						+ CASE WHEN note."fileIds" != '{}' THEN 4 ELSE 0 END
 						+ CASE WHEN note."channelId" IS NOT NULL THEN :channelBoost ELSE 0 END
+						+ CASE WHEN note."channelId" IS NOT NULL AND note.id = ANY(COALESCE(channel."pinnedNoteIds", ARRAY[]::varchar[])) THEN 18 ELSE 0 END
 						+ CASE WHEN channel."isSensitive" = TRUE THEN -18 ELSE 0 END
-						+ CASE WHEN note.tags && CAST(:qualityTags AS varchar[]) THEN 14 ELSE 0 END
-						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|ai|claude|codex)' THEN 14 ELSE 0 END
-						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(token|key|资源)' AND LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|说明|讨论|问题|怎么|如何)' THEN 10 ELSE 0 END
-						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(邀请|注册送|注册送|倍率|白嫖|来蹬|轻蹬|随便用|限时密钥|限时 key|私key|私 key)' THEN -18 ELSE 0 END
-						+ CASE WHEN note.tags && CAST(:keyTags AS varchar[]) AND LOWER(COALESCE(note.text, '')) !~ '(教程|指南|配置|部署|使用方法|说明|讨论|问题|怎么|如何)' THEN -16 ELSE 0 END
-						+ CASE WHEN note.tags && CAST(:bugTags AS varchar[]) AND note."fileIds" = '{}' AND note."repliesCount" < 2 THEN -9 ELSE 0 END
-						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(tp-[a-z0-9_-]{16,}|api[_ -]?key|密钥)' THEN -18 ELSE 0 END
-						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(sk-[a-z0-9_-]{12,})' THEN -10 ELSE 0 END
-						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '^(sk-[a-z0-9_-]+\\s*)+$' THEN -26 ELSE 0 END
+						+ CASE WHEN channel.name ~* :lowValueChannelNamePattern THEN -40 ELSE 0 END
+						+ CASE WHEN note.tags && CAST(:qualityTags AS varchar[]) THEN 20 ELSE 0 END
+						+ CASE WHEN LENGTH(COALESCE(note.text, '')) >= 80 THEN 12 ELSE 0 END
+						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|求助|ai|claude|codex|gpt)' THEN 20 ELSE 0 END
+						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(token|key|资源)' AND LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|说明|讨论|问题|怎么|如何|求助)' THEN 12 ELSE 0 END
+						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(邀请|注册送|注册送|倍率|白嫖|来蹬|轻蹬|随便用|限时密钥|限时 key|私key|私 key|号池)' THEN -40 ELSE 0 END
+						+ CASE WHEN note.tags && CAST(:keyTags AS varchar[]) AND LOWER(COALESCE(note.text, '')) !~ '(教程|指南|配置|部署|使用方法|说明|讨论|问题|怎么|如何|求助)' THEN -34 ELSE 0 END
+						+ CASE WHEN note.tags && CAST(:bugTags AS varchar[]) AND note."fileIds" = '{}' AND note."repliesCount" < 2 THEN -6 ELSE 0 END
+						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(tp-[a-z0-9_-]{16,}|api[_ -]?key|密钥)' THEN -42 ELSE 0 END
+						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(sk-[a-z0-9_-]{12,})' THEN -38 ELSE 0 END
+						+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '^(sk-[a-z0-9_-]+\\s*)+$' THEN -64 ELSE 0 END
 						+ CASE WHEN note."renoteId" IS NOT NULL AND note.text IS NULL THEN -8 ELSE 0 END
-						+ CASE WHEN LENGTH(COALESCE(note.text, '')) < 8 THEN -9 ELSE 0 END
-						+ CASE WHEN LENGTH(COALESCE(note.text, '')) < 20 THEN -7 ELSE 0 END
-						+ CASE WHEN note.tags && CAST(:lowValueTags AS varchar[]) THEN -14 ELSE 0 END
-						+ CASE WHEN COALESCE(note.text, '') LIKE '%签到%' AND LENGTH(COALESCE(note.text, '')) < 40 THEN -14 ELSE 0 END
-						+ CASE WHEN COALESCE(note.text, '') LIKE '%打卡%' AND LENGTH(COALESCE(note.text, '')) < 40 THEN -10 ELSE 0 END
+						+ CASE WHEN LENGTH(COALESCE(note.text, '')) < 8 THEN -20 ELSE 0 END
+						+ CASE WHEN LENGTH(COALESCE(note.text, '')) < 20 THEN -14 ELSE 0 END
+						+ CASE WHEN note.tags && CAST(:lowValueTags AS varchar[]) THEN -28 ELSE 0 END
+						+ CASE WHEN COALESCE(note.text, '') LIKE '%签到%' AND LENGTH(COALESCE(note.text, '')) < 60 THEN -34 ELSE 0 END
+						+ CASE WHEN COALESCE(note.text, '') LIKE '%打卡%' AND LENGTH(COALESCE(note.text, '')) < 60 THEN -28 ELSE 0 END
+						+ CASE WHEN note.id < :fresh48hId THEN -12 ELSE 0 END
+						+ CASE
+							WHEN note.id < :fresh3dId
+								AND (
+									LEAST(
+										COALESCE((
+											SELECT SUM((value)::int)
+											FROM jsonb_each_text(note.reactions)
+										), 0),
+										40
+									)
+									+ note."repliesCount" * 2
+									+ note."renoteCount" * 2
+									+ note."clippedCount" * 3
+								) < 3
+								AND note.id <> ALL(COALESCE(channel."pinnedNoteIds", ARRAY[]::varchar[]))
+								AND NOT (
+									note.tags && CAST(:qualityTags AS varchar[])
+									OR LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|求助|ai|claude|codex|gpt)'
+								)
+							THEN -45
+							WHEN note.id < :fresh3dId
+								AND (
+									LEAST(
+										COALESCE((
+											SELECT SUM((value)::int)
+											FROM jsonb_each_text(note.reactions)
+										), 0),
+										40
+									)
+									+ note."repliesCount" * 2
+									+ note."renoteCount" * 2
+									+ note."clippedCount" * 3
+								) < 3
+								AND note.id <> ALL(COALESCE(channel."pinnedNoteIds", ARRAY[]::varchar[]))
+								AND NOT (
+									note.tags && CAST(:qualityTags AS varchar[])
+									OR LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|求助|ai|claude|codex|gpt)'
+								)
+							THEN -45
+							ELSE 0
+						END
 					)
 				`, 'recommendation_score')
 				.setParameter('lowValueTags', LOW_VALUE_TAGS)
 				.setParameter('qualityTags', QUALITY_TAGS)
 				.setParameter('keyTags', ['Key', 'key', 'Token', 'token'])
 				.setParameter('bugTags', ['Bug', 'bug'])
-				.setParameter('channelBoost', surface === 'explore' ? 10 : 7)
+				.setParameter('lowValueChannelNamePattern', LOW_VALUE_CHANNEL_NAME_PATTERN)
+				.setParameter('channelBoost', surface === 'explore' ? 14 : 10)
 				.setParameter('fresh24hId', this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24))
+				.setParameter('fresh48hId', this.idService.gen(this.timeService.now - 1000 * 60 * 60 * FRESH_PRIORITY_HOURS))
 				.setParameter('fresh3dId', this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 3))
 				.setParameter('fresh7dId', this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 7));
 
@@ -314,7 +366,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					this.getAuthorFloodScores(candidates),
 				]);
 				const effectiveRankMode = category === 'trending' ? 'trending' : rankMode;
-				notes = this.diversify(this.rankCandidates(candidates, signals, authorFlood, category, sort, effectiveRankMode, now), ps.limit);
+				notes = this.diversify(this.rankCandidates(candidates, signals, authorFlood, category, sort, effectiveRankMode, now), ps.limit, now);
 			}
 			// Record delivery per-user so the next request can de-duplicate (time-recovering).
 			this.recommendationService.recordDelivery(me?.id ?? null, notes.map(note => note.id), this.timeService.now);
@@ -457,7 +509,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		return penalties;
 	}
 
-	private rankCandidates<T extends { id: string; userId: string; text: string | null; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; tags?: string[]; channelId?: string | null }>(
+	private rankCandidates<T extends { id: string; userId: string; text: string | null; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; tags?: string[]; channelId?: string | null; channel?: { pinnedNoteIds?: string[]; name?: string | null } | null }>(
 		notes: T[],
 		signals: Awaited<ReturnType<RecommendationService['getUserSignals']>>,
 		authorFlood: Map<string, number>,
@@ -490,7 +542,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				const lowValuePenalty = this.getLowValuePenalty(note);
 				const compactLen = (note.text ?? '').replace(/\s+/g, '').length;
 				const hasMedia = (note.fileIds?.length ?? 0) > 0;
-				const qualifiesForPool = lowValuePenalty < 18 && (compactLen >= 10 || hasMedia);
+				const qualityScore = this.getQualityScore(note);
+				const isPinnedInChannel = note.channel?.pinnedNoteIds?.includes(note.id) ?? false;
+				const oldContentPenalty = ageHours >= FRESH_PRIORITY_HOURS
+					? Math.min(42, (ageHours - FRESH_PRIORITY_HOURS) * 0.75)
+					: 0;
+				const qualifiesForPool = lowValuePenalty < 18 && (compactLen >= 20 || hasMedia || qualityScore > 0);
 				// Traffic-pool guarantee, now AGE-based (exposure is unreliable): every
 				// genuine new post (< COLD_START_HOURS old) gets a decaying delivery boost
 				// so it reaches an initial audience. Pure 灌水 gets only 0.15x.
@@ -525,9 +582,26 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				// Author-level anti-flood: high-volume / low-engagement spam accounts.
 				const floodPenalty = authorFlood.get(note.userId) ?? 0;
 				const latestReplyBoost = sort === 'latestReply' ? recencyTieBreak * 8 : 0;
+				let score = hotnessScore * HOTNESS_WEIGHT / 42
+					+ coldStartBoost
+					+ qualityScore
+					+ personalizedScore
+					+ seenPenalty
+					+ exploreBoost
+					+ jitter
+					+ latestReplyBoost
+					+ recencyTieBreak
+					- dedupPenalty
+					- negativeScore
+					- lowValuePenalty
+					- oldContentPenalty
+					- floodPenalty;
+				if (ageHours >= OLD_CONTENT_HOURS && !isPinnedInChannel) {
+					score = Math.min(score, OLD_CONTENT_MAX_SCORE);
+				}
 				return {
 					note,
-					score: hotnessScore * HOTNESS_WEIGHT / 42 + coldStartBoost + personalizedScore + seenPenalty + exploreBoost + jitter + latestReplyBoost + recencyTieBreak - dedupPenalty - negativeScore - lowValuePenalty - floodPenalty,
+					score,
 					exploreScore: signal?.explorationScore ?? 0,
 				};
 			})
@@ -535,7 +609,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.map(entry => entry.note);
 	}
 
-	private diversify<T extends { id: string; userId: string; text: string | null; channelId?: string | null }>(notes: T[], limit: number): T[] {
+	private diversify<T extends { id: string; userId: string; text: string | null; channelId?: string | null; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; tags?: string[]; channel?: { pinnedNoteIds?: string[]; name?: string | null } | null }>(notes: T[], limit: number, now = this.timeService.now): T[] {
 		const selected: T[] = [];
 		const authorCounts = new Map<string, number>();
 		const channelCounts = new Map<string, number>();
@@ -543,6 +617,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		const exploreSlots = Math.max(1, Math.floor(limit * EXPLORE_SLOT_RATIO));
 
 		for (const note of notes) {
+			const ageHours = Math.max(0, (now - this.idService.parse(note.id).date.getTime()) / (1000 * 60 * 60));
+			const isPinnedInChannel = note.channel?.pinnedNoteIds?.includes(note.id) ?? false;
+			if (ageHours >= 24 * 7 && !isPinnedInChannel) continue;
+			if (ageHours >= OLD_CONTENT_HOURS && !isPinnedInChannel && !this.hasOldContentQuality(note)) continue;
+			if (this.getLowValuePenalty(note) >= 60 && !this.hasStrongEngagement(note)) continue;
 			const authorCount = authorCounts.get(note.userId) ?? 0;
 			if (authorCount >= 2) continue;
 			if (note.channelId != null && (channelCounts.get(note.channelId) ?? 0) >= 2) continue;
@@ -560,6 +639,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		for (const note of notes) {
 			if (selected.length >= limit) break;
 			if (selected.some(item => item.id === note.id)) continue;
+			const ageHours = Math.max(0, (now - this.idService.parse(note.id).date.getTime()) / (1000 * 60 * 60));
+			const isPinnedInChannel = note.channel?.pinnedNoteIds?.includes(note.id) ?? false;
+			if (ageHours >= 24 * 7 && !isPinnedInChannel) continue;
+			if (ageHours >= OLD_CONTENT_HOURS && !isPinnedInChannel && !this.hasOldContentQuality(note)) continue;
+			if (this.getLowValuePenalty(note) >= 60 && !this.hasStrongEngagement(note)) continue;
 			if ((limit - selected.length) > exploreSlots && selected.length >= Math.max(limit - exploreSlots, 0)) continue;
 			selected.push(note);
 		}
@@ -567,17 +651,51 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		return selected;
 	}
 
-	private getLowValuePenalty(note: { text: string | null; tags?: string[]; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[] }): number {
+	private hasStrongEngagement(note: { repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number> }): boolean {
+		return this.getEngagementScore(note) >= 10;
+	}
+
+	private hasOldContentQuality(note: { text: string | null; tags?: string[]; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[] }): boolean {
+		return this.getEngagementScore(note) >= 6 || this.getQualityScore(note) >= 18;
+	}
+
+	private getEngagementScore(note: { repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number> }): number {
+		const reactionCount = Object.values(note.reactions ?? {}).reduce((acc, value) => acc + Number(value), 0);
+		return reactionCount + (note.repliesCount ?? 0) * 2 + (note.renoteCount ?? 0) * 2 + (note.clippedCount ?? 0) * 3;
+	}
+
+	private getQualityScore(note: { text: string | null; tags?: string[]; channelId?: string | null; fileIds?: string[] }): number {
+		const text = (note.text ?? '').trim();
+		const lower = text.toLowerCase();
+		let score = 0;
+		if ((note.tags ?? []).some(tag => QUALITY_TAGS.includes(tag))) score += 18;
+		if (/(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|求助|ai|claude|codex|gpt)/i.test(text)) score += 18;
+		if (/(token|key|资源)/i.test(lower) && /(教程|指南|配置|部署|使用方法|说明|讨论|问题|怎么|如何|求助)/i.test(text)) score += 10;
+		if (text.replace(/\s+/g, '').length >= 80) score += 10;
+		if ((note.fileIds?.length ?? 0) > 0) score += 4;
+		if (note.channelId != null) score += 6;
+		return score;
+	}
+
+	private getLowValuePenalty(note: { text: string | null; tags?: string[]; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; channel?: { name?: string | null } | null }): number {
 		const text = (note.text ?? '').trim();
 		const compactText = text.replace(/\s+/g, '');
-		const reactionCount = Object.values(note.reactions ?? {}).reduce((acc, value) => acc + Number(value), 0);
-		const engagement = reactionCount + (note.repliesCount ?? 0) + (note.renoteCount ?? 0) + (note.clippedCount ?? 0);
+		const engagement = this.getEngagementScore(note);
+		const hasQualityContext = this.getQualityScore(note) > 0;
 		let penalty = 0;
-		if (compactText.length < 6 && (note.fileIds?.length ?? 0) === 0) penalty += 28;
-		if (compactText.length < 14 && engagement === 0 && (note.fileIds?.length ?? 0) === 0) penalty += 16;
-		if (/^(签到|打卡|水|路过|测试|1|11|111|。|，|哈)+$/i.test(compactText)) penalty += 34;
+		if (compactText.length < 6 && (note.fileIds?.length ?? 0) === 0) penalty += 42;
+		if (compactText.length < 18 && engagement === 0 && (note.fileIds?.length ?? 0) === 0) penalty += 30;
+		if (/^(签到|打卡|水|路过|测试|1|11|111|。|，|哈)+$/i.test(compactText)) penalty += 50;
 		if ((note.tags ?? []).some(tag => LOW_VALUE_TAGS.includes(tag))) penalty += 18;
 		if (/^(.)\1{5,}$/.test(compactText)) penalty += 24;
+		if (/(邀请|注册送|倍率|白嫖|来蹬|轻蹬|随便用|限时密钥|限时\s*key|私\s*key|号池)/i.test(text)) penalty += 38;
+		if (/(tp-[a-z0-9_-]{16,}|api[_ -]?key|密钥)/i.test(text)) penalty += 38;
+		if (/sk-[a-z0-9_-]{12,}/i.test(text)) penalty += hasQualityContext ? 18 : 46;
+		if (/^(sk-[a-z0-9_-]+\s*)+$/i.test(compactText)) penalty += 70;
+		if (/^https?:\/\/\S+$/i.test(text)) penalty += 26;
+		if (/https?:\/\/\S+/i.test(text) && compactText.length < 90 && !hasQualityContext) penalty += 18;
+		if (/https?:\/\/\S+/i.test(text) && /(强不强|偷着乐|点\s*star|点\s*start|买不了吃亏|买不了上当|推荐.*机场)/i.test(text)) penalty += 34;
+		if (note.channel?.name != null && new RegExp(LOW_VALUE_CHANNEL_NAME_PATTERN, 'i').test(note.channel.name)) penalty += 42;
 		return penalty;
 	}
 }

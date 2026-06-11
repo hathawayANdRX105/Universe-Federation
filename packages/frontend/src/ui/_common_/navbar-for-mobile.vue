@@ -58,19 +58,11 @@ import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
 import { openAccountMenu as openAccountMenu_ } from '@/accounts.js';
 import { $i } from '@/i.js';
+import { normalizePrimaryMenu } from '@/utility/navbar-menu.js';
 
 const currentMenu = Array.isArray(prefer.s.menu) ? prefer.s.menu : [];
 if ($i != null) {
-	let nextMenu = currentMenu.filter(item => item !== 'search');
-	if (!nextMenu.includes('explore')) {
-		nextMenu = ['explore', ...nextMenu];
-	}
-	if (!nextMenu.includes('chat') && navbarItemDef.chat.show !== false) {
-		nextMenu = [...nextMenu, 'chat'];
-	}
-	if (!nextMenu.includes('ai') && navbarItemDef.ai.show !== false) {
-		nextMenu = [...nextMenu, 'ai'];
-	}
+	const nextMenu = normalizePrimaryMenu(currentMenu, navbarItemDef);
 	if (nextMenu.length !== currentMenu.length || nextMenu.some((item, index) => item !== currentMenu[index])) {
 		prefer.commit('menu', nextMenu);
 	}

@@ -16,7 +16,7 @@ import { IdService } from '@/core/IdService.js';
 import { TimeService } from '@/global/TimeService.js';
 import { DI } from '@/di-symbols.js';
 
-const DISCOVERY_WINDOW = 1000 * 60 * 60 * 24 * 14;
+const DISCOVERY_WINDOW = 1000 * 60 * 60 * 24 * 7;
 
 export const meta = {
 	tags: ['notes'],
@@ -130,6 +130,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.leftJoinAndSelect('reply.user', 'replyUser')
 			.leftJoinAndSelect('renote.user', 'renoteUser')
 			.leftJoinAndSelect('note.channel', 'channel');
+		query
+			.andWhere('LOWER(COALESCE(note.text, \'\')) !~ :discoveryLowValuePattern')
+			.andWhere(new Brackets(qb => {
+				qb.orWhere('note.tags IS NULL');
+				qb.orWhere('NOT (note.tags && CAST(:discoveryLowValueTags AS varchar[]))');
+			}))
+			.setParameter('discoveryLowValuePattern', '签到|打卡|限时密钥|限时\\s*key|私\\s*key|tp-[a-z0-9_-]{16,}|sk-[a-z0-9_-]{12,}|白嫖|注册送|倍率|号池|强不强|偷着乐|点\\s*star|点\\s*start|买不了吃亏|买不了上当')
+			.setParameter('discoveryLowValueTags', ['签到', '打卡', '水贴', 'Key', 'key']);
 		this.queryService.generateVisibilityQuery(query, me);
 		this.queryService.generateReplyTargetVisibilityQuery(query, me);
 		this.queryService.generateBlockedHostQueryForNote(query);
@@ -144,42 +152,67 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	}
 
 	private async getCoverNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1]) {
+		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 48);
 		const query = this.baseNotesQuery(sinceId, me)
 			.andWhere('note.fileIds != \'{}\'')
 			.andWhere('user.isBot = FALSE')
-			.orderBy('(note."repliesCount" * 5 + note."renoteCount" * 4 + note."clippedCount" * 5)', 'DESC')
+			.orderBy(`(
+				note."repliesCount" * 5
+				+ note."renoteCount" * 4
+				+ note."clippedCount" * 5
+				+ CASE WHEN note.id > :fresh48hId THEN 10 ELSE -12 END
+			)`, 'DESC')
 			.addOrderBy('note.id', 'DESC')
+			.setParameter('fresh48hId', fresh48hId)
 			.limit(limit);
 		return this.noteEntityService.packMany(await query.getMany(), me);
 	}
 
 	private async getHotNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1]) {
+		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 48);
 		const query = this.baseNotesQuery(sinceId, me)
 			.andWhere('user.isBot = FALSE')
-			.andWhere('LENGTH(COALESCE(note.text, \'\')) >= 8')
+			.andWhere('LENGTH(COALESCE(note.text, \'\')) >= 20')
 			.andWhere(new Brackets(qb => {
 				qb.orWhere('note."repliesCount" > 0');
 				qb.orWhere('note."renoteCount" > 0');
 				qb.orWhere('note."clippedCount" > 0');
 				qb.orWhere('note."channelId" IS NOT NULL');
 			}))
-			.orderBy('(note."repliesCount" * 5 + note."renoteCount" * 4 + note."clippedCount" * 5 + CASE WHEN note."channelId" IS NOT NULL THEN 4 ELSE 0 END)', 'DESC')
+			.orderBy(`(
+				note."repliesCount" * 6
+				+ note."renoteCount" * 5
+				+ note."clippedCount" * 6
+				+ CASE WHEN note."channelId" IS NOT NULL THEN 8 ELSE 0 END
+				+ CASE WHEN note.id > :fresh48hId THEN 14 ELSE -18 END
+				+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|求助|ai|claude|codex|gpt)' THEN 12 ELSE 0 END
+			)`, 'DESC')
 			.addOrderBy('note.id', 'DESC')
+			.setParameter('fresh48hId', fresh48hId)
 			.limit(limit);
 		return this.noteEntityService.packMany(await query.getMany(), me);
 	}
 
 	private async getTutorialNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1]) {
+		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 48);
 		const query = this.baseNotesQuery(sinceId, me)
 			.andWhere('user.isBot = FALSE')
 			.andWhere(new Brackets(qb => {
 				qb.orWhere('note.tags && CAST(:tutorialTags AS varchar[])');
 				qb.orWhere('LOWER(COALESCE(note.text, \'\')) ~ :tutorialPattern');
 			}))
-			.setParameter('tutorialTags', ['教程', 'AI', 'ai', 'Token', 'token', 'Key', 'key', '资源'])
-			.setParameter('tutorialPattern', '教程|指南|配置|部署|api|claude|codex|ai|token|key|资源')
-			.orderBy('(note."repliesCount" * 5 + note."renoteCount" * 4 + note."clippedCount" * 5 + CASE WHEN note."channelId" IS NOT NULL THEN 8 ELSE 0 END)', 'DESC')
+			.setParameter('tutorialTags', ['教程', 'AI', 'ai', 'Token', 'token', '资源', '指南', 'Bug', 'bug', '问题', '讨论'])
+			.setParameter('tutorialPattern', '教程|指南|配置|部署|api|claude|codex|ai|gpt|token|key|资源|问题|讨论|求助')
+			.orderBy(`(
+				note."repliesCount" * 5
+				+ note."renoteCount" * 4
+				+ note."clippedCount" * 5
+				+ CASE WHEN note."channelId" IS NOT NULL THEN 10 ELSE 0 END
+				+ CASE WHEN note.id > :fresh48hId THEN 10 ELSE -10 END
+				+ CASE WHEN LENGTH(COALESCE(note.text, '')) >= 80 THEN 10 ELSE 0 END
+			)`, 'DESC')
 			.addOrderBy('note.id', 'DESC')
+			.setParameter('fresh48hId', fresh48hId)
 			.limit(limit);
 		return this.noteEntityService.packMany(await query.getMany(), me);
 	}
@@ -189,7 +222,15 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.where('channel.isArchived = FALSE')
 			.andWhere('channel.isSensitive = FALSE')
 			.andWhere('channel."notesCount" > 0')
-			.orderBy('channel."notesCount"', 'DESC')
+			.andWhere('channel.name !~* :lowValueChannelPattern')
+			.orderBy(`(
+				LEAST(channel."notesCount", 500) * 0.35
+				+ LEAST(channel."usersCount", 200) * 1.6
+				+ CASE WHEN channel."lastNotedAt" > now() - interval '48 hours' THEN 45 ELSE 0 END
+				+ CASE WHEN channel."lastNotedAt" > now() - interval '7 days' THEN 20 ELSE -20 END
+				+ cardinality(channel."pinnedNoteIds") * 6
+			)`, 'DESC')
+			.setParameter('lowValueChannelPattern', '^(Key|key|白嫖|签到|打卡)$')
 			.addOrderBy('channel.lastNotedAt', 'DESC', 'NULLS LAST')
 			.limit(limit)
 			.getMany();

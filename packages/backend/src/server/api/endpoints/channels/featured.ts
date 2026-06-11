@@ -49,7 +49,17 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const query = this.channelsRepository.createQueryBuilder('channel')
 				.where('channel.lastNotedAt IS NOT NULL')
 				.andWhere('channel.isArchived = FALSE')
-				.orderBy('channel.lastNotedAt', 'DESC');
+				.andWhere('channel.isSensitive = FALSE')
+				.andWhere('channel.name !~* :lowValueChannelPattern')
+				.orderBy(`(
+					LEAST(channel."notesCount", 500) * 0.35
+					+ LEAST(channel."usersCount", 200) * 1.6
+					+ CASE WHEN channel."lastNotedAt" > now() - interval '48 hours' THEN 45 ELSE 0 END
+					+ CASE WHEN channel."lastNotedAt" > now() - interval '7 days' THEN 20 ELSE -20 END
+					+ cardinality(channel."pinnedNoteIds") * 6
+				)`, 'DESC')
+				.setParameter('lowValueChannelPattern', '^(Key|key|白嫖|签到|打卡)$')
+				.addOrderBy('channel.lastNotedAt', 'DESC', 'NULLS LAST');
 
 			const channels = await query.limit(10).getMany();
 
