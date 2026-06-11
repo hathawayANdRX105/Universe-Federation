@@ -24,7 +24,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkButton v-if="!moreFetching" v-appear="(enableInfiniteScroll && !props.disableAutoLoad) ? appearFetchMoreAhead : null" :class="$style.more" :wait="moreFetching" primary rounded @click="fetchMoreAhead">
 				{{ i18n.ts.loadMore }}
 			</MkButton>
-			<MkLoading v-else/>
+			<MkLoading v-else :mini="true"/>
 		</div>
 		<div v-if="pagination.reversed && exhausted" :class="$style.exhausted">{{ i18n.ts.noMoreHistory }}</div>
 		<slot :items="Array.from(items.values())" :fetching="fetching || moreFetching"></slot>
@@ -33,7 +33,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkButton v-if="!moreFetching" v-appear="(enableInfiniteScroll && !props.disableAutoLoad) ? appearFetchMore : null" :class="$style.more" :wait="moreFetching" primary rounded @click="fetchMore">
 				{{ i18n.ts.loadMore }}
 			</MkButton>
-			<MkLoading v-else/>
+			<MkLoading v-else :mini="true"/>
 		</div>
 	</div>
 </Transition>

@@ -93,7 +93,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <div v-if="estimatedApiProgress != null" id="wait" role="progressbar" :aria-valuenow="estimatedApiProgress" aria-valuemin="0" aria-valuemax="100">
 	<div id="waitBar" :style="{ width: `${estimatedApiProgress}%` }"></div>
-	<span>{{ estimatedApiProgress }}%</span>
 </div>
 
 <div v-if="dev" id="devTicker"><span style="animation: dev-ticker-blink 2s infinite;">DEV BUILD</span></div>
@@ -400,20 +399,6 @@ function getPointerEvents() {
 		background: linear-gradient(90deg, var(--MI_THEME-accent), var(--MI_THEME-accentLighten));
 		box-shadow: 0 0 12px color-mix(in srgb, var(--MI_THEME-accent) 50%, transparent);
 		transition: width 180ms ease;
-	}
-
-	> span {
-		position: absolute;
-		top: 6px;
-		right: 10px;
-		padding: 2px 6px;
-		border-radius: 999px;
-		background: var(--MI_THEME-panel);
-		color: var(--MI_THEME-accent);
-		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
-		font-size: 10px;
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
 	}
 }
 
