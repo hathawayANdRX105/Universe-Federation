@@ -136,6 +136,7 @@ export const PREF_DEF = {
 		default: [
 			'notifications',
 			'explore',
+			'channels',
 			'followRequests',
 			'-',
 			'announcements',

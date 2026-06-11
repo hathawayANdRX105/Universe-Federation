@@ -194,6 +194,7 @@ export const store = markRaw(new Pizzax('base', {
 		default: [
 			'notifications',
 			'explore',
+			'channels',
 			'followRequests',
 			'-',
 			'announcements',
