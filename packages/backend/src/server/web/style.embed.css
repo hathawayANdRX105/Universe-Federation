@@ -26,7 +26,7 @@ html.embed {
 	cursor: wait;
 	background:
 		linear-gradient(180deg, rgba(5, 7, 11, 0.62), rgba(5, 7, 11, 0.92)),
-		url('/client-assets/universe-federation-bg.webp') center / cover no-repeat,
+		url('/client-assets/universe-federation-bg.webp?v=uf3') center / cover no-repeat,
 		var(--MI_THEME-bg, #05070b);
 	opacity: 1;
 	transition: opacity 0.5s ease;

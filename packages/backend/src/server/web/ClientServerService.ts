@@ -77,6 +77,7 @@ const tarball = `${_dirname}/../../../../../built/tarball/`;
 const localeAssetFileRegex = /^([A-Za-z0-9-]+)\.[A-Za-z0-9_-]+\.json$/;
 export const localeAssetExactCacheControl = 'public, max-age=604800';
 export const localeAssetFallbackCacheControl = 'public, max-age=60, stale-while-revalidate=300';
+const builtInBrandAssetRegex = /^(?:about-icon\.png|universe-federation-bg\.(?:webp|svg)|universe-federation-icon\.svg)$/;
 
 type LocaleAssetResolution = {
 	lang: string;
@@ -226,7 +227,7 @@ export class ClientServerService {
 					purpose: 'any maskable',
 				},
 				{
-					src: this.meta.iconUrl || '/client-assets/about-icon.png',
+					src: this.meta.iconUrl || '/client-assets/about-icon.png?v=uf3',
 					sizes: '1254x1254',
 					type: 'image/png',
 					purpose: 'any',
@@ -370,7 +371,14 @@ export class ClientServerService {
 		fastify.register(fastifyStatic, {
 			root: clientAssets,
 			prefix: '/client-assets/',
-			maxAge: ms('7 days'),
+			setHeaders: (res, path) => {
+				const fileName = path.split(/[\\/]/).pop() ?? '';
+				if (builtInBrandAssetRegex.test(fileName)) {
+					res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+				} else {
+					res.setHeader('Cache-Control', 'public, max-age=604800');
+				}
+			},
 			decorateReply: false,
 		});
 
@@ -553,7 +561,7 @@ export class ClientServerService {
 		const renderBase = async (reply: FastifyReply, data: { [key: string]: any } = {}) => {
 			reply.header('Cache-Control', 'no-cache, must-revalidate');
 			return await reply.view('base', {
-				img: this.meta.bannerUrl ?? this.meta.backgroundImageUrl ?? '/client-assets/universe-federation-bg.webp',
+				img: this.meta.bannerUrl ?? this.meta.backgroundImageUrl ?? '/client-assets/universe-federation-bg.webp?v=uf3',
 				url: this.config.url,
 				title: instanceBrandName(this.meta.name),
 				desc: this.meta.description,

@@ -93,10 +93,10 @@ const UNIVERSE_FEDERATION_DARK_THEME = {
 };
 
 const DEFAULT_BRAND_THEME_COLOR = '#2AABEE';
-const DEFAULT_BRAND_ICON = '/client-assets/about-icon.png';
+const DEFAULT_BRAND_ICON = '/client-assets/about-icon.png?v=uf3';
 const DEFAULT_BRAND_APP_192_ICON = '/static-assets/icons/192.png';
 const DEFAULT_BRAND_APP_512_ICON = '/static-assets/icons/512.png';
-const DEFAULT_BRAND_BACKGROUND = '/client-assets/universe-federation-bg.webp';
+const DEFAULT_BRAND_BACKGROUND = '/client-assets/universe-federation-bg.webp?v=uf3';
 
 @Injectable()
 export class MetaEntityService {

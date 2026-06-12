@@ -19,7 +19,7 @@
 			"purpose": "any maskable"
 		},
 		{
-			"src": "/client-assets/about-icon.png",
+			"src": "/client-assets/about-icon.png?v=uf3",
 			"sizes": "1254x1254",
 			"type": "image/png",
 			"purpose": "any"

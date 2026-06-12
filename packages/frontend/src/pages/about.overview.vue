@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div class="_gaps_m">
-	<div :class="$style.banner" :style="{ backgroundImage: `url(${ instance.bannerUrl || instance.backgroundImageUrl || '/client-assets/universe-federation-bg.svg' })` }">
+	<div :class="$style.banner" :style="{ backgroundImage: `url(${ instance.bannerUrl || instance.backgroundImageUrl || '/client-assets/universe-federation-bg.svg?v=uf3' })` }">
 		<div style="overflow: clip;">
 			<img :src="instance.sidebarLogoUrl ?? instance.iconUrl ?? '/favicon.ico'" alt="" :class="$style.bannerIcon"/>
 			<div :class="$style.bannerName">

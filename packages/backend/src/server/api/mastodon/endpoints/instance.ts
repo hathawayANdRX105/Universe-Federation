@@ -53,7 +53,7 @@ export class ApiInstanceMastodon {
 					status_count: instance.stats.status_count,
 					domain_count: instance.stats.domain_count,
 				},
-				thumbnail: this.meta.backgroundImageUrl || '/client-assets/universe-federation-bg.webp',
+				thumbnail: this.meta.backgroundImageUrl || '/client-assets/universe-federation-bg.webp?v=uf3',
 				languages: this.meta.langs,
 				registrations: !this.meta.disableRegistration || instance.registrations,
 				approval_required: this.meta.approvalRequiredForSignup,
@@ -117,10 +117,10 @@ export class ApiInstanceMastodon {
 					},
 				},
 				thumbnail: {
-					url: this.meta.backgroundImageUrl || '/client-assets/universe-federation-bg.webp',
+					url: this.meta.backgroundImageUrl || '/client-assets/universe-federation-bg.webp?v=uf3',
 					blurhash: undefined,
 					versions: {
-						'@1x': this.meta.backgroundImageUrl || '/client-assets/universe-federation-bg.webp',
+						'@1x': this.meta.backgroundImageUrl || '/client-assets/universe-federation-bg.webp?v=uf3',
 					},
 				},
 				icon: [
