@@ -11285,6 +11285,7 @@ export type components = {
             /** Format: url */
             bannerUrl: string | null;
             pinnedNoteIds: string[];
+            hiddenSearchTrendTerms: string[];
             color: string;
             isArchived: boolean;
             usersCount: number;
@@ -24270,6 +24271,7 @@ export interface operations {
                     bannerId?: string | null;
                     isArchived?: boolean | null;
                     pinnedNoteIds?: string[];
+                    hiddenSearchTrendTerms?: string[];
                     color?: string;
                     isSensitive?: boolean | null;
                     allowRenoteToExternal?: boolean | null;

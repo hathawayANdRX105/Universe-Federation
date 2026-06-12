@@ -10,6 +10,7 @@ import type { DriveFilesRepository, ChannelsRepository, MiDriveFile } from '@/mo
 import { ChannelEntityService } from '@/core/entities/ChannelEntityService.js';
 import { DI } from '@/di-symbols.js';
 import { RoleService } from '@/core/RoleService.js';
+import { normalizeForSearch } from '@/misc/normalize-for-search.js';
 import { ApiError } from '../../error.js';
 
 export const meta = {
@@ -65,6 +66,13 @@ export const paramDef = {
 				type: 'string', format: 'misskey:id',
 			},
 		},
+		hiddenSearchTrendTerms: {
+			type: 'array',
+			maxItems: 200,
+			items: {
+				type: 'string', minLength: 1, maxLength: 128,
+			},
+		},
 		color: { type: 'string', minLength: 1, maxLength: 16 },
 		isSensitive: { type: 'boolean', nullable: true },
 		allowRenoteToExternal: { type: 'boolean', nullable: true },
@@ -117,6 +125,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				...(ps.name !== undefined ? { name: ps.name } : {}),
 				...(ps.description !== undefined ? { description: ps.description } : {}),
 				...(ps.pinnedNoteIds !== undefined ? { pinnedNoteIds: ps.pinnedNoteIds } : {}),
+				...(ps.hiddenSearchTrendTerms !== undefined ? { hiddenSearchTrendTerms: normalizeHiddenSearchTrendTerms(ps.hiddenSearchTrendTerms) } : {}),
 				...(ps.color !== undefined ? { color: ps.color } : {}),
 				...(typeof ps.isArchived === 'boolean' ? { isArchived: ps.isArchived } : {}),
 				...(banner ? { bannerId: banner.id } : {}),
@@ -127,4 +136,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			return await this.channelEntityService.pack(channel.id, me);
 		});
 	}
+}
+
+function normalizeHiddenSearchTrendTerms(terms: string[]): string[] {
+	return Array.from(new Set(terms
+		.map(term => normalizeForSearch(term.replace(/^#/, '').trim()).slice(0, 40))
+		.filter(term => term.length >= 2)))
+		.slice(0, 200);
 }

@@ -178,6 +178,7 @@ export class ChannelEntityService {
 			userId: channel.userId,
 			bannerUrl: banner ? this.driveFileEntityService.getPublicUrl(banner) : null,
 			pinnedNoteIds: channel.pinnedNoteIds,
+			hiddenSearchTrendTerms: channel.hiddenSearchTrendTerms ?? [],
 			color: channel.color,
 			isArchived: channel.isArchived,
 			usersCount: channel.usersCount,
@@ -197,4 +198,3 @@ export class ChannelEntityService {
 		};
 	}
 }
-

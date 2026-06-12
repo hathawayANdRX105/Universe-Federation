@@ -64,6 +64,11 @@ export class MiChannel {
 	public pinnedNoteIds: string[];
 
 	@Column('varchar', {
+		array: true, length: 128, default: '{}',
+	})
+	public hiddenSearchTrendTerms: string[];
+
+	@Column('varchar', {
 		length: 16,
 		default: '#86b300',
 	})

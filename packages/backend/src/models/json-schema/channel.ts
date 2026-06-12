@@ -48,6 +48,13 @@ export const packedChannelSchema = {
 				format: 'id',
 			},
 		},
+		hiddenSearchTrendTerms: {
+			type: 'array',
+			nullable: false, optional: false,
+			items: {
+				type: 'string',
+			},
+		},
 		color: {
 			type: 'string',
 			optional: false, nullable: false,
