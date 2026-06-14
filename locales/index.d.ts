@@ -5959,9 +5959,49 @@ export interface Locale extends ILocale {
          */
         "silenceAll": string;
         /**
-         * オンにすると、オーナー以外のメンバーはメッセージを送信できなくなります。
+         * オンにすると、オーナー・管理者・モデレーターのみメッセージを送信できます。
          */
         "silenceAllDescription": string;
+        /**
+         * 低速モード
+         */
+        "slowMode": string;
+        /**
+         * メッセージ間の最小間隔（秒）
+         */
+        "slowModeInterval": string;
+        /**
+         * 各メンバーは発言後この秒数だけ待つ必要があります。0で無効。オーナー・管理者・モデレーターは対象外です。
+         */
+        "slowModeDescription": string;
+        /**
+         * 低速モードが有効です。{n}秒後にもう一度お試しください。
+         */
+        "slowModeActive": ParameterizedString<"n">;
+        /**
+         * キーワードブロックと自動ミュート
+         */
+        "keywordFilter": string;
+        /**
+         * ブロックするキーワード（1行に1つ）
+         */
+        "keywordFilterList": string;
+        /**
+         * これらのキーワードを含むメッセージはブロックされ、送信者は下記の時間ミュートされます。オーナー・管理者・モデレーターは対象外です。
+         */
+        "keywordFilterDescription": string;
+        /**
+         * ヒット時のミュート時間（秒）
+         */
+        "keywordMuteDuration": string;
+        /**
+         * 0 = ブロックのみ（ミュートなし）、-1 = 無期限ミュート、その他 = 指定秒数ミュート。
+         */
+        "keywordMuteDurationDescription": string;
+        /**
+         * メッセージがキーワードフィルターによりブロックされました。
+         */
+        "blockedByKeyword": string;
         /**
          * 発言禁止中のメンバー
          */

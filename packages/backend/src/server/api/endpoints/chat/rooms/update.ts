@@ -62,6 +62,9 @@ export const paramDef = {
 		announcement: { type: 'string', maxLength: 2048 },
 		announcementPinned: { type: 'boolean' },
 		avatarId: { type: 'string', format: 'misskey:id', nullable: true },
+		slowModeSeconds: { type: 'integer', minimum: 0, maximum: 86400 },
+		bannedKeywords: { type: 'array', items: { type: 'string', maxLength: 256 }, maxItems: 100 },
+		keywordMuteSeconds: { type: 'integer', minimum: -1 },
 	},
 	required: ['roomId'],
 } as const;
@@ -93,6 +96,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				announcement: ps.announcement,
 				announcementPinned: ps.announcementPinned,
 				avatarId: ps.avatarId,
+				slowModeSeconds: ps.slowModeSeconds,
+				bannedKeywords: ps.bannedKeywords,
+				keywordMuteSeconds: ps.keywordMuteSeconds,
 			}, me.id).catch(err => {
 				if (err instanceof Error) {
 					if (err.message === 'no such file') throw new ApiError(meta.errors.noSuchFile);

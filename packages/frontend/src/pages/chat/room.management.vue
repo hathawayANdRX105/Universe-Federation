@@ -29,6 +29,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 
 	<div :class="$style.section">
+		<div :class="$style.title">{{ i18n.ts._chat.slowMode }}</div>
+		<MkInput v-model="slowModeSeconds" type="number" :min="0" :max="86400">
+			<template #label>{{ i18n.ts._chat.slowModeInterval }}</template>
+			<template #caption>{{ i18n.ts._chat.slowModeDescription }}</template>
+		</MkInput>
+		<MkButton primary :disabled="!slowModeChanged" @click="saveSlowMode">{{ i18n.ts.save }}</MkButton>
+	</div>
+
+	<div :class="$style.section">
+		<div :class="$style.title">{{ i18n.ts._chat.keywordFilter }}</div>
+		<MkTextarea v-model="keywordsText">
+			<template #label>{{ i18n.ts._chat.keywordFilterList }}</template>
+			<template #caption>{{ i18n.ts._chat.keywordFilterDescription }}</template>
+		</MkTextarea>
+		<MkInput v-model="keywordMuteSeconds" type="number" :min="-1">
+			<template #label>{{ i18n.ts._chat.keywordMuteDuration }}</template>
+			<template #caption>{{ i18n.ts._chat.keywordMuteDurationDescription }}</template>
+		</MkInput>
+		<MkButton primary :disabled="!keywordChanged" @click="saveKeywordFilter">{{ i18n.ts.save }}</MkButton>
+	</div>
+
+	<div :class="$style.section">
 		<div :class="$style.title">{{ i18n.ts._chat.mutedMembers }}</div>
 		<MkLoading v-if="mutedFetching"/>
 		<div v-else-if="mutedMembers.length === 0" :class="$style.caption">{{ i18n.ts._chat.noMutedMembers }}</div>
@@ -139,6 +161,9 @@ const retentionEnabled = ref(props.room.messageRetentionDays != null);
 const retentionDays = ref<number | string>(props.room.messageRetentionDays ?? 30);
 const stats = ref<Misskey.Endpoints['chat/rooms/manage/stats']['res'] | null>(null);
 const isSilenced = ref(props.room.isSilenced);
+const slowModeSeconds = ref<number | string>(props.room.slowModeSeconds ?? 0);
+const keywordsText = ref((props.room.bannedKeywords ?? []).join('\n'));
+const keywordMuteSeconds = ref<number | string>(props.room.keywordMuteSeconds ?? 0);
 const announcement = ref(props.room.announcement);
 const announcementPinned = ref(props.room.announcementPinned);
 const announcementChanged = computed(() => announcement.value !== props.room.announcement || announcementPinned.value !== props.room.announcementPinned);
@@ -158,12 +183,33 @@ const normalizedRetentionDays = computed(() => {
 	return days;
 });
 const canSaveRetention = computed(() => normalizedRetentionDays.value !== undefined);
+
+function parseKeywords(text: string): string[] {
+	return Array.from(new Set(text.split('\n').map(k => k.trim()).filter(k => k.length > 0))).slice(0, 100);
+}
+
+const slowModeChanged = computed(() => {
+	const v = Number(slowModeSeconds.value);
+	if (!Number.isInteger(v) || v < 0 || v > 86400) return false;
+	return v !== (props.room.slowModeSeconds ?? 0);
+});
+const keywordChanged = computed(() => {
+	const mute = Number(keywordMuteSeconds.value);
+	if (!Number.isInteger(mute) || mute < -1) return false;
+	const parsed = parseKeywords(keywordsText.value);
+	const current = props.room.bannedKeywords ?? [];
+	const keywordsDiffer = parsed.length !== current.length || parsed.some((k, i) => k !== current[i]);
+	return keywordsDiffer || mute !== (props.room.keywordMuteSeconds ?? 0);
+});
 const maxDailyCount = computed(() => Math.max(1, ...(stats.value?.daily.map(item => item.count) ?? [0])));
 
 watch(() => props.room, () => {
 	retentionEnabled.value = props.room.messageRetentionDays != null;
 	retentionDays.value = props.room.messageRetentionDays ?? 30;
 	isSilenced.value = props.room.isSilenced;
+	slowModeSeconds.value = props.room.slowModeSeconds ?? 0;
+	keywordsText.value = (props.room.bannedKeywords ?? []).join('\n');
+	keywordMuteSeconds.value = props.room.keywordMuteSeconds ?? 0;
 	announcement.value = props.room.announcement;
 	announcementPinned.value = props.room.announcementPinned;
 	loadStats();
@@ -214,6 +260,26 @@ async function saveSilenced(value: boolean) {
 		roomId: props.room.id,
 		isSilenced: value,
 	});
+	emit('updated', updated);
+}
+
+async function saveSlowMode() {
+	if (!slowModeChanged.value) return;
+	const updated = await os.apiWithDialog('chat/rooms/update', {
+		roomId: props.room.id,
+		slowModeSeconds: Number(slowModeSeconds.value),
+	});
+	emit('updated', updated);
+}
+
+async function saveKeywordFilter() {
+	if (!keywordChanged.value) return;
+	const updated = await os.apiWithDialog('chat/rooms/update', {
+		roomId: props.room.id,
+		bannedKeywords: parseKeywords(keywordsText.value),
+		keywordMuteSeconds: Number(keywordMuteSeconds.value),
+	});
+	keywordsText.value = ((updated.bannedKeywords ?? []) as string[]).join('\n');
 	emit('updated', updated);
 }
 

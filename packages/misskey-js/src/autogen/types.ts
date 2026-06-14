@@ -13605,6 +13605,9 @@ export type components = {
             memberLimitOverride?: number | null;
             canManage: boolean;
             messageRetentionDays?: number | null;
+            slowModeSeconds: number;
+            bannedKeywords?: string[];
+            keywordMuteSeconds?: number;
             memberCount: number;
             isJoined: boolean;
             isMuted?: boolean;
@@ -33802,6 +33805,9 @@ export interface operations {
                     announcementPinned?: boolean;
                     /** Format: misskey:id */
                     avatarId?: string | null;
+                    slowModeSeconds?: number;
+                    bannedKeywords?: string[];
+                    keywordMuteSeconds?: number;
                 };
             };
         };

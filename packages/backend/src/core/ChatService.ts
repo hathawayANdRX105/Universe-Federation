@@ -47,6 +47,11 @@ export const MAX_CHAT_ROOM_MESSAGE_RETENTION_DAYS = 3650;
 export const CHAT_ROOM_RETENTION_BATCH_SIZE = 1000;
 // 永久ミュートは expire しない遠未来の日時で表現する
 export const CHAT_ROOM_PERMANENT_MUTE = new Date('9999-12-31T23:59:59.000Z');
+// 慢速模式・关键字拦截の上限
+export const MAX_CHAT_SLOW_MODE_SECONDS = 86400; // 24h
+export const MAX_CHAT_BANNED_KEYWORDS = 100;
+export const MAX_CHAT_BANNED_KEYWORD_LENGTH = 256;
+export const MAX_CHAT_KEYWORD_MUTE_SECONDS = 3650 * 24 * 60 * 60; // 10y（実質永久に近い上限）
 const ROOM_MEMBER_COUNT_CACHE_TTL = 60;
 const ROOM_MESSAGE_TARGET_CACHE_TTL = 60;
 const ROOM_SENDER_MEMBERSHIP_CACHE_TTL = 10;
@@ -70,7 +75,7 @@ return latest
 `;
 const isCustomEmojiRegexp = /^:([\w+-]+)(?:@\.)?:$/;
 type ChatMessageReference = Pick<MiChatMessage, 'id' | 'toUserId' | 'toRoomId'>;
-type ChatRoomMessageTarget = Pick<MiChatRoom, 'id' | 'ownerId' | 'isSilenced'>;
+type ChatRoomMessageTarget = Pick<MiChatRoom, 'id' | 'ownerId' | 'isSilenced' | 'slowModeSeconds' | 'bannedKeywords' | 'keywordMuteSeconds'>;
 type PackedRoomChatMessage = Packed<'ChatMessageLiteForRoom'>;
 type RoomTimelineCacheMeta = {
 	warmedAt: number;
@@ -704,6 +709,19 @@ export class ChatService {
 		return packedMessage;
 	}
 
+	// 大文字小文字を無視した部分一致で禁止キーワードを検出。命中した元キーワードを返す。
+	@bindThis
+	private matchBannedKeyword(keywords: string[] | null | undefined, text: string | null | undefined): string | null {
+		if (text == null || text.length === 0) return null;
+		if (keywords == null || keywords.length === 0) return null;
+		const haystack = text.toLowerCase();
+		for (const kw of keywords) {
+			const needle = kw.trim().toLowerCase();
+			if (needle.length > 0 && haystack.includes(needle)) return kw;
+		}
+		return null;
+	}
+
 	@bindThis
 	public async createMessageToRoom(fromUser: { id: MiUser['id']; host: MiUser['host']; }, toRoom: ChatRoomMessageTarget, params: {
 		text?: string | null;
@@ -728,13 +746,52 @@ export class ChatService {
 				this.deleteRoomSenderMembershipCache(toRoom.id, fromUser.id);
 				throw new Error('you are not a member of the room');
 			}
-			if (toRoom.isSilenced) {
-				throw new Error('room is silenced');
-			}
+			// 明示的なミュート（手動 or 关键字）は常に適用する。
 			if (membership.mutedUntil != null && membership.mutedUntil.getTime() > this.timeService.now) {
 				const error = new Error('you are muted in this room');
 				(error as Error & { mutedUntil?: string }).mutedUntil = membership.mutedUntil.toISOString();
 				throw error;
+			}
+
+			// 全体禁言 / 慢速模式 / 关键字拦截 はサイトモデレーターを免除する。
+			// （バグ修正: 以前は room.isSilenced 時にオーナー以外＝管理者も発言できなかった）
+			const moderationActive = toRoom.isSilenced || toRoom.slowModeSeconds > 0 || (toRoom.bannedKeywords?.length ?? 0) > 0;
+			const isExempt = moderationActive ? await this.roleService.isModerator({ id: fromUser.id }) : false;
+
+			if (!isExempt) {
+				if (toRoom.isSilenced) {
+					throw new Error('room is silenced');
+				}
+
+				// 关键字拦截: 命中したらメッセージを破棄し、設定に従って発送者をミュートする。
+				const matchedKeyword = this.matchBannedKeyword(toRoom.bannedKeywords, params.text);
+				if (matchedKeyword != null) {
+					const sec = toRoom.keywordMuteSeconds;
+					if (sec !== 0) {
+						const mutedUntil = sec < 0 ? CHAT_ROOM_PERMANENT_MUTE : new Date(this.timeService.now + sec * 1000);
+						await this.chatRoomMembershipsRepository.update(membership.id, { mutedUntil });
+						this.globalEventService.publishChatRoomStream(toRoom.id, 'memberMuted', {
+							roomId: toRoom.id,
+							userId: fromUser.id,
+							mutedUntil: mutedUntil.toISOString(),
+						});
+					}
+					const error = new Error('blocked by keyword');
+					(error as Error & { keyword?: string }).keyword = matchedKeyword;
+					throw error;
+				}
+
+				// 慢速模式: Redis で「最後の発言から slowModeSeconds 秒」を強制する。
+				if (toRoom.slowModeSeconds > 0) {
+					const key = `chatSlowMode:${toRoom.id}:${fromUser.id}`;
+					const acquired = await this.redisClient.set(key, '1', 'EX', toRoom.slowModeSeconds, 'NX');
+					if (acquired == null) {
+						const ttl = await this.redisClient.ttl(key);
+						const error = new Error('slow mode');
+						(error as Error & { retryAfter?: number }).retryAfter = ttl > 0 ? ttl : toRoom.slowModeSeconds;
+						throw error;
+					}
+				}
 			}
 		}
 
@@ -1693,6 +1750,9 @@ export class ChatService {
 					id: true,
 					ownerId: true,
 					isSilenced: true,
+					slowModeSeconds: true,
+					bannedKeywords: true,
+					keywordMuteSeconds: true,
 				},
 				where: {
 					id: roomId,
@@ -1956,13 +2016,33 @@ export class ChatService {
 		announcement?: string;
 		announcementPinned?: boolean;
 		avatarId?: MiDriveFile['id'] | null;
+		slowModeSeconds?: number;
+		bannedKeywords?: string[];
+		keywordMuteSeconds?: number;
 	}, updaterId?: MiUser['id']): Promise<MiChatRoom> {
 		if (params.joinMode != null && !chatRoomJoinModes.includes(params.joinMode)) {
 			throw new Error('invalid join mode');
 		}
 
+		if (params.slowModeSeconds != null) {
+			if (!Number.isInteger(params.slowModeSeconds) || params.slowModeSeconds < 0 || params.slowModeSeconds > MAX_CHAT_SLOW_MODE_SECONDS) {
+				throw new Error('invalid slow mode');
+			}
+		}
+		if (params.keywordMuteSeconds != null) {
+			if (!Number.isInteger(params.keywordMuteSeconds) || params.keywordMuteSeconds < -1 || params.keywordMuteSeconds > MAX_CHAT_KEYWORD_MUTE_SECONDS) {
+				throw new Error('invalid keyword mute seconds');
+			}
+		}
 		const { avatarId, ...restParams } = params;
 		const setParams: Partial<MiChatRoom> = { ...restParams };
+
+		if (params.bannedKeywords != null) {
+			// 正規化: トリム → 空要素除去 → 重複除去 → 件数/長さ上限。
+			setParams.bannedKeywords = Array.from(new Set(
+				params.bannedKeywords.map(k => k.trim()).filter(k => k.length > 0 && k.length <= MAX_CHAT_BANNED_KEYWORD_LENGTH),
+			)).slice(0, MAX_CHAT_BANNED_KEYWORDS);
+		}
 
 		if (avatarId !== undefined) {
 			if (avatarId != null) {

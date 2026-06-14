@@ -76,6 +76,18 @@ export const meta = {
 			code: 'YOU_ARE_MUTED_IN_ROOM',
 			id: '41913b27-0031-40b5-8b7c-f78736252c77',
 		},
+
+		slowMode: {
+			message: 'Slow mode is enabled. Please wait before sending another message.',
+			code: 'SLOW_MODE',
+			id: 'b3b6e4c2-2e6f-4a4a-9f7c-2c3a3f0c9b21',
+		},
+
+		blockedByKeyword: {
+			message: 'Your message was blocked by a keyword filter.',
+			code: 'BLOCKED_BY_KEYWORD',
+			id: 'c1d0e9a8-7b6c-4d5e-8f90-1a2b3c4d5e6f',
+		},
 	},
 } as const;
 
@@ -157,6 +169,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					if (err.message === 'you are muted in this room') {
 						throw new ApiError(meta.errors.youAreMutedInRoom, {
 							mutedUntil: (err as Error & { mutedUntil?: string }).mutedUntil ?? null,
+						});
+					}
+					if (err.message === 'slow mode') {
+						throw new ApiError(meta.errors.slowMode, {
+							retryAfter: (err as Error & { retryAfter?: number }).retryAfter ?? null,
+						});
+					}
+					if (err.message === 'blocked by keyword') {
+						throw new ApiError(meta.errors.blockedByKeyword, {
+							keyword: (err as Error & { keyword?: string }).keyword ?? null,
 						});
 					}
 				}

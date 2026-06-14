@@ -92,4 +92,22 @@ export class MiChatRoom {
 		nullable: true,
 	})
 	public messageRetentionDays: number | null;
+
+	// 慢速模式：同一成员两条消息之间的最小间隔（秒）。0 = 关闭。
+	@Column('integer', {
+		default: 0,
+	})
+	public slowModeSeconds: number;
+
+	// 关键字拦截：命中其一即拦截该消息（不入库）并按 keywordMuteSeconds 禁言发送者。
+	@Column('varchar', {
+		array: true, length: 256, default: '{}',
+	})
+	public bannedKeywords: string[];
+
+	// 命中关键字后的禁言时长（秒）。0 = 仅拦截不禁言；<0 = 永久禁言；>0 = 禁言该秒数。
+	@Column('integer', {
+		default: 0,
+	})
+	public keywordMuteSeconds: number;
 }

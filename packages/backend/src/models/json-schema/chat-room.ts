@@ -69,6 +69,22 @@ export const packedChatRoomSchema = {
 			type: 'integer',
 			optional: true, nullable: true,
 		},
+		slowModeSeconds: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
+		bannedKeywords: {
+			type: 'array',
+			optional: true, nullable: false,
+			items: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+		},
+		keywordMuteSeconds: {
+			type: 'integer',
+			optional: true, nullable: false,
+		},
 		memberCount: {
 			type: 'integer',
 			optional: false, nullable: false,

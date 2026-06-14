@@ -378,14 +378,28 @@ async function send() {
 
 		emit('sent', message, snapshot.clientId);
 	} catch (err) {
-		console.error('Error in chat:', err);
 		emit('sendFailed', snapshot.clientId);
 		restoreSnapshotIfIdle(snapshot);
-		void os.alert({
-			type: 'error',
-			title: i18n.ts.error,
-			text: printError(err),
-		});
+		const code = (err as { code?: string } | null)?.code;
+		if (code === 'SLOW_MODE') {
+			const retryAfter = (err as { info?: { retryAfter?: number | null } } | null)?.info?.retryAfter;
+			void os.alert({
+				type: 'warning',
+				text: retryAfter != null ? i18n.tsx._chat.slowModeActive({ n: retryAfter }) : i18n.ts._chat.slowMode,
+			});
+		} else if (code === 'BLOCKED_BY_KEYWORD') {
+			void os.alert({
+				type: 'warning',
+				text: i18n.ts._chat.blockedByKeyword,
+			});
+		} else {
+			console.error('Error in chat:', err);
+			void os.alert({
+				type: 'error',
+				title: i18n.ts.error,
+				text: printError(err),
+			});
+		}
 	} finally {
 		sending.value = false;
 	}
