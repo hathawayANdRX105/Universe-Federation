@@ -37,6 +37,7 @@ import { UserWebhookService } from '@/core/UserWebhookService.js';
 import { HashtagService } from '@/core/HashtagService.js';
 import { AntennaService } from '@/core/AntennaService.js';
 import { QueueService } from '@/core/QueueService.js';
+import { mergeRecommendationConfig } from '@/core/RecommendationConfig.js';
 import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { ApDeliverManagerService } from '@/core/activitypub/ApDeliverManagerService.js';
@@ -847,6 +848,13 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 		// Register to search database
 		if (!user.noindex) await this.index(note);
+
+		// 感情分析(有効時のみ): ローカルの公開テキスト投稿を非同期でキューに入れる
+		if (user.host == null && note.visibility === 'public' && note.text != null && note.text.length > 0) {
+			if (mergeRecommendationConfig(this.meta.recommendationConfig).sentiment.enabled) {
+				await this.queueService.createAnalyzeSentimentJob(note.id);
+			}
+		}
 	}
 
 	/**

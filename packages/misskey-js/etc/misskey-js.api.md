@@ -416,6 +416,12 @@ type AdminQueueShowJobRequest = operations['admin___queue___show-job']['requestB
 type AdminQueueStatsResponse = operations['admin___queue___stats']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type AdminRecommendationBackfillSentimentRequest = operations['admin___recommendation___backfill-sentiment']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminRecommendationBackfillSentimentResponse = operations['admin___recommendation___backfill-sentiment']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type AdminRecommendationGetConfigResponse = operations['admin___recommendation___get-config']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
@@ -2222,6 +2228,8 @@ declare namespace entities {
         AdminQueueRetryJobRequest,
         AdminQueueShowJobRequest,
         AdminQueueStatsResponse,
+        AdminRecommendationBackfillSentimentRequest,
+        AdminRecommendationBackfillSentimentResponse,
         AdminRecommendationGetConfigResponse,
         AdminRecommendationPinnedListResponse,
         AdminRecommendationShowRequest,

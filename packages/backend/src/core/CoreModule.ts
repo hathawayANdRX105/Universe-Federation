@@ -83,6 +83,7 @@ import { FileInfoService } from './FileInfoService.js';
 import { SearchService } from './SearchService.js';
 import { SearchTrendService } from './SearchTrendService.js';
 import { RecommendationService } from './RecommendationService.js';
+import { SentimentService } from './SentimentService.js';
 import { ClipService } from './ClipService.js';
 import { FeaturedService } from './FeaturedService.js';
 import { FanoutTimelineService } from './FanoutTimelineService.js';
@@ -237,6 +238,7 @@ const $FlashService: Provider = { provide: 'FlashService', useExisting: FlashSer
 const $SearchService: Provider = { provide: 'SearchService', useExisting: SearchService };
 const $SearchTrendService: Provider = { provide: 'SearchTrendService', useExisting: SearchTrendService };
 const $RecommendationService: Provider = { provide: 'RecommendationService', useExisting: RecommendationService };
+const $SentimentService: Provider = { provide: 'SentimentService', useExisting: SentimentService };
 const $ClipService: Provider = { provide: 'ClipService', useExisting: ClipService };
 const $FeaturedService: Provider = { provide: 'FeaturedService', useExisting: FeaturedService };
 const $FanoutTimelineService: Provider = { provide: 'FanoutTimelineService', useExisting: FanoutTimelineService };
@@ -402,6 +404,7 @@ const $Imports = [
 		SearchService,
 		SearchTrendService,
 		RecommendationService,
+		SentimentService,
 		ClipService,
 		FeaturedService,
 		FanoutTimelineService,
@@ -564,6 +567,7 @@ const $Imports = [
 		$SearchService,
 		$SearchTrendService,
 		$RecommendationService,
+		$SentimentService,
 		$ClipService,
 		$FeaturedService,
 		$FanoutTimelineService,
@@ -725,6 +729,7 @@ const $Imports = [
 		SearchService,
 		SearchTrendService,
 		RecommendationService,
+		SentimentService,
 		ClipService,
 		FeaturedService,
 		FanoutTimelineService,
@@ -885,6 +890,7 @@ const $Imports = [
 		$SearchService,
 		$SearchTrendService,
 		$RecommendationService,
+		$SentimentService,
 		$ClipService,
 		$FeaturedService,
 		$FanoutTimelineService,

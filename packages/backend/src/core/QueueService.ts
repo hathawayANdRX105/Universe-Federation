@@ -836,6 +836,11 @@ export class QueueService implements OnModuleInit, OnApplicationBootstrap {
 		return await this.createBackgroundTask({ type: 'delete-ap-logs', dataType, data });
 	}
 
+	public async createAnalyzeSentimentJob(noteId: string) {
+		// 同一ノートの重複分析を避ける
+		return await this.createBackgroundTask({ type: 'analyze-sentiment', noteId }, noteId);
+	}
+
 	protected async createBackgroundTask<T extends BackgroundTaskJobData>(data: T, duplication?: string | { id: string, ttl?: number }): Promise<void> {
 		await this.add(
 			'backgroundTask',

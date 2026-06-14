@@ -2252,6 +2252,28 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    '/admin/recommendation/backfill-sentiment': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * admin/recommendation/backfill-sentiment
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:recommendation*
+         */
+        post: operations['admin___recommendation___backfill-sentiment'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/admin/recommendation/get-config': {
         parameters: {
             query?: never;
@@ -21395,6 +21417,91 @@ export interface operations {
             };
         };
     };
+    'admin___recommendation___backfill-sentiment': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** @default 3 */
+                    days?: number;
+                    /** @default 1000 */
+                    limit?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        enqueued: number;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
     'admin___recommendation___get-config': {
         parameters: {
             query?: never;
@@ -21413,35 +21520,51 @@ export interface operations {
                     'application/json': {
                         current: {
                             enabled: boolean;
-                            lowValueTags: string[];
-                            promoKeywords: string[];
-                            bugKeywords: string[];
-                            qualityKeywords: string[];
-                            qualityTags: string[];
-                            weights: {
-                                lowValueTagPenalty: number;
-                                promoPenalty: number;
-                                bugPenalty: number;
-                                affLinkPenalty: number;
-                                qualityBoost: number;
-                            };
+                            rules: {
+                                id: string;
+                                name: string;
+                                enabled: boolean;
+                                /** @enum {string} */
+                                kind: 'demote' | 'boost';
+                                /** @enum {string} */
+                                match: 'keyword' | 'tag';
+                                terms: string[];
+                                weight: number;
+                                exemptWithQuality: boolean;
+                            }[];
+                            channelBoost: number;
                             excludeThreshold: number;
+                            sentiment: {
+                                enabled: boolean;
+                                modelId: string;
+                                negativePenalty: number;
+                                positiveBoost: number;
+                                neutralBand: number;
+                            };
                         };
                         default: {
                             enabled: boolean;
-                            lowValueTags: string[];
-                            promoKeywords: string[];
-                            bugKeywords: string[];
-                            qualityKeywords: string[];
-                            qualityTags: string[];
-                            weights: {
-                                lowValueTagPenalty: number;
-                                promoPenalty: number;
-                                bugPenalty: number;
-                                affLinkPenalty: number;
-                                qualityBoost: number;
-                            };
+                            rules: {
+                                id: string;
+                                name: string;
+                                enabled: boolean;
+                                /** @enum {string} */
+                                kind: 'demote' | 'boost';
+                                /** @enum {string} */
+                                match: 'keyword' | 'tag';
+                                terms: string[];
+                                weight: number;
+                                exemptWithQuality: boolean;
+                            }[];
+                            channelBoost: number;
                             excludeThreshold: number;
+                            sentiment: {
+                                enabled: boolean;
+                                modelId: string;
+                                negativePenalty: number;
+                                positiveBoost: number;
+                                neutralBand: number;
+                            };
                         };
                     };
                 };
@@ -21610,6 +21733,12 @@ export interface operations {
                         exposureCount: number;
                         pinned: boolean;
                         scoreBoost: number;
+                        sentiment: {
+                            score: number;
+                            label: string;
+                            magnitude: number;
+                            analyzedAt: string;
+                        } | null;
                     };
                 };
             };
@@ -21749,19 +21878,27 @@ export interface operations {
             content: {
                 'application/json': {
                     enabled?: boolean;
-                    lowValueTags?: string[];
-                    promoKeywords?: string[];
-                    bugKeywords?: string[];
-                    qualityKeywords?: string[];
-                    qualityTags?: string[];
-                    weights?: {
-                        lowValueTagPenalty?: number;
-                        promoPenalty?: number;
-                        bugPenalty?: number;
-                        affLinkPenalty?: number;
-                        qualityBoost?: number;
-                    };
+                    rules?: {
+                        id?: string;
+                        name: string;
+                        enabled?: boolean;
+                        /** @enum {string} */
+                        kind: 'demote' | 'boost';
+                        /** @enum {string} */
+                        match: 'keyword' | 'tag';
+                        terms: string[];
+                        weight: number;
+                        exemptWithQuality?: boolean;
+                    }[];
+                    channelBoost?: number;
                     excludeThreshold?: number;
+                    sentiment?: {
+                        enabled?: boolean;
+                        modelId?: string;
+                        negativePenalty?: number;
+                        positiveBoost?: number;
+                        neutralBand?: number;
+                    };
                 };
             };
         };
@@ -21774,19 +21911,27 @@ export interface operations {
                 content: {
                     'application/json': {
                         enabled: boolean;
-                        lowValueTags: string[];
-                        promoKeywords: string[];
-                        bugKeywords: string[];
-                        qualityKeywords: string[];
-                        qualityTags: string[];
-                        weights: {
-                            lowValueTagPenalty: number;
-                            promoPenalty: number;
-                            bugPenalty: number;
-                            affLinkPenalty: number;
-                            qualityBoost: number;
-                        };
+                        rules: {
+                            id: string;
+                            name: string;
+                            enabled: boolean;
+                            /** @enum {string} */
+                            kind: 'demote' | 'boost';
+                            /** @enum {string} */
+                            match: 'keyword' | 'tag';
+                            terms: string[];
+                            weight: number;
+                            exemptWithQuality: boolean;
+                        }[];
+                        channelBoost: number;
                         excludeThreshold: number;
+                        sentiment: {
+                            enabled: boolean;
+                            modelId: string;
+                            negativePenalty: number;
+                            positiveBoost: number;
+                            neutralBand: number;
+                        };
                     };
                 };
             };

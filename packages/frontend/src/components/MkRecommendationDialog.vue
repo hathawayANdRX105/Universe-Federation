@@ -39,6 +39,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkInfo v-if="data.flags.lowValueSuspected" warn>{{ i18n.ts._recommendation.suspectedLowValue }}</MkInfo>
 			<MkInfo v-if="data.author.isBot">Bot</MkInfo>
 
+			<div v-if="data.sentiment != null" :class="$style.grid">
+				<div><span>{{ i18n.ts._recommendation.sentiment }}</span><b>{{ sentimentLabelText(data.sentiment.label) }}</b></div>
+				<div><span>{{ i18n.ts._recommendation.sentimentScore }}</span><b>{{ data.sentiment.score }}</b></div>
+			</div>
+
 			<hr/>
 
 			<MkSwitch v-model="pinned">
@@ -88,6 +93,12 @@ const pinned = ref(false);
 const scoreBoost = ref<number>(0);
 
 const changed = computed(() => data.value != null && (pinned.value !== data.value.pinned || Number(scoreBoost.value) !== data.value.scoreBoost));
+
+function sentimentLabelText(label: string): string {
+	if (label === 'positive') return i18n.ts._recommendation.sentimentPositive;
+	if (label === 'negative') return i18n.ts._recommendation.sentimentNegative;
+	return i18n.ts._recommendation.sentimentNeutral;
+}
 
 async function load() {
 	fetching.value = true;

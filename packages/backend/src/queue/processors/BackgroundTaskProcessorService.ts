@@ -19,6 +19,7 @@ import type {
 	PostSuspendBackgroundTask,
 	PostUnsuspendBackgroundTask,
 	DeleteApLogsBackgroundTask,
+	AnalyzeSentimentBackgroundTask,
 } from '@/queue/types.js';
 import { ApPersonService } from '@/core/activitypub/models/ApPersonService.js';
 import { QueueLoggerService } from '@/queue/QueueLoggerService.js';
@@ -32,7 +33,9 @@ import InstanceChart from '@/core/chart/charts/instance.js';
 import ApRequestChart from '@/core/chart/charts/ap-request.js';
 import FederationChart from '@/core/chart/charts/federation.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
-import type { DriveFilesRepository, NoteEditsRepository, NotesRepository, PollsRepository } from '@/models/_.js';
+import type { DriveFilesRepository, NoteEditsRepository, NoteSentimentsRepository, NotesRepository, PollsRepository } from '@/models/_.js';
+import { SentimentService } from '@/core/SentimentService.js';
+import { RecommendationService } from '@/core/RecommendationService.js';
 import { MiUser } from '@/models/_.js';
 import { NoteEditService } from '@/core/NoteEditService.js';
 import { HashtagService } from '@/core/HashtagService.js';
@@ -82,6 +85,11 @@ export class BackgroundTaskProcessorService {
 		private readonly userSuspendService: UserSuspendService,
 		private readonly apLogService: ApLogService,
 		private readonly timeService: TimeService,
+		private readonly sentimentService: SentimentService,
+		private readonly recommendationService: RecommendationService,
+
+		@Inject(DI.noteSentimentsRepository)
+		private readonly noteSentimentsRepository: NoteSentimentsRepository,
 
 		queueLoggerService: QueueLoggerService,
 	) {
@@ -114,9 +122,11 @@ export class BackgroundTaskProcessorService {
 			return await this.processPostSuspend(job);
 		} else if (job.type === 'post-unsuspend') {
 			return await this.processPostUnsuspend(job);
-			// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 		} else if (job.type === 'delete-ap-logs') {
 			return await this.processDeleteApLogs(job);
+			// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+		} else if (job.type === 'analyze-sentiment') {
+			return await this.processAnalyzeSentiment(job);
 		} else {
 			const type = (job as { type: string }).type;
 			this.logger.warn(`Can't process unknown job type "${type}"; this is likely a bug. Full job data:`, job);
@@ -342,6 +352,29 @@ export class BackgroundTaskProcessorService {
 		await this.userSuspendService.postUnsuspend(user);
 
 		return 'ok';
+	}
+
+	@bindThis
+	private async processAnalyzeSentiment(task: AnalyzeSentimentBackgroundTask): Promise<string> {
+		const config = await this.recommendationService.getRecommendationConfig();
+		if (!config.sentiment.enabled) return 'skip (disabled)';
+
+		const note = await this.notesRepository.findOneBy({ id: task.noteId });
+		if (note == null || note.text == null || note.text.length === 0) return 'skip (no text)';
+
+		const result = await this.sentimentService.analyze(note.text, config.sentiment.modelId);
+		if (result == null) return 'skip (no result)';
+
+		// upsert: 再分析時も上書き
+		await this.noteSentimentsRepository.upsert({
+			noteId: note.id,
+			score: result.score,
+			label: result.label,
+			magnitude: result.magnitude,
+			analyzedAt: new Date(this.timeService.now),
+		}, ['noteId']);
+
+		return `ok (${result.label} ${result.score.toFixed(2)})`;
 	}
 
 	private async processDeleteApLogs(task: DeleteApLogsBackgroundTask): Promise<string> {

@@ -8,31 +8,47 @@ import { Endpoint } from '@/server/api/endpoint-base.js';
 import { RecommendationService } from '@/core/RecommendationService.js';
 import { DEFAULT_RECOMMENDATION_CONFIG } from '@/core/RecommendationConfig.js';
 
-const stringArray = { type: 'array', optional: false, nullable: false, items: { type: 'string', optional: false, nullable: false } } as const;
-const number = { type: 'number', optional: false, nullable: false } as const;
+const bool = { type: 'boolean', optional: false, nullable: false } as const;
+const num = { type: 'number', optional: false, nullable: false } as const;
+const str = { type: 'string', optional: false, nullable: false } as const;
+const strArray = { type: 'array', optional: false, nullable: false, items: str } as const;
 
-const CONFIG_SCHEMA = {
+const RULE_SCHEMA = {
 	type: 'object',
 	optional: false, nullable: false,
 	properties: {
-		enabled: { type: 'boolean', optional: false, nullable: false },
-		lowValueTags: stringArray,
-		promoKeywords: stringArray,
-		bugKeywords: stringArray,
-		qualityKeywords: stringArray,
-		qualityTags: stringArray,
-		weights: {
-			type: 'object',
-			optional: false, nullable: false,
-			properties: {
-				lowValueTagPenalty: number,
-				promoPenalty: number,
-				bugPenalty: number,
-				affLinkPenalty: number,
-				qualityBoost: number,
-			},
-		},
-		excludeThreshold: number,
+		id: str,
+		name: str,
+		enabled: bool,
+		kind: { type: 'string', optional: false, nullable: false, enum: ['demote', 'boost'] },
+		match: { type: 'string', optional: false, nullable: false, enum: ['keyword', 'tag'] },
+		terms: strArray,
+		weight: num,
+		exemptWithQuality: bool,
+	},
+} as const;
+
+const SENTIMENT_SCHEMA = {
+	type: 'object',
+	optional: false, nullable: false,
+	properties: {
+		enabled: bool,
+		modelId: str,
+		negativePenalty: num,
+		positiveBoost: num,
+		neutralBand: num,
+	},
+} as const;
+
+export const CONFIG_SCHEMA = {
+	type: 'object',
+	optional: false, nullable: false,
+	properties: {
+		enabled: bool,
+		rules: { type: 'array', optional: false, nullable: false, items: RULE_SCHEMA },
+		channelBoost: num,
+		excludeThreshold: num,
+		sentiment: SENTIMENT_SCHEMA,
 	},
 } as const;
 

@@ -64,6 +64,15 @@ export const meta = {
 			exposureCount: { type: 'number', optional: false, nullable: false },
 			pinned: { type: 'boolean', optional: false, nullable: false },
 			scoreBoost: { type: 'number', optional: false, nullable: false },
+			sentiment: {
+				type: 'object', optional: false, nullable: true,
+				properties: {
+					score: { type: 'number', optional: false, nullable: false },
+					label: { type: 'string', optional: false, nullable: false },
+					magnitude: { type: 'number', optional: false, nullable: false },
+					analyzedAt: { type: 'string', optional: false, nullable: false },
+				},
+			},
 		},
 	},
 
@@ -122,9 +131,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (user.avatarId != null) trustScore += 2;
 			if (user.isBot === true) trustScore -= 6;
 
-			const [exposureCounts, override] = await Promise.all([
+			const [exposureCounts, override, sentiment] = await Promise.all([
 				this.recommendationService.getNoteExposureCounts([ps.noteId]),
 				this.recommendationService.getNoteOverride(ps.noteId),
+				this.recommendationService.getNoteSentiment(ps.noteId),
 			]);
 
 			return {
@@ -157,6 +167,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				exposureCount: exposureCounts.get(ps.noteId) ?? 0,
 				pinned: override?.pinned ?? false,
 				scoreBoost: override?.scoreBoost ?? 0,
+				sentiment: sentiment != null ? {
+					score: Math.round(sentiment.score * 100) / 100,
+					label: sentiment.label,
+					magnitude: Math.round(sentiment.magnitude * 100) / 100,
+					analyzedAt: sentiment.analyzedAt.toISOString(),
+				} : null,
 			};
 		});
 	}

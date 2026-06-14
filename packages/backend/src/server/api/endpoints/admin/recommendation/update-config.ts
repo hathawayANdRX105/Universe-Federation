@@ -6,12 +6,7 @@
 import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { RecommendationService } from '@/core/RecommendationService.js';
-
-const stringArray = { type: 'array', items: { type: 'string' } } as const;
-const penalty = { type: 'integer', minimum: 0, maximum: 300 } as const;
-
-const resStringArray = { type: 'array', optional: false, nullable: false, items: { type: 'string', optional: false, nullable: false } } as const;
-const resNumber = { type: 'number', optional: false, nullable: false } as const;
+import { CONFIG_SCHEMA } from './get-config.js';
 
 export const meta = {
 	tags: ['admin'],
@@ -20,60 +15,44 @@ export const meta = {
 	requireModerator: true,
 	kind: 'write:admin:recommendation',
 
-	res: {
-		type: 'object',
-		optional: false, nullable: false,
-		properties: {
-			enabled: { type: 'boolean', optional: false, nullable: false },
-			lowValueTags: resStringArray,
-			promoKeywords: resStringArray,
-			bugKeywords: resStringArray,
-			qualityKeywords: resStringArray,
-			qualityTags: resStringArray,
-			weights: {
-				type: 'object',
-				optional: false, nullable: false,
-				properties: {
-					lowValueTagPenalty: resNumber,
-					promoPenalty: resNumber,
-					bugPenalty: resNumber,
-					affLinkPenalty: resNumber,
-					qualityBoost: resNumber,
-				},
-			},
-			excludeThreshold: resNumber,
-		},
-	},
+	// 更新後の(検証・補完済み)完全な設定を返す
+	res: CONFIG_SCHEMA,
 } as const;
 
+// 入力スキーマ:全量(編集保存・インポート共用)。欠落フィールドは現在値で補完される。
 export const paramDef = {
 	type: 'object',
 	properties: {
-		// 語ベースの降权/加点ルール全体の有効・無効
 		enabled: { type: 'boolean' },
-		// 命中で減点する低品質タグ
-		lowValueTags: stringArray,
-		// 命中で減点する広告/引流キーワード
-		promoKeywords: stringArray,
-		// 命中で減点する bug/不具合/要望キーワード
-		bugKeywords: stringArray,
-		// 命中で加点する良質コンテンツキーワード
-		qualityKeywords: stringArray,
-		// 命中で加点する良質タグ
-		qualityTags: stringArray,
-		// 各種の重み(減点幅・加点幅)
-		weights: {
-			type: 'object',
-			properties: {
-				lowValueTagPenalty: penalty,
-				promoPenalty: penalty,
-				bugPenalty: penalty,
-				affLinkPenalty: penalty,
-				qualityBoost: penalty,
+		rules: {
+			type: 'array',
+			items: {
+				type: 'object',
+				properties: {
+					id: { type: 'string' },
+					name: { type: 'string' },
+					enabled: { type: 'boolean' },
+					kind: { type: 'string', enum: ['demote', 'boost'] },
+					match: { type: 'string', enum: ['keyword', 'tag'] },
+					terms: { type: 'array', items: { type: 'string' } },
+					weight: { type: 'integer', minimum: 0, maximum: 300 },
+					exemptWithQuality: { type: 'boolean' },
+				},
+				required: ['name', 'kind', 'match', 'terms', 'weight'],
 			},
 		},
-		// 減点合計がこの値以上 かつ 強いエンゲージメント無し → 推薦から除外
+		channelBoost: { type: 'integer', minimum: 0, maximum: 300 },
 		excludeThreshold: { type: 'integer', minimum: 10, maximum: 300 },
+		sentiment: {
+			type: 'object',
+			properties: {
+				enabled: { type: 'boolean' },
+				modelId: { type: 'string' },
+				negativePenalty: { type: 'integer', minimum: -300, maximum: 0 },
+				positiveBoost: { type: 'integer', minimum: 0, maximum: 300 },
+				neutralBand: { type: 'number', minimum: 0, maximum: 0.9 },
+			},
+		},
 	},
 	required: [],
 } as const;

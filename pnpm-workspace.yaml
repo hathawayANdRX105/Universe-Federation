@@ -31,6 +31,8 @@ onlyBuiltDependencies:
   - msgpackr-extract
   - msw
   - nice-napi
+  - onnxruntime-node
+  - protobufjs
   - re2
   - sharp
   - unrs-resolver

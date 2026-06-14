@@ -14,7 +14,7 @@ import { QueryService } from '@/core/QueryService.js';
 import { SearchTrendService } from '@/core/SearchTrendService.js';
 import { IdService } from '@/core/IdService.js';
 import { RecommendationService } from '@/core/RecommendationService.js';
-import type { RecommendationConfig } from '@/core/RecommendationConfig.js';
+import { deriveSqlTerms, type RecommendationConfig } from '@/core/RecommendationConfig.js';
 import { TimeService } from '@/global/TimeService.js';
 import { DI } from '@/di-symbols.js';
 
@@ -31,9 +31,9 @@ function escapeForPgRegex(s: string): string {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// 発見セクションから除外する低品質テキストパターン(構造的 + 管理者設定の広告/bug 語)。
-function buildDiscoveryLowValuePattern(config: RecommendationConfig): string {
-	const words = [...config.promoKeywords, ...config.bugKeywords]
+// 発見セクションから除外する低品質テキストパターン(構造的 + 管理者設定の demote キーワード)。
+function buildDiscoveryLowValuePattern(demoteKeywords: string[]): string {
+	const words = demoteKeywords
 		.map(w => w.trim())
 		.filter(w => w.length > 0)
 		.map(escapeForPgRegex);
@@ -166,6 +166,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	}
 
 	private baseNotesQuery(sinceId: string, me: Parameters<QueryService['generateVisibilityQuery']>[1], config: RecommendationConfig) {
+		const sqlTerms = deriveSqlTerms(config);
 		const query = this.notesRepository.createQueryBuilder('note')
 			.where('note.id > :sinceId', { sinceId })
 			.andWhere('note.visibility = \'public\'')
@@ -181,8 +182,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				qb.orWhere('note.tags IS NULL');
 				qb.orWhere('NOT (note.tags && CAST(:discoveryLowValueTags AS varchar[]))');
 			}))
-			.setParameter('discoveryLowValuePattern', buildDiscoveryLowValuePattern(config))
-			.setParameter('discoveryLowValueTags', config.lowValueTags.length > 0 ? config.lowValueTags : ['__never_match_sentinel_zzqx__']);
+			.setParameter('discoveryLowValuePattern', buildDiscoveryLowValuePattern(sqlTerms.demoteKeywords))
+			.setParameter('discoveryLowValueTags', sqlTerms.lowValueTags.length > 0 ? sqlTerms.lowValueTags : ['__never_match_sentinel_zzqx__']);
 		this.queryService.generateVisibilityQuery(query, me);
 		this.queryService.generateReplyTargetVisibilityQuery(query, me);
 		this.queryService.generateBlockedHostQueryForNote(query);

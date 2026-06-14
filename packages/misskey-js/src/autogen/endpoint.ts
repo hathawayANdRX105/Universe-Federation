@@ -126,6 +126,8 @@ import type {
 	AdminQueueRetryJobRequest,
 	AdminQueueShowJobRequest,
 	AdminQueueStatsResponse,
+	AdminRecommendationBackfillSentimentRequest,
+	AdminRecommendationBackfillSentimentResponse,
 	AdminRecommendationGetConfigResponse,
 	AdminRecommendationPinnedListResponse,
 	AdminRecommendationShowRequest,
@@ -867,6 +869,7 @@ export type Endpoints = {
 	'admin/queue/retry-job': { req: AdminQueueRetryJobRequest; res: EmptyResponse };
 	'admin/queue/show-job': { req: AdminQueueShowJobRequest; res: EmptyResponse };
 	'admin/queue/stats': { req: EmptyRequest; res: AdminQueueStatsResponse };
+	'admin/recommendation/backfill-sentiment': { req: AdminRecommendationBackfillSentimentRequest; res: AdminRecommendationBackfillSentimentResponse };
 	'admin/recommendation/get-config': { req: EmptyRequest; res: AdminRecommendationGetConfigResponse };
 	'admin/recommendation/pinned-list': { req: EmptyRequest; res: AdminRecommendationPinnedListResponse };
 	'admin/recommendation/show': { req: AdminRecommendationShowRequest; res: AdminRecommendationShowResponse };

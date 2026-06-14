@@ -7,7 +7,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import * as Redis from 'ioredis';
 import { In, IsNull, Not } from 'typeorm';
 import { DI } from '@/di-symbols.js';
-import type { ChannelFollowingsRepository, FollowingsRepository, MetasRepository, MiNote, MutingsRepository, NoteRecommendationsRepository, NotesRepository } from '@/models/_.js';
+import type { ChannelFollowingsRepository, FollowingsRepository, MetasRepository, MiNote, MutingsRepository, NoteRecommendationsRepository, NoteSentimentsRepository, NotesRepository } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { normalizeForSearch } from '@/misc/normalize-for-search.js';
 import { TimeService } from '@/global/TimeService.js';
@@ -95,6 +95,9 @@ export class RecommendationService {
 		@Inject(DI.metasRepository)
 		private metasRepository: MetasRepository,
 
+		@Inject(DI.noteSentimentsRepository)
+		private noteSentimentsRepository: NoteSentimentsRepository,
+
 		private readonly metaService: MetaService,
 		private readonly timeService: TimeService,
 	) {
@@ -132,12 +135,9 @@ export class RecommendationService {
 	@bindThis
 	public async updateRecommendationConfig(partial: unknown): Promise<RecommendationConfig> {
 		const current = await this.fetchRecommendationConfigFresh();
-		const p = (partial != null && typeof partial === 'object' ? partial : {}) as Partial<RecommendationConfig> & { weights?: Partial<RecommendationConfig['weights']> };
-		const merged = mergeRecommendationConfig({
-			...current,
-			...p,
-			weights: { ...current.weights, ...(p.weights ?? {}) },
-		});
+		const p = (partial != null && typeof partial === 'object' ? partial : {}) as Record<string, unknown>;
+		// フロントは編集/インポートとも全量を送るが、部分更新でも他フィールドが消えないよう current に重ねる
+		const merged = mergeRecommendationConfig({ ...current, ...p });
 		await this.metaService.update({ recommendationConfig: merged as unknown as Record<string, any> });
 		// このプロセスのキャッシュは即時無効化(他プロセスは TTL 経過で反映)
 		this.cachedConfig = null;
@@ -154,6 +154,26 @@ export class RecommendationService {
 			result.set(row.noteId, { pinned: row.pinned, scoreBoost: row.scoreBoost });
 		}
 		return result;
+	}
+
+	/** 候補ノートの感情分析結果をまとめて取得(推薦ランキング用) */
+	@bindThis
+	public async getNoteSentiments(noteIds: string[]): Promise<Map<string, { score: number; label: string; magnitude: number }>> {
+		const result = new Map<string, { score: number; label: string; magnitude: number }>();
+		if (noteIds.length === 0) return result;
+		const rows = await this.noteSentimentsRepository.findBy({ noteId: In(noteIds) });
+		for (const row of rows) {
+			result.set(row.noteId, { score: row.score, label: row.label, magnitude: row.magnitude });
+		}
+		return result;
+	}
+
+	/** 単一ノートの感情分析結果(管理画面の診断用) */
+	@bindThis
+	public async getNoteSentiment(noteId: string): Promise<{ score: number; label: string; magnitude: number; analyzedAt: Date } | null> {
+		const row = await this.noteSentimentsRepository.findOneBy({ noteId });
+		if (row == null) return null;
+		return { score: row.score, label: row.label, magnitude: row.magnitude, analyzedAt: row.analyzedAt };
 	}
 
 	/** ホーム推薦の最上部に固定する投稿ID(新しくピン留めした順) */

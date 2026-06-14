@@ -14,7 +14,7 @@ import { RoleService } from '@/core/RoleService.js';
 import { IdService } from '@/core/IdService.js';
 import { TimeService } from '@/global/TimeService.js';
 import { RecommendationService } from '@/core/RecommendationService.js';
-import { containsKeyword, hasAnyTag, type RecommendationConfig } from '@/core/RecommendationConfig.js';
+import { containsKeyword, deriveSqlTerms, hasAnyTag, type RecommendationConfig } from '@/core/RecommendationConfig.js';
 import { DI } from '@/di-symbols.js';
 import { ApiError } from '../../error.js';
 
@@ -40,7 +40,7 @@ function buildPgKeywordPattern(keywords: string[]): string {
 	if (keywords.length === 0) return '__never_match_sentinel_zzqx__';
 	return '(' + keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')';
 }
-const EXPLORE_SLOT_RATIO = 0.18;
+const EXPLORE_SLOT_RATIO = 0.25;
 // Time-decayed hotness model (replaces the old exposure-divided engagement rate,
 // which collapsed to ~0 because the global exposure counter inflated ~100x faster
 // than engagement on a busy instance — burying genuinely hot new posts).
@@ -56,7 +56,7 @@ const DEDUP_WINDOW_MINUTES = 360; // 6h: within this, a just-seen note is suppre
 const DEDUP_MAX_PENALTY = 90; // strength of the demotion for a just-now-delivered note (must outweigh hotness so the feed visibly rotates)
 // Random jitter to break ties / add variation between refreshes (kept small so it
 // only reorders near-equal scores, never lets junk leap to the top).
-const JITTER_AMPLITUDE = 3;
+const JITTER_AMPLITUDE = 6;
 // Author-level anti-flood: accounts that post a lot but earn almost no engagement per
 // post are spammers (e.g. grok/doubao/WindSurf — none flagged isBot, so withBots can't
 // catch them). Their notes get a frequency-scaled penalty so they can't dominate by volume.
@@ -147,7 +147,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			// 管理者が調整可能な推薦設定(降权/加点する語と重み)。SQL の事前スコアと JS の精スコア両方で使う。
 			const recConfig = await this.recommendationService.getRecommendationConfig();
-			const qualityKeywordPattern = buildPgKeywordPattern(recConfig.qualityKeywords);
+			const sqlTerms = deriveSqlTerms(recConfig);
+			const qualityKeywordPattern = buildPgKeywordPattern(sqlTerms.qualityKeywords);
 
 			const sinceId = ps.sinceId ?? (ps.sinceDate ? this.idService.gen(ps.sinceDate) : null);
 			const untilId = ps.untilId ?? (ps.untilDate ? this.idService.gen(ps.untilDate) : null);
@@ -293,8 +294,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 						END
 					)
 				`, 'recommendation_score')
-				.setParameter('lowValueTags', recConfig.lowValueTags)
-				.setParameter('qualityTags', recConfig.qualityTags)
+				.setParameter('lowValueTags', sqlTerms.lowValueTags)
+				.setParameter('qualityTags', sqlTerms.qualityTags)
 				.setParameter('qualityKeywordPattern', qualityKeywordPattern)
 				.setParameter('keyTags', ['Key', 'key', 'Token', 'token'])
 				.setParameter('bugTags', ['Bug', 'bug'])
@@ -372,13 +373,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				// Per-request seed: varies the exploration shuffle between refreshes so
 				// the feed isn't identical each time (combined with offset for paging).
 				const requestSeed = (Math.floor(now / (1000 * 30)) + ps.offset) % 100000;
-				const [signals, authorFlood, overrides] = await Promise.all([
+				const [signals, authorFlood, overrides, sentiments] = await Promise.all([
 					this.recommendationService.getUserSignals(me?.id ?? null, candidates, now, requestSeed),
 					this.getAuthorFloodScores(candidates),
 					this.recommendationService.getNoteOverrides(candidates.map(c => c.id)),
+					recConfig.sentiment.enabled ? this.recommendationService.getNoteSentiments(candidates.map(c => c.id)) : Promise.resolve(null),
 				]);
 				const effectiveRankMode = category === 'trending' ? 'trending' : rankMode;
-				notes = this.diversify(this.rankCandidates(candidates, signals, authorFlood, category, sort, effectiveRankMode, now, recConfig, overrides), ps.limit, recConfig, now);
+				notes = this.diversify(this.rankCandidates(candidates, signals, authorFlood, category, sort, effectiveRankMode, now, recConfig, overrides, sentiments), ps.limit, recConfig, now);
 			}
 
 			// 管理者がホーム推薦に固定したノートを最上部に注入する(ホーム・先頭ページのみ)
@@ -537,6 +539,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		now: number,
 		config: RecommendationConfig,
 		overrides?: Map<string, { pinned: boolean; scoreBoost: number }>,
+		sentiments?: Map<string, { score: number; label: string; magnitude: number }> | null,
 	): T[] {
 		return notes
 			.map((note, index) => {
@@ -593,7 +596,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					: 0;
 				// Legacy seen flag (frontend impression) — keep a light demotion on top.
 				const seenPenalty = signal?.seen ? -10 + Math.min(engagementValue, 12) * 0.5 : 0;
-				const exploreBoost = (signal?.explorationScore ?? 0) * (rankMode === 'trending' ? 2.2 : 8.5);
+				const exploreBoost = (signal?.explorationScore ?? 0) * (rankMode === 'trending' ? 2.2 : 13);
 				// Small per-request jitter (hash-based via explorationScore) to break ties
 				// and add visible variation between refreshes.
 				const jitter = ((signal?.explorationScore ?? 0) - 0.5) * 2 * JITTER_AMPLITUDE;
@@ -615,6 +618,17 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					if (author.avatarId != null) authorTrust += 2;
 					if (author.isBot === true) authorTrust -= 6;
 				}
+				// チャンネル投稿への一律加点(管理者が調整可)。チャンネル内容を推薦に出やすくする。
+				const channelBoost = note.channelId != null ? config.channelBoost : 0;
+				// 感情分析: 有効時、負面は降权(主)、正面は軽い加点。閾値(neutralBand)内は中立で無調整。
+				let sentimentAdj = 0;
+				if (config.sentiment.enabled && sentiments != null) {
+					const s = sentiments.get(note.id);
+					if (s != null) {
+						if (s.score < -config.sentiment.neutralBand) sentimentAdj = config.sentiment.negativePenalty;
+						else if (s.score > config.sentiment.neutralBand) sentimentAdj = config.sentiment.positiveBoost;
+					}
+				}
 				let score = hotnessScore * HOTNESS_WEIGHT / 42
 					+ coldStartBoost
 					+ qualityScore
@@ -622,6 +636,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					+ seenPenalty
 					+ exploreBoost
 					+ jitter
+					+ channelBoost
+					+ sentimentAdj
 					+ latestReplyBoost
 					+ recencyTieBreak
 					+ authorTrust
@@ -705,10 +721,13 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		const text = (note.text ?? '').trim();
 		const lower = text.toLowerCase();
 		let score = 0;
-		// ----- 管理者が調整可能な加点(良質タグ/キーワード) -----
+		// ----- 管理者が調整可能な加点(boost ルール) -----
 		if (config.enabled) {
-			if (hasAnyTag(note.tags, config.qualityTags)) score += config.weights.qualityBoost;
-			if (containsKeyword(text, config.qualityKeywords)) score += config.weights.qualityBoost;
+			for (const rule of config.rules) {
+				if (!rule.enabled || rule.kind !== 'boost') continue;
+				const hit = rule.match === 'tag' ? hasAnyTag(note.tags, rule.terms) : containsKeyword(text, rule.terms);
+				if (hit) score += rule.weight;
+			}
 		}
 		// ----- 内蔵の構造的加点 -----
 		if (/(token|key|资源)/i.test(lower) && /(教程|指南|配置|部署|使用方法|说明|讨论|怎么用|如何)/i.test(text)) score += 10;
@@ -738,18 +757,15 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		if (/https?:\/\/\S+/i.test(text) && /(强不强|偷着乐|点\s*star|点\s*start|买不了吃亏|买不了上当|推荐.*机场)/i.test(text)) penalty += 34;
 		if (note.channel?.name != null && new RegExp(LOW_VALUE_CHANNEL_NAME_PATTERN, 'i').test(note.channel.name)) penalty += 42;
 
-		// ===== 管理者が調整可能なルール(語と重みは meta.recommendationConfig / 管理画面で変更可) =====
+		// ===== 管理者が調整可能なルール(demote ルール。語/タグ/重みは管理画面で変更可) =====
 		if (config.enabled) {
-			// 低品質タグ(签到/打卡/广告/bug 等)
-			if (hasAnyTag(note.tags, config.lowValueTags)) penalty += config.weights.lowValueTagPenalty;
-			// 広告/引流キーワード(返利/加微信/中转/机场 等)。正当な文脈(教程など)は除外して誤爆を防ぐ
-			if (containsKeyword(text, config.promoKeywords) && !hasQualityContext) penalty += config.weights.promoPenalty;
-			// bug/不具合・要望(タグ #bug もしくは bug キーワード)。一般ユーザー向けの推薦には不向き → 降权
-			if (hasAnyTag(note.tags, ['bug']) || /(^|[\s#])bug([\s#]|$)/i.test(text) || containsKeyword(text, config.bugKeywords)) penalty += config.weights.bugPenalty;
-			// aff リンク(?aff=)は明確な広告 → 強く降权
-			if (/[?&]aff[=_-]/i.test(text)) penalty += config.weights.affLinkPenalty;
-			// 登録/招待リンクの引流(正当なチュートリアル文脈は除外)
-			if (/https?:\/\/\S*\/(register|signup|sign-up|invite|ref)\b/i.test(text) && !hasQualityContext) penalty += config.weights.promoPenalty;
+			for (const rule of config.rules) {
+				if (!rule.enabled || rule.kind !== 'demote') continue;
+				// exemptWithQuality: 良質な文脈がある投稿は降权を免除(広告語などの誤爆防止)
+				if (rule.exemptWithQuality && hasQualityContext) continue;
+				const hit = rule.match === 'tag' ? hasAnyTag(note.tags, rule.terms) : containsKeyword(text, rule.terms);
+				if (hit) penalty += rule.weight;
+			}
 		}
 		return penalty;
 	}

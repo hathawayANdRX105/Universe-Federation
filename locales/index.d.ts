@@ -6098,6 +6098,26 @@ export interface Locale extends ILocale {
          * 保存しました
          */
         "saved": string;
+        /**
+         * 感情
+         */
+        "sentiment": string;
+        /**
+         * 感情スコア(-1〜1)
+         */
+        "sentimentScore": string;
+        /**
+         * ポジティブ
+         */
+        "sentimentPositive": string;
+        /**
+         * ネガティブ
+         */
+        "sentimentNegative": string;
+        /**
+         * 中立
+         */
+        "sentimentNeutral": string;
     };
     "_recommendationAdmin": {
         /**
@@ -6105,93 +6125,21 @@ export interface Locale extends ILocale {
          */
         "title": string;
         /**
-         * ホームのおすすめアルゴリズムを動的に調整します:どの語を降格・加点するか、その重み、そして何点未満を除外するか。1行に1語、空欄でそのルールを無効化。
+         * ホームのおすすめ採点を「ルール」で一元管理。各ルール=語/タグの集合 + 降格または加点 + 重み。動的に追加・削除・編集でき、設定の入出力も可能。内蔵の構造的フィルタ(極端に短い投稿・キー羅列・裸リンク等)はここでは調整不可。
          */
         "about": string;
         /**
-         * 語ベースの調整を有効化
+         * 全体
+         */
+        "globalSection": string;
+        /**
+         * ルールによる調整を有効化
          */
         "enabled": string;
         /**
-         * オフにすると下記の語リストと重みは無視されます(内蔵の構造的フィルタのみ残ります)。
+         * オフにすると下記のルールは無視されます(内蔵の構造的フィルタのみ残ります)。
          */
         "enabledCaption": string;
-        /**
-         * 降格(広告/低品質/フィードバック)
-         */
-        "demote": string;
-        /**
-         * 加点(良質コンテンツ)
-         */
-        "promote": string;
-        /**
-         * 除外しきい値
-         */
-        "threshold": string;
-        /**
-         * 1行に1つ。カンマ区切りも可
-         */
-        "listCaption": string;
-        /**
-         * 投稿のハッシュタグに一致
-         */
-        "tagsCaption": string;
-        /**
-         * 低品質タグ
-         */
-        "lowValueTags": string;
-        /**
-         * 低品質タグの減点
-         */
-        "lowValueTagPenalty": string;
-        /**
-         * 広告/勧誘キーワード
-         */
-        "promoKeywords": string;
-        /**
-         * 一致で降格(チュートリアル等の正当な文脈は除外)
-         */
-        "promoCaption": string;
-        /**
-         * 広告キーワードの減点
-         */
-        "promoPenalty": string;
-        /**
-         * bug/フィードバック/エラー キーワード
-         */
-        "bugKeywords": string;
-        /**
-         * 不具合報告や要望は一般フィードには不向きです
-         */
-        "bugCaption": string;
-        /**
-         * bug/フィードバックの減点
-         */
-        "bugPenalty": string;
-        /**
-         * aff リンクの減点
-         */
-        "affLinkPenalty": string;
-        /**
-         * ?aff= を含む明確な勧誘リンク
-         */
-        "affLinkCaption": string;
-        /**
-         * 良質タグ
-         */
-        "qualityTags": string;
-        /**
-         * 良質コンテンツ キーワード
-         */
-        "qualityKeywords": string;
-        /**
-         * チュートリアル・共有・議論などは一致で加点
-         */
-        "qualityCaption": string;
-        /**
-         * 良質コンテンツの加点
-         */
-        "qualityBoost": string;
         /**
          * 除外しきい値
          */
@@ -6200,6 +6148,146 @@ export interface Locale extends ILocale {
          * 減点の合計がこの値に達し、かつ強いエンゲージメントが無い投稿はおすすめから除外されます(既定 60)。
          */
         "excludeThresholdCaption": string;
+        /**
+         * チャンネル投稿の加点
+         */
+        "channelBoost": string;
+        /**
+         * チャンネル由来の投稿に一律加点し、チャンネル内容を出やすくします(既定 8)。
+         */
+        "channelBoostCaption": string;
+        /**
+         * ルール
+         */
+        "rulesSection": string;
+        /**
+         * 各ルールは語またはタグの集合に一致し、降格/加点します。自由に追加・削除・編集、個別にオン/オフ。
+         */
+        "rulesCaption": string;
+        /**
+         * ルール名
+         */
+        "ruleName": string;
+        /**
+         * 種別
+         */
+        "ruleKind": string;
+        /**
+         * 降格
+         */
+        "kindDemote": string;
+        /**
+         * 加点
+         */
+        "kindBoost": string;
+        /**
+         * 一致方法
+         */
+        "ruleMatch": string;
+        /**
+         * 本文キーワード
+         */
+        "matchKeyword": string;
+        /**
+         * ハッシュタグ
+         */
+        "matchTag": string;
+        /**
+         * 減点(0-300)
+         */
+        "weightDemote": string;
+        /**
+         * 加点(0-300)
+         */
+        "weightBoost": string;
+        /**
+         * キーワード(本文に含む)
+         */
+        "ruleTermsKeyword": string;
+        /**
+         * タグ(#タグ、完全一致)
+         */
+        "ruleTermsTag": string;
+        /**
+         * 1行に1つ。カンマ区切りも可
+         */
+        "listCaption": string;
+        /**
+         * 有効
+         */
+        "ruleEnabled": string;
+        /**
+         * 良質な内容を含む場合は免除(広告ルール用、チュートリアル誤爆防止)
+         */
+        "ruleExempt": string;
+        /**
+         * ルールを追加
+         */
+        "addRule": string;
+        /**
+         * 感情分析(実験的)
+         */
+        "sentimentSection": string;
+        /**
+         * サーバ側に感情モデルの導入が必要です(Phase 3)。ここで事前設定できますが、モデル未導入では有効化しても効きません。
+         */
+        "sentimentAbout": string;
+        /**
+         * 感情スコアをおすすめ順位に反映
+         */
+        "sentimentEnabled": string;
+        /**
+         * モデル ID(HuggingFace)
+         */
+        "sentimentModel": string;
+        /**
+         * Transformers.js でローカル読み込みする ONNX モデル。既定は小型の多言語感情モデル。
+         */
+        "sentimentModelCaption": string;
+        /**
+         * ネガティブ減点(-300〜0)
+         */
+        "sentimentNegative": string;
+        /**
+         * 明確にネガティブ/攻撃的な投稿を降格 —— ネガティブ抑制を主に。
+         */
+        "sentimentNegativeCaption": string;
+        /**
+         * ポジティブ加点(0-300)
+         */
+        "sentimentPositive": string;
+        /**
+         * 中立帯(0-0.9)
+         */
+        "sentimentNeutral": string;
+        /**
+         * 感情スコアの絶対値がこの範囲内なら中立とみなし無調整。
+         */
+        "sentimentNeutralCaption": string;
+        /**
+         * 最近の投稿の感情をバックフィル
+         */
+        "backfill": string;
+        /**
+         * 直近3日のローカル公開投稿を分析キューに投入します(モデル導入+上のスイッチON が必要)。初回はモデルをDLするためお待ちください。
+         */
+        "backfillCaption": string;
+        /**
+         * インポート
+         */
+        "import": string;
+        /**
+         * エクスポート
+         */
+        "export": string;
+        /**
+         * ファイルが有効な JSON 設定ではありません
+         */
+        "importInvalid": string;
+        /**
+         * インポートはファイル内容で設定を上書きし、即時反映されます。続行しますか?
+         */
+        "importConfirm": string;
         /**
          * 既定に戻す
          */

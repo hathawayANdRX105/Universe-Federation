@@ -27,6 +27,7 @@ import { MiChatMessage } from '@/models/ChatMessage.js';
 import { MiChatRoom } from '@/models/ChatRoom.js';
 import { MiChatRoomBanning } from '@/models/ChatRoomBanning.js';
 import { MiNoteRecommendation } from '@/models/NoteRecommendation.js';
+import { MiNoteSentiment } from '@/models/NoteSentiment.js';
 import { MiChatRoomInvitation } from '@/models/ChatRoomInvitation.js';
 import { MiChatRoomMembership } from '@/models/ChatRoomMembership.js';
 import { MiChatRoomUserMuting } from '@/models/ChatRoomUserMuting.js';
@@ -237,6 +238,7 @@ export {
 	MiChatRoomUserMuting,
 	MiChatRoomBanning,
 	MiNoteRecommendation,
+	MiNoteSentiment,
 	MiChatApproval,
 	MiBubbleGameRecord,
 	MiReversiGame,
@@ -329,6 +331,7 @@ export type ChatRoomInvitationsRepository = Repository<MiChatRoomInvitation> & M
 export type ChatRoomUserMutingsRepository = Repository<MiChatRoomUserMuting> & MiRepository<MiChatRoomUserMuting>;
 export type ChatRoomBanningsRepository = Repository<MiChatRoomBanning> & MiRepository<MiChatRoomBanning>;
 export type NoteRecommendationsRepository = Repository<MiNoteRecommendation> & MiRepository<MiNoteRecommendation>;
+export type NoteSentimentsRepository = Repository<MiNoteSentiment> & MiRepository<MiNoteSentiment>;
 export type ChatApprovalsRepository = Repository<MiChatApproval> & MiRepository<MiChatApproval>;
 export type BubbleGameRecordsRepository = Repository<MiBubbleGameRecord> & MiRepository<MiBubbleGameRecord>;
 export type ReversiGamesRepository = Repository<MiReversiGame> & MiRepository<MiReversiGame>;
