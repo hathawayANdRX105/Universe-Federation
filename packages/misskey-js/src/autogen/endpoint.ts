@@ -23,12 +23,34 @@ import type {
 	AdminAdListRequest,
 	AdminAdListResponse,
 	AdminAdUpdateRequest,
+	AdminAiProvidersCreateRequest,
+	AdminAiProvidersDeleteRequest,
+	AdminAiProvidersFetchModelsRequest,
+	AdminAiProvidersTestRequest,
+	AdminAiProvidersUpdateRequest,
+	AdminAiSettingsUpdateRequest,
 	AdminAnnouncementsCreateRequest,
 	AdminAnnouncementsCreateResponse,
 	AdminAnnouncementsDeleteRequest,
 	AdminAnnouncementsListRequest,
 	AdminAnnouncementsListResponse,
 	AdminAnnouncementsUpdateRequest,
+	AdminApiAccessRequestsApproveRequest,
+	AdminApiAccessRequestsListRequest,
+	AdminApiAccessRequestsRejectRequest,
+	AdminApiAccessRequestsSuspendRequest,
+	AdminApiAppsApproveRequest,
+	AdminApiAppsDeleteRequest,
+	AdminApiAppsListRequest,
+	AdminApiAppsRejectRequest,
+	AdminApiAppsShowRequest,
+	AdminApiAppsSuspendRequest,
+	AdminApiAppsUnsuspendRequest,
+	AdminApiAppsUpdateRequest,
+	AdminApiSettingsUpdateRequest,
+	AdminApiTokensListRequest,
+	AdminApiTokensRevokeRequest,
+	AdminApiTokensSuspendRequest,
 	AdminApproveUserRequest,
 	AdminAvatarDecorationsCreateRequest,
 	AdminAvatarDecorationsCreateResponse,
@@ -130,6 +152,8 @@ import type {
 	AdminRolesUpdateDefaultPoliciesRequest,
 	AdminRolesUsersRequest,
 	AdminRolesUsersResponse,
+	AdminSearchTrendsHideRequest,
+	AdminSearchTrendsHideResponse,
 	AdminSendEmailRequest,
 	AdminServerInfoResponse,
 	AdminSetRootRequest,
@@ -161,6 +185,13 @@ import type {
 	AdminUpdateProxyAccountRequest,
 	AdminUpdateProxyAccountResponse,
 	AdminUpdateUserNoteRequest,
+	AiChatRequest,
+	AiConversationsCreateRequest,
+	AiConversationsDeleteRequest,
+	AiConversationsShowRequest,
+	AiConversationsUpdateRequest,
+	AiMessagesDeleteRequest,
+	AiMessagesListRequest,
 	AnnouncementsRequest,
 	AnnouncementsResponse,
 	AnnouncementsShowRequest,
@@ -179,6 +210,17 @@ import type {
 	ApGetResponse,
 	ApShowRequest,
 	ApShowResponse,
+	ApiAccessRequestRequest,
+	ApiAppsCreateRequest,
+	ApiAppsDeleteRequest,
+	ApiAppsListRequest,
+	ApiAppsRotateSecretRequest,
+	ApiAppsShowRequest,
+	ApiAppsUpdateRequest,
+	ApiTokensCreateRequest,
+	ApiTokensCreateResponse,
+	ApiTokensListRequest,
+	ApiTokensRevokeRequest,
 	AppCreateRequest,
 	AppCreateResponse,
 	AppCurrentResponse,
@@ -246,6 +288,8 @@ import type {
 	ChartsUsersResponse,
 	ChatHistoryRequest,
 	ChatHistoryResponse,
+	ChatMessagesContextRequest,
+	ChatMessagesContextResponse,
 	ChatMessagesCreateToRoomRequest,
 	ChatMessagesCreateToRoomResponse,
 	ChatMessagesCreateToUserRequest,
@@ -261,6 +305,9 @@ import type {
 	ChatMessagesUnreactRequest,
 	ChatMessagesUserTimelineRequest,
 	ChatMessagesUserTimelineResponse,
+	ChatRoomsBansDeleteRequest,
+	ChatRoomsBansListRequest,
+	ChatRoomsBansListResponse,
 	ChatRoomsCreateRequest,
 	ChatRoomsCreateResponse,
 	ChatRoomsDeleteRequest,
@@ -274,21 +321,31 @@ import type {
 	ChatRoomsJoinRequest,
 	ChatRoomsJoiningRequest,
 	ChatRoomsJoiningResponse,
+	ChatRoomsKickRequest,
 	ChatRoomsLeaveRequest,
+	ChatRoomsManageDeleteAllMessagesRequest,
+	ChatRoomsManageDeleteUserMessagesRequest,
+	ChatRoomsManageDeleteUserMessagesResponse,
+	ChatRoomsManageStatsRequest,
+	ChatRoomsManageStatsResponse,
+	ChatRoomsManageUpdateRequest,
+	ChatRoomsManageUpdateResponse,
 	ChatRoomsMembersRequest,
 	ChatRoomsMembersResponse,
 	ChatRoomsMuteRequest,
+	ChatRoomsMuteMemberRequest,
+	ChatRoomsOwnedRequest,
+	ChatRoomsOwnedResponse,
+	ChatRoomsShowRequest,
+	ChatRoomsShowResponse,
+	ChatRoomsUnmuteMemberRequest,
+	ChatRoomsUpdateRequest,
+	ChatRoomsUpdateResponse,
 	ChatRoomsUserMutesCreateRequest,
 	ChatRoomsUserMutesCreateResponse,
 	ChatRoomsUserMutesDeleteRequest,
 	ChatRoomsUserMutesListRequest,
 	ChatRoomsUserMutesListResponse,
-	ChatRoomsOwnedRequest,
-	ChatRoomsOwnedResponse,
-	ChatRoomsShowRequest,
-	ChatRoomsShowResponse,
-	ChatRoomsUpdateRequest,
-	ChatRoomsUpdateResponse,
 	ClipsAddNoteRequest,
 	ClipsCreateRequest,
 	ClipsCreateResponse,
@@ -527,6 +584,8 @@ import type {
 	NotesCreateRequest,
 	NotesCreateResponse,
 	NotesDeleteRequest,
+	NotesDiscoverySectionsRequest,
+	NotesDiscoverySectionsResponse,
 	NotesEditRequest,
 	NotesEditResponse,
 	NotesFavoritesCreateRequest,
@@ -552,6 +611,9 @@ import type {
 	NotesReactionsResponse,
 	NotesReactionsCreateRequest,
 	NotesReactionsDeleteRequest,
+	NotesRecommendationFeedbackRequest,
+	NotesRecommendedTimelineRequest,
+	NotesRecommendedTimelineResponse,
 	NotesRenotesRequest,
 	NotesRenotesResponse,
 	NotesRepliesRequest,
@@ -564,6 +626,8 @@ import type {
 	NotesSearchResponse,
 	NotesSearchByTagRequest,
 	NotesSearchByTagResponse,
+	NotesSearchTrendsRequest,
+	NotesSearchTrendsResponse,
 	NotesShowRequest,
 	NotesShowResponse,
 	NotesStateRequest,
@@ -706,10 +770,36 @@ export type Endpoints = {
 	'admin/ad/delete': { req: AdminAdDeleteRequest; res: EmptyResponse };
 	'admin/ad/list': { req: AdminAdListRequest; res: AdminAdListResponse };
 	'admin/ad/update': { req: AdminAdUpdateRequest; res: EmptyResponse };
+	'admin/ai/providers/create': { req: AdminAiProvidersCreateRequest; res: EmptyResponse };
+	'admin/ai/providers/delete': { req: AdminAiProvidersDeleteRequest; res: EmptyResponse };
+	'admin/ai/providers/fetch-models': { req: AdminAiProvidersFetchModelsRequest; res: EmptyResponse };
+	'admin/ai/providers/list': { req: EmptyRequest; res: EmptyResponse };
+	'admin/ai/providers/test': { req: AdminAiProvidersTestRequest; res: EmptyResponse };
+	'admin/ai/providers/update': { req: AdminAiProvidersUpdateRequest; res: EmptyResponse };
+	'admin/ai/settings/show': { req: EmptyRequest; res: EmptyResponse };
+	'admin/ai/settings/update': { req: AdminAiSettingsUpdateRequest; res: EmptyResponse };
 	'admin/announcements/create': { req: AdminAnnouncementsCreateRequest; res: AdminAnnouncementsCreateResponse };
 	'admin/announcements/delete': { req: AdminAnnouncementsDeleteRequest; res: EmptyResponse };
 	'admin/announcements/list': { req: AdminAnnouncementsListRequest; res: AdminAnnouncementsListResponse };
 	'admin/announcements/update': { req: AdminAnnouncementsUpdateRequest; res: EmptyResponse };
+	'admin/api/access-requests/approve': { req: AdminApiAccessRequestsApproveRequest; res: EmptyResponse };
+	'admin/api/access-requests/list': { req: AdminApiAccessRequestsListRequest; res: EmptyResponse };
+	'admin/api/access-requests/reject': { req: AdminApiAccessRequestsRejectRequest; res: EmptyResponse };
+	'admin/api/access-requests/suspend': { req: AdminApiAccessRequestsSuspendRequest; res: EmptyResponse };
+	'admin/api/apps/approve': { req: AdminApiAppsApproveRequest; res: EmptyResponse };
+	'admin/api/apps/delete': { req: AdminApiAppsDeleteRequest; res: EmptyResponse };
+	'admin/api/apps/list': { req: AdminApiAppsListRequest; res: EmptyResponse };
+	'admin/api/apps/reject': { req: AdminApiAppsRejectRequest; res: EmptyResponse };
+	'admin/api/apps/show': { req: AdminApiAppsShowRequest; res: EmptyResponse };
+	'admin/api/apps/suspend': { req: AdminApiAppsSuspendRequest; res: EmptyResponse };
+	'admin/api/apps/unsuspend': { req: AdminApiAppsUnsuspendRequest; res: EmptyResponse };
+	'admin/api/apps/update': { req: AdminApiAppsUpdateRequest; res: EmptyResponse };
+	'admin/api/settings/show': { req: EmptyRequest; res: EmptyResponse };
+	'admin/api/settings/update': { req: AdminApiSettingsUpdateRequest; res: EmptyResponse };
+	'admin/api/tokens/list': { req: AdminApiTokensListRequest; res: EmptyResponse };
+	'admin/api/tokens/revoke': { req: AdminApiTokensRevokeRequest; res: EmptyResponse };
+	'admin/api/tokens/suspend': { req: AdminApiTokensSuspendRequest; res: EmptyResponse };
+	'admin/api/usage/summary': { req: EmptyRequest; res: EmptyResponse };
 	'admin/approve-user': { req: AdminApproveUserRequest; res: EmptyResponse };
 	'admin/avatar-decorations/create': { req: AdminAvatarDecorationsCreateRequest; res: AdminAvatarDecorationsCreateResponse };
 	'admin/avatar-decorations/delete': { req: AdminAvatarDecorationsDeleteRequest; res: EmptyResponse };
@@ -787,6 +877,7 @@ export type Endpoints = {
 	'admin/roles/update': { req: AdminRolesUpdateRequest; res: EmptyResponse };
 	'admin/roles/update-default-policies': { req: AdminRolesUpdateDefaultPoliciesRequest; res: EmptyResponse };
 	'admin/roles/users': { req: AdminRolesUsersRequest; res: AdminRolesUsersResponse };
+	'admin/search-trends/hide': { req: AdminSearchTrendsHideRequest; res: AdminSearchTrendsHideResponse };
 	'admin/send-email': { req: AdminSendEmailRequest; res: EmptyResponse };
 	'admin/server-info': { req: EmptyRequest; res: AdminServerInfoResponse };
 	'admin/set-root': { req: AdminSetRootRequest; res: EmptyResponse };
@@ -810,6 +901,15 @@ export type Endpoints = {
 	'admin/update-meta': { req: AdminUpdateMetaRequest; res: EmptyResponse };
 	'admin/update-proxy-account': { req: AdminUpdateProxyAccountRequest; res: AdminUpdateProxyAccountResponse };
 	'admin/update-user-note': { req: AdminUpdateUserNoteRequest; res: EmptyResponse };
+	'ai/chat': { req: AiChatRequest; res: EmptyResponse };
+	'ai/conversations/create': { req: AiConversationsCreateRequest; res: EmptyResponse };
+	'ai/conversations/delete': { req: AiConversationsDeleteRequest; res: EmptyResponse };
+	'ai/conversations/list': { req: EmptyRequest; res: EmptyResponse };
+	'ai/conversations/show': { req: AiConversationsShowRequest; res: EmptyResponse };
+	'ai/conversations/update': { req: AiConversationsUpdateRequest; res: EmptyResponse };
+	'ai/messages/delete': { req: AiMessagesDeleteRequest; res: EmptyResponse };
+	'ai/messages/list': { req: AiMessagesListRequest; res: EmptyResponse };
+	'ai/status': { req: EmptyRequest; res: EmptyResponse };
 	'announcements': { req: AnnouncementsRequest; res: AnnouncementsResponse };
 	'announcements/show': { req: AnnouncementsShowRequest; res: AnnouncementsShowResponse };
 	'antennas/create': { req: AntennasCreateRequest; res: AntennasCreateResponse };
@@ -820,6 +920,17 @@ export type Endpoints = {
 	'antennas/update': { req: AntennasUpdateRequest; res: AntennasUpdateResponse };
 	'ap/get': { req: ApGetRequest; res: ApGetResponse };
 	'ap/show': { req: ApShowRequest; res: ApShowResponse };
+	'api/access/request': { req: ApiAccessRequestRequest; res: EmptyResponse };
+	'api/access/status': { req: EmptyRequest; res: EmptyResponse };
+	'api/apps/create': { req: ApiAppsCreateRequest; res: EmptyResponse };
+	'api/apps/delete': { req: ApiAppsDeleteRequest; res: EmptyResponse };
+	'api/apps/list': { req: ApiAppsListRequest; res: EmptyResponse };
+	'api/apps/rotate-secret': { req: ApiAppsRotateSecretRequest; res: EmptyResponse };
+	'api/apps/show': { req: ApiAppsShowRequest; res: EmptyResponse };
+	'api/apps/update': { req: ApiAppsUpdateRequest; res: EmptyResponse };
+	'api/tokens/create': { req: ApiTokensCreateRequest; res: ApiTokensCreateResponse };
+	'api/tokens/list': { req: ApiTokensListRequest; res: EmptyResponse };
+	'api/tokens/revoke': { req: ApiTokensRevokeRequest; res: EmptyResponse };
 	'app/create': { req: AppCreateRequest; res: AppCreateResponse };
 	'app/current': { req: EmptyRequest; res: AppCurrentResponse };
 	'app/show': { req: AppShowRequest; res: AppShowResponse };
@@ -858,6 +969,7 @@ export type Endpoints = {
 	'charts/user/reactions': { req: ChartsUserReactionsRequest; res: ChartsUserReactionsResponse };
 	'charts/users': { req: ChartsUsersRequest; res: ChartsUsersResponse };
 	'chat/history': { req: ChatHistoryRequest; res: ChatHistoryResponse };
+	'chat/messages/context': { req: ChatMessagesContextRequest; res: ChatMessagesContextResponse };
 	'chat/messages/create-to-room': { req: ChatMessagesCreateToRoomRequest; res: ChatMessagesCreateToRoomResponse };
 	'chat/messages/create-to-user': { req: ChatMessagesCreateToUserRequest; res: ChatMessagesCreateToUserResponse };
 	'chat/messages/delete': { req: ChatMessagesDeleteRequest; res: EmptyResponse };
@@ -867,6 +979,8 @@ export type Endpoints = {
 	'chat/messages/show': { req: ChatMessagesShowRequest; res: ChatMessagesShowResponse };
 	'chat/messages/unreact': { req: ChatMessagesUnreactRequest; res: EmptyResponse };
 	'chat/messages/user-timeline': { req: ChatMessagesUserTimelineRequest; res: ChatMessagesUserTimelineResponse };
+	'chat/rooms/bans/delete': { req: ChatRoomsBansDeleteRequest; res: EmptyResponse };
+	'chat/rooms/bans/list': { req: ChatRoomsBansListRequest; res: ChatRoomsBansListResponse };
 	'chat/rooms/create': { req: ChatRoomsCreateRequest; res: ChatRoomsCreateResponse };
 	'chat/rooms/delete': { req: ChatRoomsDeleteRequest; res: EmptyResponse };
 	'chat/rooms/invitations/create': { req: ChatRoomsInvitationsCreateRequest; res: ChatRoomsInvitationsCreateResponse };
@@ -875,15 +989,22 @@ export type Endpoints = {
 	'chat/rooms/invitations/outbox': { req: ChatRoomsInvitationsOutboxRequest; res: ChatRoomsInvitationsOutboxResponse };
 	'chat/rooms/join': { req: ChatRoomsJoinRequest; res: EmptyResponse };
 	'chat/rooms/joining': { req: ChatRoomsJoiningRequest; res: ChatRoomsJoiningResponse };
+	'chat/rooms/kick': { req: ChatRoomsKickRequest; res: EmptyResponse };
 	'chat/rooms/leave': { req: ChatRoomsLeaveRequest; res: EmptyResponse };
+	'chat/rooms/manage/delete-all-messages': { req: ChatRoomsManageDeleteAllMessagesRequest; res: EmptyResponse };
+	'chat/rooms/manage/delete-user-messages': { req: ChatRoomsManageDeleteUserMessagesRequest; res: ChatRoomsManageDeleteUserMessagesResponse };
+	'chat/rooms/manage/stats': { req: ChatRoomsManageStatsRequest; res: ChatRoomsManageStatsResponse };
+	'chat/rooms/manage/update': { req: ChatRoomsManageUpdateRequest; res: ChatRoomsManageUpdateResponse };
 	'chat/rooms/members': { req: ChatRoomsMembersRequest; res: ChatRoomsMembersResponse };
 	'chat/rooms/mute': { req: ChatRoomsMuteRequest; res: EmptyResponse };
+	'chat/rooms/mute-member': { req: ChatRoomsMuteMemberRequest; res: EmptyResponse };
+	'chat/rooms/owned': { req: ChatRoomsOwnedRequest; res: ChatRoomsOwnedResponse };
+	'chat/rooms/show': { req: ChatRoomsShowRequest; res: ChatRoomsShowResponse };
+	'chat/rooms/unmute-member': { req: ChatRoomsUnmuteMemberRequest; res: EmptyResponse };
+	'chat/rooms/update': { req: ChatRoomsUpdateRequest; res: ChatRoomsUpdateResponse };
 	'chat/rooms/user-mutes/create': { req: ChatRoomsUserMutesCreateRequest; res: ChatRoomsUserMutesCreateResponse };
 	'chat/rooms/user-mutes/delete': { req: ChatRoomsUserMutesDeleteRequest; res: EmptyResponse };
 	'chat/rooms/user-mutes/list': { req: ChatRoomsUserMutesListRequest; res: ChatRoomsUserMutesListResponse };
-	'chat/rooms/owned': { req: ChatRoomsOwnedRequest; res: ChatRoomsOwnedResponse };
-	'chat/rooms/show': { req: ChatRoomsShowRequest; res: ChatRoomsShowResponse };
-	'chat/rooms/update': { req: ChatRoomsUpdateRequest; res: ChatRoomsUpdateResponse };
 	'clips/add-note': { req: ClipsAddNoteRequest; res: EmptyResponse };
 	'clips/create': { req: ClipsCreateRequest; res: ClipsCreateResponse };
 	'clips/delete': { req: ClipsDeleteRequest; res: EmptyResponse };
@@ -1042,6 +1163,7 @@ export type Endpoints = {
 	'notes/conversation': { req: NotesConversationRequest; res: NotesConversationResponse };
 	'notes/create': { req: NotesCreateRequest; res: NotesCreateResponse };
 	'notes/delete': { req: NotesDeleteRequest; res: EmptyResponse };
+	'notes/discovery-sections': { req: NotesDiscoverySectionsRequest; res: NotesDiscoverySectionsResponse };
 	'notes/edit': { req: NotesEditRequest; res: NotesEditResponse };
 	'notes/favorites/create': { req: NotesFavoritesCreateRequest; res: EmptyResponse };
 	'notes/favorites/delete': { req: NotesFavoritesDeleteRequest; res: EmptyResponse };
@@ -1058,6 +1180,8 @@ export type Endpoints = {
 	'notes/reactions': { req: NotesReactionsRequest; res: NotesReactionsResponse };
 	'notes/reactions/create': { req: NotesReactionsCreateRequest; res: EmptyResponse };
 	'notes/reactions/delete': { req: NotesReactionsDeleteRequest; res: EmptyResponse };
+	'notes/recommendation-feedback': { req: NotesRecommendationFeedbackRequest; res: EmptyResponse };
+	'notes/recommended-timeline': { req: NotesRecommendedTimelineRequest; res: NotesRecommendedTimelineResponse };
 	'notes/renotes': { req: NotesRenotesRequest; res: NotesRenotesResponse };
 	'notes/replies': { req: NotesRepliesRequest; res: NotesRepliesResponse };
 	'notes/schedule/create': { req: NotesScheduleCreateRequest; res: EmptyResponse };
@@ -1065,6 +1189,7 @@ export type Endpoints = {
 	'notes/schedule/list': { req: NotesScheduleListRequest; res: NotesScheduleListResponse };
 	'notes/search': { req: NotesSearchRequest; res: NotesSearchResponse };
 	'notes/search-by-tag': { req: NotesSearchByTagRequest; res: NotesSearchByTagResponse };
+	'notes/search-trends': { req: NotesSearchTrendsRequest; res: NotesSearchTrendsResponse };
 	'notes/show': { req: NotesShowRequest; res: NotesShowResponse };
 	'notes/state': { req: NotesStateRequest; res: NotesStateResponse };
 	'notes/thread-muting/create': { req: NotesThreadMutingCreateRequest; res: EmptyResponse };

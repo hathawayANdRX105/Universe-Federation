@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div ref="rootEl" :class="$style.root">
 	<div :class="$style.localHeader" data-chat-room-header data-chat-room-tabs>
 		<div :class="$style.localTitle">
-			<i v-if="room" class="ti ti-users"></i>
+			<XRoomAvatar v-if="room" :room="room" :class="$style.localTitleAvatar"/>
 			<MkAvatar v-else-if="user" :user="user" :class="$style.localTitleAvatar" indicator/>
 			<span>{{ room?.name ?? user?.name ?? user?.username ?? i18n.ts.chat }}</span>
 		</div>
@@ -30,6 +30,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</button>
 	</div>
 	<div v-show="tab === 'chat'" ref="chatPaneEl" :class="$style.chatPane">
+		<div v-if="room != null && room.announcementPinned && room.announcement.length > 0" :class="$style.announcement">
+			<i class="ti ti-pinned" :class="$style.announcementIcon"></i>
+			<div :class="$style.announcementBody">
+				<div :class="$style.announcementTitle">{{ i18n.ts._chat.announcement }}</div>
+				<div :class="$style.announcementText">{{ room.announcement }}</div>
+			</div>
+		</div>
 		<div class="_gaps">
 			<div v-if="initializing">
 				<MkLoading/>
@@ -88,8 +95,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:animate="!isRestoringHistoryScroll && !isRoomChat"
 					tag="div" :class="$style.messageList"
 				>
-					<div v-for="item in visibleTimeline" :key="item.id" :class="[$style.messageItem, { [$style.contextTarget]: item.type === 'item' && item.id === contextTargetMessageId }]" :data-scroll-anchor="item.type === 'item' ? item.id : undefined">
-						<XMessage v-if="item.type === 'item'" :message="item.data" :enableReferenceActions="true" :enableRoomUserMute="true" :canDeleteAnyMessage="canDeleteAnyMessage" :canManageRoomUsers="canManageRoomUsers" @reply="setReplyTarget(item.data)" @quote="setQuoteTarget(item.data)" @mention="mentionUser" @muteUser="muteUserInRoom" @openReference="openReferenceMessage" @deletedMany="onDeletedMany"/>
+					<div v-for="item in visibleTimeline" :key="item.id" v-memo="[item.type, item.type === 'item' && item.id === contextTargetMessageId, item.type === 'item' ? item.data.reactions.length : 0, item.type === 'item' ? item.data.sendStatus : 0, item.type === 'item' ? item.data.replyUnavailable === true : false, item.type === 'item' ? item.data.quoteUnavailable === true : false, canManageRoomUsers, canDeleteAnyMessage, room?.ownerId]" :class="[$style.messageItem, { [$style.contextTarget]: item.type === 'item' && item.id === contextTargetMessageId }]" :data-scroll-anchor="item.type === 'item' ? item.id : undefined">
+						<XMessage v-if="item.type === 'item'" :message="item.data" :enableReferenceActions="true" :enableRoomUserMute="true" :canDeleteAnyMessage="canDeleteAnyMessage" :canManageRoomUsers="canManageRoomUsers" :roomOwnerId="room?.ownerId" @reply="setReplyTarget(item.data)" @quote="setQuoteTarget(item.data)" @mention="mentionUser" @muteUser="muteUserInRoom" @openReference="openReferenceMessage" @deletedMany="onDeletedMany"/>
 						<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
 							<span><i class="ti ti-chevron-up"></i> {{ item.nextText }}</span>
 							<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
@@ -123,7 +130,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<div v-if="tab === 'members'" :class="$style.tabPane">
 		<div class="_spacer" :class="$style.tabPaneInner" style="--MI_SPACER-w: min(100%, 840px);">
-			<XMembers v-if="room != null" :room="room" @inviteUser="inviteUser"/>
+			<XMembers v-if="room != null" :room="room" :refreshKey="membersRefreshKey" @inviteUser="inviteUser"/>
 		</div>
 	</div>
 
@@ -165,6 +172,7 @@ import { ref, computed, onMounted, onBeforeUnmount, onDeactivated, onActivated, 
 import * as Misskey from 'misskey-js';
 import { getScrollContainer } from '@@/js/scroll.js';
 import XMessage from './XMessage.vue';
+import XRoomAvatar from './XRoomAvatar.vue';
 import XForm from './room.form.vue';
 import XSearch from './room.search.vue';
 import XMembers from './room.members.vue';
@@ -246,6 +254,7 @@ const usersRefreshFailedById = new Set<string>();
 const usersRefreshQueue = new Map<string, Misskey.entities.UserLite>();
 const mutedRoomUserIds = ref<Set<string>>(new Set());
 const mutedUsersRefreshKey = ref(0);
+const membersRefreshKey = ref(0);
 const showScrollToLatestButton = ref(false);
 const showChatTabsScrollControls = ref(false);
 const canScrollChatTabsLeft = ref(false);
@@ -1197,25 +1206,36 @@ function connectStream() {
 	connection.value?.dispose();
 
 	if (props.userId) {
-		connection.value = useStream().useChannel('chatUser', {
+		const userConnection = useStream().useChannel('chatUser', {
 			otherId: props.userId,
 		});
+		userConnection.on('message', onMessage);
+		userConnection.on('deleted', onDeleted);
+		userConnection.on('deletedMany', onDeletedMany);
+		userConnection.on('cleared', onCleared);
+		userConnection.on('pruned', onPruned);
+		userConnection.on('react', onReact);
+		userConnection.on('unreact', onUnreact);
+		connection.value = userConnection;
 	} else if (room.value != null) {
-		connection.value = useStream().useChannel('chatRoom', {
+		const roomConnection = useStream().useChannel('chatRoom', {
 			roomId: room.value.id,
 		});
+		roomConnection.on('message', onMessage);
+		roomConnection.on('deleted', onDeleted);
+		roomConnection.on('deletedMany', onDeletedMany);
+		roomConnection.on('cleared', onCleared);
+		roomConnection.on('pruned', onPruned);
+		roomConnection.on('react', onReact);
+		roomConnection.on('unreact', onUnreact);
+		roomConnection.on('roomUpdated', onRoomUpdatedStream);
+		roomConnection.on('memberKicked', onMemberKicked);
+		roomConnection.on('memberMuted', onMemberMuted);
+		connection.value = roomConnection;
 	} else {
 		connection.value = null;
 		return;
 	}
-
-	connection.value.on('message', onMessage);
-	connection.value.on('deleted', onDeleted);
-	connection.value.on('deletedMany', onDeletedMany);
-	connection.value.on('cleared', onCleared);
-	connection.value.on('pruned', onPruned);
-	connection.value.on('react', onReact);
-	connection.value.on('unreact', onUnreact);
 }
 
 function clearStreamRecoveryTimer() {
@@ -1705,7 +1725,6 @@ async function initialize() {
 			room.value = null;
 
 			connectStream();
-			await waitChannelConnected();
 
 			if (props.messageId != null) {
 				await initializeContextTimeline(props.messageId);
@@ -1738,15 +1757,14 @@ async function initialize() {
 				return;
 			}
 
-			await loadMutedRoomUsers();
-
+			// stream接続はブロックせず開始し、タイムラインとミュート一覧を並列取得して往復回数を削減する
+			// （接続前のメッセージ取りこぼしは _connected_ 後の recovery で補完される）
 			connectStream();
-			await waitChannelConnected();
 
 			if (props.messageId != null) {
-				await initializeContextTimeline(props.messageId);
+				await Promise.all([loadMutedRoomUsers(), initializeContextTimeline(props.messageId)]);
 			} else {
-				await loadLatestTimeline();
+				await Promise.all([loadMutedRoomUsers(), loadLatestTimeline()]);
 			}
 		}
 	} catch (err) {
@@ -2108,6 +2126,60 @@ function onUnreact(ctx: Parameters<Misskey.Channels['chatUser']['events']['unrea
 	}
 }
 
+function onRoomUpdatedStream(ctx: Parameters<Misskey.Channels['chatRoom']['events']['roomUpdated']>[0]) {
+	markChatStreamEvent();
+	if (room.value == null) return;
+	room.value = {
+		...room.value,
+		name: ctx.name,
+		description: ctx.description,
+		joinMode: ctx.joinMode,
+		avatarUrl: ctx.avatarUrl,
+		isSilenced: ctx.isSilenced,
+		announcement: ctx.announcement,
+		announcementPinned: ctx.announcementPinned,
+	};
+}
+
+function onMemberKicked(ctx: Parameters<Misskey.Channels['chatRoom']['events']['memberKicked']>[0]) {
+	markChatStreamEvent();
+	if (room.value == null) return;
+
+	if (ctx.userId === $i.id) {
+		// 進行中の取得処理(room.value!.id 参照)が走らないように先にストリームを止め、
+		// 退出後はチャットホームへ戻す
+		isRoomViewDisposed = true;
+		connection.value?.dispose();
+		connection.value = null;
+		void os.alert({
+			type: 'warning',
+			text: i18n.ts._chat.youWereKickedFromRoom,
+		}).then(() => {
+			router.push('/chat');
+		});
+		return;
+	}
+
+	room.value = {
+		...room.value,
+		memberCount: Math.max(1, room.value.memberCount - 1),
+	};
+	membersRefreshKey.value++;
+}
+
+function onMemberMuted(ctx: Parameters<Misskey.Channels['chatRoom']['events']['memberMuted']>[0]) {
+	markChatStreamEvent();
+	if (room.value == null) return;
+
+	if (ctx.userId === $i.id) {
+		room.value = {
+			...room.value,
+			myMutedUntil: ctx.mutedUntil,
+		};
+	}
+	membersRefreshKey.value++;
+}
+
 function onIndicatorClick() {
 	if (isContextMode.value) {
 		void exitContextToLatest();
@@ -2429,20 +2501,24 @@ definePage(computed(() => {
 				userName: user.value,
 				title: user.value.name ?? user.value.username,
 				avatar: user.value,
+				needWideArea: true,
 			};
 		} else if (room.value) {
 			return {
 				title: room.value.name,
 				icon: 'ti ti-users',
+				needWideArea: true,
 			};
 		} else {
 			return {
 				title: i18n.ts.chat,
+				needWideArea: true,
 			};
 		}
 	} else {
 		return {
 			title: i18n.ts.chat,
+			needWideArea: true,
 		};
 	}
 }));
@@ -2484,6 +2560,44 @@ definePage(computed(() => {
 	z-index: 1000;
 }
 
+.announcement {
+	position: sticky;
+	top: 0;
+	z-index: 900;
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 8px 12px 0;
+	padding: 10px 14px;
+	border-radius: var(--MI-radius-sm);
+	background: color(from var(--MI_THEME-accent) srgb r g b / 0.1);
+	border: solid 1px color(from var(--MI_THEME-accent) srgb r g b / 0.25);
+}
+
+.announcementIcon {
+	flex: 0 0 auto;
+	margin-top: 2px;
+	color: var(--MI_THEME-accent);
+}
+
+.announcementBody {
+	min-width: 0;
+	flex: 1;
+}
+
+.announcementTitle {
+	font-size: 0.8em;
+	font-weight: 700;
+	color: var(--MI_THEME-accent);
+	margin-bottom: 2px;
+}
+
+.announcementText {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-size: 0.92em;
+}
+
 .localHeader {
 	--chat-room-header-bg: color(from var(--MI_THEME-pageHeaderBg) srgb r g b / 0.92);
 	--chat-room-header-fg: var(--MI_THEME-pageHeaderFg);
@@ -2491,9 +2605,10 @@ definePage(computed(() => {
 	position: relative;
 	z-index: 1000;
 	display: grid;
-	grid-template-columns: minmax(120px, auto) minmax(0, 1fr) auto;
+	grid-template-columns: minmax(0, 1fr) auto;
 	grid-template-areas:
-		"title tabs menu";
+		"title menu"
+		"tabs tabs";
 	align-items: center;
 	gap: 0 8px;
 	width: 100%;
@@ -2521,7 +2636,6 @@ definePage(computed(() => {
 	grid-area: title;
 	gap: 8px;
 	min-width: 0;
-	max-width: 260px;
 	min-height: 52px;
 	font-weight: 700;
 	color: var(--chat-room-header-fg);
@@ -2547,6 +2661,7 @@ definePage(computed(() => {
 	width: 100%;
 	max-width: 100%;
 	min-width: 0;
+	border-top: solid 1px color-mix(in srgb, var(--chat-room-header-fg) 10%, transparent);
 }
 
 .localTabsShellScrollable {
@@ -2642,19 +2757,10 @@ definePage(computed(() => {
 
 @container (max-width: 520px) {
 	.localHeader {
-		grid-template-columns: minmax(0, 1fr) auto;
-		grid-template-areas:
-			"title menu"
-			"tabs tabs";
 		padding: 0 12px 2px;
 	}
 
-	.localTabsShell {
-		border-top: solid 1px color-mix(in srgb, var(--chat-room-header-fg) 10%, transparent);
-	}
-
 	.localTitle {
-		max-width: none;
 		min-height: 40px;
 	}
 

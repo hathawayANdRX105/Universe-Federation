@@ -64,6 +64,18 @@ export const meta = {
 			code: 'INVALID_REFERENCE',
 			id: 'ccf98f9e-94fd-451f-b099-fef25fd55bd9',
 		},
+
+		roomSilenced: {
+			message: 'The room is silenced. Only the owner can send messages.',
+			code: 'ROOM_SILENCED',
+			id: '6e834bd7-438b-46e0-a9b9-b4108928bd8e',
+		},
+
+		youAreMutedInRoom: {
+			message: 'You are muted in this room.',
+			code: 'YOU_ARE_MUTED_IN_ROOM',
+			id: '41913b27-0031-40b5-8b7c-f78736252c77',
+		},
 	},
 } as const;
 
@@ -135,8 +147,18 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				reply,
 				quote,
 			}).catch(err => {
-				if (err instanceof Error && err.message === 'you are not a member of the room') {
-					throw new ApiError(meta.errors.noSuchRoom);
+				if (err instanceof Error) {
+					if (err.message === 'you are not a member of the room') {
+						throw new ApiError(meta.errors.noSuchRoom);
+					}
+					if (err.message === 'room is silenced') {
+						throw new ApiError(meta.errors.roomSilenced);
+					}
+					if (err.message === 'you are muted in this room') {
+						throw new ApiError(meta.errors.youAreMutedInRoom, {
+							mutedUntil: (err as Error & { mutedUntil?: string }).mutedUntil ?? null,
+						});
+					}
 				}
 				throw err;
 			});

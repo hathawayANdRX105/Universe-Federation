@@ -300,6 +300,26 @@ export type Channels = {
 				user?: UserLite;
 				messageId: ChatMessageLite['id'];
 			}) => void;
+			roomUpdated: (payload: {
+				id: string;
+				name: string;
+				description: string;
+				joinMode: 'inviteOnly' | 'open' | 'closed';
+				avatarUrl: string | null;
+				isSilenced: boolean;
+				announcement: string;
+				announcementPinned: boolean;
+			}) => void;
+			memberKicked: (payload: {
+				roomId: string;
+				userId: string;
+				banned: boolean;
+			}) => void;
+			memberMuted: (payload: {
+				roomId: string;
+				userId: string;
+				mutedUntil: string | null;
+			}) => void;
 		};
 		receives: {
 			read: {

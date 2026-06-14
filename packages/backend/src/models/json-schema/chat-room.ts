@@ -32,6 +32,22 @@ export const packedChatRoomSchema = {
 			type: 'string',
 			optional: false, nullable: false,
 		},
+		avatarUrl: {
+			type: 'string',
+			optional: false, nullable: true,
+		},
+		isSilenced: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
+		announcement: {
+			type: 'string',
+			optional: false, nullable: false,
+		},
+		announcementPinned: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
 		joinMode: {
 			type: 'string',
 			optional: false, nullable: false,
@@ -64,6 +80,11 @@ export const packedChatRoomSchema = {
 		isMuted: {
 			type: 'boolean',
 			optional: true, nullable: false,
+		},
+		myMutedUntil: {
+			type: 'string',
+			format: 'date-time',
+			optional: true, nullable: true,
 		},
 	},
 } as const;

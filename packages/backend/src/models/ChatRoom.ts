@@ -6,6 +6,7 @@
 import { PrimaryColumn, Entity, Index, JoinColumn, Column, ManyToOne } from 'typeorm';
 import { id } from './util/id.js';
 import { MiUser } from './User.js';
+import { MiDriveFile } from './DriveFile.js';
 
 export const chatRoomJoinModes = ['inviteOnly', 'open', 'closed'] as const;
 
@@ -37,6 +38,40 @@ export class MiChatRoom {
 		length: 2048, default: '',
 	})
 	public description: string;
+
+	@Index()
+	@Column({
+		...id(),
+		nullable: true,
+	})
+	public avatarId: MiDriveFile['id'] | null;
+
+	@ManyToOne(type => MiDriveFile, {
+		onDelete: 'SET NULL',
+	})
+	@JoinColumn()
+	public avatar: MiDriveFile | null;
+
+	// avatarId が null でない場合のみ有効
+	@Column('varchar', {
+		length: 512, nullable: true,
+	})
+	public avatarUrl: string | null;
+
+	@Column('boolean', {
+		default: false,
+	})
+	public isSilenced: boolean;
+
+	@Column('varchar', {
+		length: 2048, default: '',
+	})
+	public announcement: string;
+
+	@Column('boolean', {
+		default: false,
+	})
+	public announcementPinned: boolean;
 
 	@Column('boolean', {
 		default: false,

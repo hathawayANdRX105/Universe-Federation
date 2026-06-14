@@ -15,6 +15,8 @@ export type PageMetadata = {
 	avatar?: Misskey.entities.User | null;
 	userName?: Misskey.entities.User | null;
 	needWideArea?: boolean;
+	// needWideArea と併用すると、全幅レイアウトでもウィジェットカラムを表示する
+	keepWidgets?: boolean;
 };
 
 type PageMetadataGetter = () => PageMetadata;

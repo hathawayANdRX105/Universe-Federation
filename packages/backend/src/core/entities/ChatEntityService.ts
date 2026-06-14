@@ -6,7 +6,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import * as mfm from 'mfm-js';
 import { DI } from '@/di-symbols.js';
-import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository, MiChatRoomUserMuting, ChatRoomUserMutingsRepository } from '@/models/_.js';
+import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository, MiChatRoomUserMuting, ChatRoomUserMutingsRepository, MiChatRoomBanning, ChatRoomBanningsRepository } from '@/models/_.js';
 import { awaitAll } from '@/misc/prelude/await-all.js';
 import type { Packed } from '@/misc/json-schema.js';
 import type { } from '@/models/Blocking.js';
@@ -46,6 +46,9 @@ export class ChatEntityService {
 
 		@Inject(DI.chatRoomUserMutingsRepository)
 		private chatRoomUserMutingsRepository: ChatRoomUserMutingsRepository,
+
+		@Inject(DI.chatRoomBanningsRepository)
+		private chatRoomBanningsRepository: ChatRoomBanningsRepository,
 
 		@Inject(DI.meta)
 		private meta: MiMeta,
@@ -447,6 +450,10 @@ export class ChatEntityService {
 			createdAt: this.idService.parse(room.id).date.toISOString(),
 			name: room.name,
 			description: room.description,
+			avatarUrl: room.avatarId != null ? room.avatarUrl : null,
+			isSilenced: room.isSilenced,
+			announcement: room.announcement,
+			announcementPinned: room.announcementPinned,
 			joinMode: room.joinMode,
 			memberLimit: room.memberLimitOverride ?? this.meta.chatRoomDefaultMemberLimit,
 			memberLimitOverride: canSeeOverride ? room.memberLimitOverride : undefined,
@@ -457,6 +464,7 @@ export class ChatEntityService {
 			ownerId: room.ownerId,
 			owner: options?._hint_?.packedOwners.get(room.ownerId) ?? await this.userEntityService.pack(room.owner ?? room.ownerId, me),
 			isMuted: membership != null ? membership.isMuted : false,
+			myMutedUntil: membership?.mutedUntil?.toISOString() ?? null,
 		};
 	}
 
@@ -552,6 +560,10 @@ export class ChatEntityService {
 			createdAt: this.idService.parse(room.id).date.toISOString(),
 			name: room.name,
 			description: room.description,
+			avatarUrl: room.avatarId != null ? room.avatarUrl : null,
+			isSilenced: room.isSilenced,
+			announcement: room.announcement,
+			announcementPinned: room.announcementPinned,
 			joinMode: room.joinMode,
 			memberLimit: room.memberLimitOverride ?? this.meta.chatRoomDefaultMemberLimit,
 			memberLimitOverride: canSeeOverride ? room.memberLimitOverride : undefined,
@@ -562,6 +574,7 @@ export class ChatEntityService {
 			ownerId: room.ownerId,
 			owner: hints.packedOwners.get(room.ownerId)!,
 			isMuted: hints.membership != null ? hints.membership.isMuted : false,
+			myMutedUntil: hints.membership?.mutedUntil?.toISOString() ?? null,
 		};
 	}
 
@@ -620,6 +633,7 @@ export class ChatEntityService {
 			user: options?.populateUser ? (options._hint_?.packedUsers.get(membership.userId) ?? await this.userEntityService.pack(membership.user ?? membership.userId, me)) : undefined,
 			roomId: membership.roomId,
 			room: options?.populateRoom ? (options._hint_?.packedRooms.get(membership.roomId) ?? await this.packRoom(membership.room ?? membership.roomId, me)) : undefined,
+			mutedUntil: membership.mutedUntil?.toISOString() ?? null,
 		};
 	}
 
@@ -681,5 +695,40 @@ export class ChatEntityService {
 			.then(users => new Map(users.map(u => [u.id, u])));
 
 		return await Promise.all(mutings.map(muting => this.packRoomUserMuting(muting, me, { _hint_: { packedUsers } })));
+	}
+
+	@bindThis
+	public async packRoomBanning(
+		src: MiChatRoomBanning['id'] | MiChatRoomBanning,
+		me: { id: MiUser['id'] },
+		options?: {
+			_hint_?: {
+				packedUsers: Map<MiChatRoomBanning['userId'], Packed<'UserLite'>>;
+			};
+		},
+	): Promise<Packed<'ChatRoomBanning'>> {
+		const banning = typeof src === 'object' ? src : await this.chatRoomBanningsRepository.findOneByOrFail({ id: src });
+
+		return {
+			id: banning.id,
+			createdAt: banning.createdAt.toISOString(),
+			roomId: banning.roomId,
+			userId: banning.userId,
+			user: options?._hint_?.packedUsers.get(banning.userId) ?? await this.userEntityService.pack(banning.user ?? banning.userId, me),
+		};
+	}
+
+	@bindThis
+	public async packRoomBannings(
+		bannings: MiChatRoomBanning[],
+		me: { id: MiUser['id'] },
+	) {
+		if (bannings.length === 0) return [];
+
+		const users = bannings.map(x => x.user ?? x.userId);
+		const packedUsers = await this.userEntityService.packMany(users, me)
+			.then(users => new Map(users.map(u => [u.id, u])));
+
+		return await Promise.all(bannings.map(banning => this.packRoomBanning(banning, me, { _hint_: { packedUsers } })));
 	}
 }

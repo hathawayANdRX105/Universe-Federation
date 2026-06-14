@@ -54,7 +54,7 @@ export const ROUTE_DEF = [{
 	component: page(() => import('@/pages/clip.vue')),
 }, {
 	path: '/chat',
-	component: chatPage(() => import('@/pages/chat/home.vue')),
+	component: chatPage(() => import('@/pages/chat/index.vue')),
 	loginRequired: true,
 }, {
 	path: '/ai',
@@ -62,14 +62,14 @@ export const ROUTE_DEF = [{
 	loginRequired: true,
 }, {
 	path: '/chat/user/:userId',
-	component: chatPage(() => import('@/pages/chat/room.vue')),
+	component: chatPage(() => import('@/pages/chat/index.vue')),
 	loginRequired: true,
 	query: {
 		messageId: 'messageId',
 	},
 }, {
 	path: '/chat/room/:roomId',
-	component: chatPage(() => import('@/pages/chat/room.vue')),
+	component: chatPage(() => import('@/pages/chat/index.vue')),
 	loginRequired: true,
 	query: {
 		messageId: 'messageId',

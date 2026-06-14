@@ -62,6 +62,13 @@ class ChatRoomChannel extends Channel {
 
 	@bindThis
 	private onEvent(data: ChatEventPayload) {
+		// 自分がキック/BANされた場合は、そのイベントを通知した上で購読を解除し、
+		// 以降のメッセージ等が（クライアントが切断しない場合でも）届かないようにする
+		if (data.type === 'memberKicked' && data.body.userId === this.user?.id) {
+			this.connection.sendSerializedMessageToWsFast(serializeChatChannelEventForWs(this.id, data), { compress: false });
+			this.subscriber.off(`chatRoomStream:${this.roomId}`, this.onEvent);
+			return;
+		}
 		this.connection.sendSerializedMessageToWsFast(serializeChatChannelEventForWs(this.id, data), { compress: false });
 	}
 

@@ -5,6 +5,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div class="_gaps">
+	<div :class="$style.avatarBlock">
+		<XRoomAvatar :room="room" :class="$style.roomAvatar"/>
+		<div v-if="isOwner" :class="$style.avatarActions">
+			<MkButton primary rounded @click="changeAvatar">{{ i18n.ts._chat.changeRoomAvatar }}</MkButton>
+			<MkButton v-if="room.avatarUrl" rounded @click="removeAvatar">{{ i18n.ts._chat.removeRoomAvatar }}</MkButton>
+		</div>
+	</div>
+
 	<MkInput v-model="name_" :disabled="!isOwner">
 		<template #label>{{ i18n.ts.name }}</template>
 	</MkInput>
@@ -46,9 +54,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue';
 import * as Misskey from 'misskey-js';
+import XRoomAvatar from './XRoomAvatar.vue';
 import MkButton from '@/components/MkButton.vue';
 import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
+import { selectFile } from '@/utility/select-file.js';
 import { ensureSignin } from '@/i.js';
 import MkInput from '@/components/MkInput.vue';
 import MkTextarea from '@/components/MkTextarea.vue';
@@ -107,6 +117,39 @@ async function save() {
 	emit('updated', updated);
 }
 
+function changeAvatar(ev: MouseEvent) {
+	selectFile((ev.currentTarget ?? ev.target) as HTMLElement, i18n.ts._chat.roomAvatar).then(async (file) => {
+		let originalOrCropped = file;
+
+		const { canceled } = await os.confirm({
+			type: 'question',
+			text: i18n.ts.cropImageAsk,
+			okText: i18n.ts.cropYes,
+			cancelText: i18n.ts.cropNo,
+		});
+
+		if (!canceled) {
+			originalOrCropped = await os.cropImage(file, {
+				aspectRatio: 1,
+			});
+		}
+
+		const updated = await os.apiWithDialog('chat/rooms/update', {
+			roomId: props.room.id,
+			avatarId: originalOrCropped.id,
+		});
+		emit('updated', updated);
+	});
+}
+
+async function removeAvatar() {
+	const updated = await os.apiWithDialog('chat/rooms/update', {
+		roomId: props.room.id,
+		avatarId: null,
+	});
+	emit('updated', updated);
+}
+
 async function del() {
 	const { canceled } = await os.confirm({
 		type: 'warning',
@@ -135,6 +178,26 @@ watch(isMuted, async () => {
 </script>
 
 <style lang="scss" module>
+.avatarBlock {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 0;
+}
+
+.roomAvatar {
+	width: 96px;
+	height: 96px;
+}
+
+.avatarActions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+}
+
 .membership {
 	display: flex;
 }

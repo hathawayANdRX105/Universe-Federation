@@ -21,6 +21,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<button class="_button" :class="$style.referenceButton" :title="i18n.ts.cancel" @click="emit('clearQuote')"><i class="ti ti-x"></i></button>
 		</div>
 	</div>
+	<MkInfo v-if="muteState != null" warn>
+		<template v-if="muteState.type === 'silenced'">{{ i18n.ts._chat.roomIsSilenced }}</template>
+		<template v-else-if="muteState.until == null">{{ i18n.ts._chat.mutedForever }}</template>
+		<template v-else>{{ i18n.tsx._chat.youAreMutedInRoomUntil({ time: dateString(muteState.until) }) }}</template>
+	</MkInfo>
 	<div v-if="file" :class="$style.file" data-chat-attached-file>
 		<i class="ti ti-paperclip"></i>
 		<span :class="$style.fileName">{{ file.name }}</span>
@@ -34,8 +39,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 			ref="textareaEl"
 			v-model="text"
 			:class="$style.textarea"
-			:placeholder="i18n.ts.inputMessageHere"
+			:placeholder="muteState != null ? (muteState.type === 'silenced' ? i18n.ts._chat.roomIsSilenced : i18n.ts._chat.youAreMutedInRoom) : i18n.ts.inputMessageHere"
 			:readonly="textareaReadOnly"
+			:disabled="muteState != null"
 			@keydown="onKeydown"
 			@focus="onFocus"
 			@paste="onPaste"
@@ -54,8 +60,11 @@ import { onMounted, watch, ref, shallowRef, computed, nextTick, onBeforeUnmount 
 import * as Misskey from 'misskey-js';
 //import insertTextAtCursor from 'insert-text-at-cursor';
 import { formatTimeString } from '@@/js/format-time-string.js';
+import { useInterval } from '@@/js/use-interval.js';
 import type { NormalizedChatMessage } from './room.vue';
+import MkInfo from '@/components/MkInfo.vue';
 import { selectFile } from '@/utility/select-file.js';
+import { dateString } from '@/filters/date.js';
 import * as os from '@/os.js';
 import { i18n } from '@/i18n.js';
 import { uploadFile } from '@/utility/upload.js';
@@ -108,7 +117,24 @@ let autocompleteInstance: Autocomplete | null = null;
 let focusScrollTimers: number[] = [];
 let sendSerial = 0;
 
-const canSend = computed(() => text.value.trim().length > 0 || file.value != null || props.replyTarget != null || props.quoteTarget != null);
+// ミュート期限切れの自動解除のために定期的に更新する
+const now = ref(Date.now());
+useInterval(() => {
+	now.value = Date.now();
+}, 1000 * 30, { immediate: false, afterMounted: true });
+
+const muteState = computed<{ type: 'silenced' } | { type: 'muted'; until: string | null } | null>(() => {
+	const room = props.room;
+	if (room == null || room.ownerId === $i.id) return null;
+	if (room.isSilenced) return { type: 'silenced' };
+	if (room.myMutedUntil != null && Date.parse(room.myMutedUntil) > now.value) {
+		const isPermanent = new Date(room.myMutedUntil).getFullYear() >= 9999;
+		return { type: 'muted', until: isPermanent ? null : room.myMutedUntil };
+	}
+	return null;
+});
+
+const canSend = computed(() => muteState.value == null && (text.value.trim().length > 0 || file.value != null || props.replyTarget != null || props.quoteTarget != null));
 
 function getDraftKey(): string | null {
 	if (props.user) return 'user:' + props.user.id;
@@ -325,7 +351,7 @@ function createOptimisticMessage(snapshot: SendSnapshot): NormalizedChatMessage 
 }
 
 async function send() {
-	if (sending.value || !canSend.value) return;
+	if (sending.value || !canSend.value || muteState.value != null) return;
 
 	const target = getSendTarget();
 	if (target == null) return;

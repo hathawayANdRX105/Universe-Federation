@@ -58,10 +58,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 			/>
 			<MkMediaList v-if="message.file" :mediaList="[message.file]" :class="$style.file"/>
 		</div>
-		<div class="_gaps_s" style="margin: 8px 0;" @click.stop>
+		<div v-if="message.text" class="_gaps_s" style="margin: 8px 0;" @click.stop>
 			<SkUrlPreviewGroup :sourceNodes="parsed" :showAsQuote="!message.fromUser?.rejectQuotes"/>
 		</div>
 		<SkTransitionGroup
+			v-if="visibleReactions.length > 0"
 			:enterActiveClass="$style.transition_reaction_enterActive"
 			:leaveActiveClass="$style.transition_reaction_leaveActive"
 			:enterFromClass="$style.transition_reaction_enterFrom"
@@ -118,6 +119,7 @@ const props = defineProps<{
 	canDeleteAnyMessage?: boolean;
 	canManageRoomUsers?: boolean;
 	canModerateUsers?: boolean;
+	roomOwnerId?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -391,6 +393,80 @@ function getAvatarMenu(): MenuItem[] {
 			caption: i18n.ts._chat.muteUserInRoomCaption,
 			icon: 'ti ti-eye-off',
 			action: () => emit('muteUser', user),
+		});
+	}
+
+	if (canManageSender.value && user.id !== props.roomOwnerId) {
+		const muteMember = async (durationMs: number | null) => {
+			await os.apiWithDialog('chat/rooms/mute-member', {
+				roomId: roomId!,
+				userId: user.id,
+				expiresAt: durationMs == null ? null : Date.now() + durationMs,
+			});
+		};
+
+		menu.push({
+			type: 'divider',
+		}, {
+			type: 'parent',
+			text: i18n.ts._chat.muteMember,
+			icon: 'ti ti-microphone-off',
+			children: [{
+				text: i18n.ts._chat.muteFor10Minutes,
+				action: () => muteMember(1000 * 60 * 10),
+			}, {
+				text: i18n.ts._chat.muteFor1Hour,
+				action: () => muteMember(1000 * 60 * 60),
+			}, {
+				text: i18n.ts._chat.muteFor1Day,
+				action: () => muteMember(1000 * 60 * 60 * 24),
+			}, {
+				text: i18n.ts._chat.muteForever,
+				action: () => muteMember(null),
+			}],
+		}, {
+			text: i18n.ts._chat.unmuteMember,
+			icon: 'ti ti-microphone',
+			action: async () => {
+				await os.apiWithDialog('chat/rooms/unmute-member', {
+					roomId: roomId!,
+					userId: user.id,
+				});
+			},
+		}, {
+			text: i18n.ts._chat.kickUser,
+			icon: 'ti ti-user-x',
+			danger: true,
+			action: async () => {
+				const confirm = await os.confirm({
+					type: 'warning',
+					text: i18n.ts._chat.kickUserConfirm,
+				});
+				if (confirm.canceled) return;
+
+				await os.apiWithDialog('chat/rooms/kick', {
+					roomId: roomId!,
+					userId: user.id,
+					ban: false,
+				});
+			},
+		}, {
+			text: i18n.ts._chat.kickAndBanUser,
+			icon: 'ti ti-ban',
+			danger: true,
+			action: async () => {
+				const confirm = await os.confirm({
+					type: 'warning',
+					text: i18n.ts._chat.kickAndBanUserConfirm,
+				});
+				if (confirm.canceled) return;
+
+				await os.apiWithDialog('chat/rooms/kick', {
+					roomId: roomId!,
+					userId: user.id,
+					ban: true,
+				});
+			},
 		});
 	}
 

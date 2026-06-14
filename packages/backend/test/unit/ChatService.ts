@@ -107,6 +107,7 @@ describe('ChatService large room fast path', () => {
 			findBy: jest.fn(async () => [] as any[]),
 			insertOne: jest.fn(async (membership) => membership),
 			delete: jest.fn(async () => ({ affected: 1 })),
+			update: jest.fn(async () => ({ affected: 1 })),
 		};
 		const chatMessagesQueryBuilder: any = {
 			alias: 'message',
@@ -226,6 +227,14 @@ describe('ChatService large room fast path', () => {
 				joinMode: 'open',
 				memberLimitOverride: null,
 			})),
+			findOneOrFail: jest.fn(async () => ({
+				isSilenced: false,
+			})),
+		};
+		const chatRoomBanningsRepository: any = {
+			existsBy: jest.fn(async () => false),
+			delete: jest.fn(async () => ({ affected: 1 })),
+			createQueryBuilder: jest.fn(() => chatRoomUserMutingQueryBuilder),
 		};
 		const chatRoomInvitationsRepository: any = {
 			findOneBy: jest.fn(async () => null),
@@ -265,6 +274,8 @@ describe('ChatService large room fast path', () => {
 			chatRoomInvitationsRepository as never,
 			chatRoomMembershipsRepository as never,
 			chatRoomUserMutingsRepository as never,
+			chatRoomBanningsRepository as never,
+			{} as never,
 			{} as never,
 			userEntityService as never,
 			chatEntityService as never,
@@ -299,6 +310,7 @@ describe('ChatService large room fast path', () => {
 			chatRoomsRepository,
 			chatRoomUserMutingsRepository,
 			chatRoomUserMutingQueryBuilder,
+			chatRoomBanningsRepository,
 			queryService,
 			appLockService,
 			unlockChatRoomJoin,
@@ -915,5 +927,125 @@ describe('ChatService large room fast path', () => {
 		expect(beforeQuery.setParameter).toHaveBeenCalledWith('toUserId', 'receiver');
 		expect(afterQuery.setParameter).toHaveBeenCalledWith('fromUserId', 'sender');
 		expect(afterQuery.setParameter).toHaveBeenCalledWith('toUserId', 'receiver');
+	});
+
+	test('silenced rooms reject messages from non-owner members', async () => {
+		const ctx = createService(10);
+
+		// isSilenced は findRoomMessageTargetBy のキャッシュ値(=toRoom)から判定される
+		await expect(ctx.service.createMessageToRoom({ id: 'sender', host: null }, { id: 'room', ownerId: 'owner', isSilenced: true } as never, {
+			text: 'hello',
+		})).rejects.toThrow('room is silenced');
+
+		expect(ctx.chatMessagesRepository.insertOne).not.toHaveBeenCalled();
+		expect(ctx.globalEventService.publishChatRoomStream).not.toHaveBeenCalled();
+	});
+
+	test('silenced rooms still accept messages from the owner', async () => {
+		const ctx = createService(10);
+
+		await ctx.service.createMessageToRoom({ id: 'owner', host: null }, { id: 'room', ownerId: 'owner', isSilenced: true } as never, {
+			text: 'hello',
+		});
+
+		// オーナーはミュート/サイレンスのためのmembership取得を行わない
+		expect(ctx.chatRoomMembershipsRepository.findOne).not.toHaveBeenCalled();
+		expect(ctx.chatMessagesRepository.insertOne).toHaveBeenCalled();
+	});
+
+	test('muted members cannot send messages until the mute expires', async () => {
+		const ctx = createService(10);
+		ctx.chatRoomMembershipsRepository.findOne.mockResolvedValue({ userId: 'sender', isMuted: false, mutedUntil: new Date('2100-01-01T00:00:00.000Z') });
+
+		await expect(ctx.service.createMessageToRoom({ id: 'sender', host: null }, { id: 'room', ownerId: 'owner' } as never, {
+			text: 'hello',
+		})).rejects.toThrow('you are muted in this room');
+
+		expect(ctx.chatMessagesRepository.insertOne).not.toHaveBeenCalled();
+	});
+
+	test('expired member mutes no longer block messages', async () => {
+		const ctx = createService(10);
+		ctx.chatRoomMembershipsRepository.findOne.mockResolvedValue({ userId: 'sender', isMuted: false, mutedUntil: new Date('1970-01-01T00:00:00.000Z') });
+
+		await ctx.service.createMessageToRoom({ id: 'sender', host: null }, { id: 'room', ownerId: 'owner' } as never, {
+			text: 'hello',
+		});
+
+		expect(ctx.chatMessagesRepository.insertOne).toHaveBeenCalled();
+	});
+
+	test('kicking a member removes the membership and publishes memberKicked', async () => {
+		const ctx = createService(10);
+		ctx.chatRoomMembershipsRepository.findOneBy.mockResolvedValueOnce({ id: 'membership-id', roomId: 'room', userId: 'target' });
+
+		await ctx.service.kickFromRoom({ id: 'room', ownerId: 'owner' } as never, 'target', { ban: false });
+
+		expect(ctx.chatRoomMembershipsRepository.delete).toHaveBeenCalledWith('membership-id');
+		expect(ctx.chatRoomBanningsRepository.createQueryBuilder).not.toHaveBeenCalled();
+		expect(ctx.globalEventService.publishChatRoomStream).toHaveBeenCalledWith('room', 'memberKicked', {
+			roomId: 'room',
+			userId: 'target',
+			banned: false,
+		});
+	});
+
+	test('kicking with ban inserts a banning record', async () => {
+		const ctx = createService(10);
+		ctx.chatRoomMembershipsRepository.findOneBy.mockResolvedValueOnce({ id: 'membership-id', roomId: 'room', userId: 'target' });
+
+		await ctx.service.kickFromRoom({ id: 'room', ownerId: 'owner' } as never, 'target', { ban: true });
+
+		expect(ctx.chatRoomBanningsRepository.createQueryBuilder).toHaveBeenCalled();
+		expect(ctx.globalEventService.publishChatRoomStream).toHaveBeenCalledWith('room', 'memberKicked', {
+			roomId: 'room',
+			userId: 'target',
+			banned: true,
+		});
+	});
+
+	test('the room owner cannot be kicked', async () => {
+		const ctx = createService(10);
+
+		await expect(ctx.service.kickFromRoom({ id: 'room', ownerId: 'owner' } as never, 'owner', {}))
+			.rejects.toThrow('cannot kick the owner');
+	});
+
+	test('banned users cannot join the room', async () => {
+		const ctx = createService(10);
+		ctx.chatRoomBanningsRepository.existsBy.mockResolvedValueOnce(true);
+
+		await expect(ctx.service.joinToRoom('banned-user', 'room')).rejects.toThrow('you are banned');
+		expect(ctx.chatRoomMembershipsRepository.insertOne).not.toHaveBeenCalled();
+	});
+
+	test('banned users cannot be invited', async () => {
+		const ctx = createService(10);
+		ctx.chatRoomBanningsRepository.existsBy.mockResolvedValueOnce(true);
+		ctx.chatRoomMembershipsRepository.findOneBy.mockResolvedValueOnce(null);
+
+		await expect(ctx.service.createRoomInvitation('owner', 'room', 'banned-user')).rejects.toThrow('user is banned');
+	});
+
+	test('muting a member updates the membership and publishes memberMuted', async () => {
+		const ctx = createService(10);
+		ctx.chatRoomMembershipsRepository.findOneBy.mockResolvedValueOnce({ id: 'membership-id', roomId: 'room', userId: 'target' });
+		const mutedUntil = new Date('2100-01-01T00:00:00.000Z');
+
+		await ctx.service.muteRoomMember({ id: 'room', ownerId: 'owner' } as never, 'target', mutedUntil);
+
+		expect(ctx.chatRoomMembershipsRepository.update).toHaveBeenCalledWith('membership-id', { mutedUntil });
+		expect(ctx.globalEventService.publishChatRoomStream).toHaveBeenCalledWith('room', 'memberMuted', {
+			roomId: 'room',
+			userId: 'target',
+			mutedUntil: mutedUntil.toISOString(),
+		});
+	});
+
+	test('the room owner cannot be muted', async () => {
+		const ctx = createService(10);
+
+		await expect(ctx.service.muteRoomMember({ id: 'room', ownerId: 'owner' } as never, 'owner', null))
+			.rejects.toThrow('cannot mute the owner');
 	});
 });

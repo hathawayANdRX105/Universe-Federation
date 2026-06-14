@@ -17,7 +17,7 @@ import { CHAT_MESSAGE_MENTION_CACHE_TTL, ChatEntityService, chatMessageMentionCa
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { PushNotificationService } from '@/core/PushNotificationService.js';
 import { bindThis } from '@/decorators.js';
-import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomInvitationsRepository, ChatRoomMembershipsRepository, ChatRoomUserMutingsRepository, ChatRoomsRepository, MiChatMessage, MiChatRoom, MiChatRoomMembership, MiChatRoomUserMuting, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
+import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomBanningsRepository, ChatRoomInvitationsRepository, ChatRoomMembershipsRepository, ChatRoomUserMutingsRepository, ChatRoomsRepository, DriveFilesRepository, MiChatMessage, MiChatRoom, MiChatRoomBanning, MiChatRoomMembership, MiChatRoomUserMuting, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
 import { UserBlockingService } from '@/core/UserBlockingService.js';
 import { QueryService } from '@/core/QueryService.js';
 import { RoleService } from '@/core/RoleService.js';
@@ -45,6 +45,8 @@ export const LARGE_CHAT_ROOM_MEMBER_THRESHOLD = 500;
 export const MIN_CHAT_ROOM_MESSAGE_RETENTION_DAYS = 1;
 export const MAX_CHAT_ROOM_MESSAGE_RETENTION_DAYS = 3650;
 export const CHAT_ROOM_RETENTION_BATCH_SIZE = 1000;
+// 永久ミュートは expire しない遠未来の日時で表現する
+export const CHAT_ROOM_PERMANENT_MUTE = new Date('9999-12-31T23:59:59.000Z');
 const ROOM_MEMBER_COUNT_CACHE_TTL = 60;
 const ROOM_MESSAGE_TARGET_CACHE_TTL = 60;
 const ROOM_SENDER_MEMBERSHIP_CACHE_TTL = 10;
@@ -68,7 +70,7 @@ return latest
 `;
 const isCustomEmojiRegexp = /^:([\w+-]+)(?:@\.)?:$/;
 type ChatMessageReference = Pick<MiChatMessage, 'id' | 'toUserId' | 'toRoomId'>;
-type ChatRoomMessageTarget = Pick<MiChatRoom, 'id' | 'ownerId'>;
+type ChatRoomMessageTarget = Pick<MiChatRoom, 'id' | 'ownerId' | 'isSilenced'>;
 type PackedRoomChatMessage = Packed<'ChatMessageLiteForRoom'>;
 type RoomTimelineCacheMeta = {
 	warmedAt: number;
@@ -152,6 +154,12 @@ export class ChatService {
 
 		@Inject(DI.chatRoomUserMutingsRepository)
 		private chatRoomUserMutingsRepository: ChatRoomUserMutingsRepository,
+
+		@Inject(DI.chatRoomBanningsRepository)
+		private chatRoomBanningsRepository: ChatRoomBanningsRepository,
+
+		@Inject(DI.driveFilesRepository)
+		private driveFilesRepository: DriveFilesRepository,
 
 		@Inject(DI.mutingsRepository)
 		private mutingsRepository: MutingsRepository,
@@ -704,12 +712,31 @@ export class ChatService {
 		reply?: ChatMessageReference | null;
 		quote?: ChatMessageReference | null;
 	}): Promise<Packed<'ChatMessageLiteForRoom'>> {
-		const [membershipsCount, senderIsMember] = await Promise.all([
-			this.getRoomMembersCountForMessageFanout(toRoom.id),
-			this.isRoomSenderMemberForMessage(toRoom, fromUser.id),
-		]);
+		const membershipsCount = await this.getRoomMembersCountForMessageFanout(toRoom.id);
 
-		if (!senderIsMember) throw new Error('you are not a member of the room');
+		// オーナーは常にメンバーかつ制限を受けない。
+		// 非オーナーは membership を1回だけ取得し、メンバー資格・ミュート状態を同時に判定することで
+		// 高並列時の1メッセージあたりのDBクエリ数を最小化する（isSilencedはfindRoomMessageTargetByのキャッシュ値を使用）。
+		if (fromUser.id !== toRoom.ownerId) {
+			// select に主キーを含めないと、mutedUntil が NULL の行を TypeORM が「該当なし」と誤判定して
+			// null を返してしまい、ミュートされていないメンバー全員が「非メンバー」扱いになるため id も選択する。
+			const membership = await this.chatRoomMembershipsRepository.findOne({
+				select: { id: true, mutedUntil: true },
+				where: { roomId: toRoom.id, userId: fromUser.id },
+			});
+			if (membership == null) {
+				this.deleteRoomSenderMembershipCache(toRoom.id, fromUser.id);
+				throw new Error('you are not a member of the room');
+			}
+			if (toRoom.isSilenced) {
+				throw new Error('room is silenced');
+			}
+			if (membership.mutedUntil != null && membership.mutedUntil.getTime() > this.timeService.now) {
+				const error = new Error('you are muted in this room');
+				(error as Error & { mutedUntil?: string }).mutedUntil = membership.mutedUntil.toISOString();
+				throw error;
+			}
+		}
 
 		const isLargeRoom = membershipsCount > LARGE_CHAT_ROOM_MEMBER_THRESHOLD;
 
@@ -1665,6 +1692,7 @@ export class ChatService {
 				select: {
 					id: true,
 					ownerId: true,
+					isSilenced: true,
 				},
 				where: {
 					id: roomId,
@@ -1715,6 +1743,10 @@ export class ChatService {
 		const membershipsCount = await this.getRoomMembersCount(roomId);
 		if (membershipsCount >= this.getEffectiveRoomMemberLimit(room)) {
 			throw new Error('room is full');
+		}
+
+		if (await this.isRoomUserBanned(roomId, inviteeId)) {
+			throw new Error('user is banned');
 		}
 
 		// TODO: cehck block
@@ -1770,6 +1802,10 @@ export class ChatService {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 		const isRoomManager = await this.hasPermissionToManageRoom({ id: userId } as MiUser, room);
 
+		if (!isRoomManager && await this.isRoomUserBanned(roomId, userId)) {
+			throw new Error('you are banned');
+		}
+
 		if (room.joinMode === 'closed' && !isRoomManager) {
 			throw new Error('joining disabled');
 		}
@@ -1822,6 +1858,90 @@ export class ChatService {
 	}
 
 	@bindThis
+	public async isRoomUserBanned(roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		return await this.chatRoomBanningsRepository.existsBy({ roomId, userId });
+	}
+
+	@bindThis
+	public async kickFromRoom(room: MiChatRoom, userId: MiUser['id'], options: { ban?: boolean } = {}) {
+		if (userId === room.ownerId) {
+			throw new Error('cannot kick the owner');
+		}
+
+		const membership = await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId });
+		if (membership == null && !options.ban) {
+			throw new Error('not a member');
+		}
+
+		if (membership != null) {
+			await this.chatRoomMembershipsRepository.delete(membership.id);
+		}
+		await this.chatRoomInvitationsRepository.delete({ roomId: room.id, userId });
+
+		if (options.ban) {
+			await this.chatRoomBanningsRepository.createQueryBuilder()
+				.insert()
+				.values({
+					id: this.idService.gen(),
+					createdAt: new Date(this.timeService.now),
+					roomId: room.id,
+					userId,
+				})
+				.orIgnore()
+				.execute();
+		}
+
+		this.deleteRoomSenderMembershipCache(room.id, userId);
+		await this.deleteRoomMembersCountCache(room.id);
+
+		const redisPipeline = this.redisClient.pipeline();
+		redisPipeline.del(`newRoomChatMessageExists:${userId}:${room.id}`);
+		redisPipeline.del(`newRoomChatMentionExists:${userId}:${room.id}`);
+		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${room.id}`);
+		await redisPipeline.exec();
+
+		this.globalEventService.publishChatRoomStream(room.id, 'memberKicked', {
+			roomId: room.id,
+			userId,
+			banned: options.ban ?? false,
+		});
+	}
+
+	@bindThis
+	public async unbanRoomUser(roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		await this.chatRoomBanningsRepository.delete({ roomId, userId });
+	}
+
+	@bindThis
+	public async getRoomBansWithPagination(roomId: MiChatRoom['id'], limit: number, sinceId?: MiChatRoomBanning['id'] | null, untilId?: MiChatRoomBanning['id'] | null) {
+		const query = this.queryService.makePaginationQuery(this.chatRoomBanningsRepository.createQueryBuilder('banning'), sinceId, untilId)
+			.andWhere('banning.roomId = :roomId', { roomId })
+			.leftJoinAndSelect('banning.user', 'user');
+
+		return await query.take(limit).getMany();
+	}
+
+	@bindThis
+	public async muteRoomMember(room: MiChatRoom, userId: MiUser['id'], mutedUntil: Date | null) {
+		if (userId === room.ownerId) {
+			throw new Error('cannot mute the owner');
+		}
+
+		const membership = await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId });
+		if (membership == null) {
+			throw new Error('not a member');
+		}
+
+		await this.chatRoomMembershipsRepository.update(membership.id, { mutedUntil });
+
+		this.globalEventService.publishChatRoomStream(room.id, 'memberMuted', {
+			roomId: room.id,
+			userId,
+			mutedUntil: mutedUntil?.toISOString() ?? null,
+		});
+	}
+
+	@bindThis
 	public async muteRoom(userId: MiUser['id'], roomId: MiChatRoom['id'], mute: boolean) {
 		const membership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
 		await this.chatRoomMembershipsRepository.update(membership.id, { isMuted: mute });
@@ -1832,19 +1952,58 @@ export class ChatService {
 		name?: string;
 		description?: string;
 		joinMode?: ChatRoomJoinMode;
-	}): Promise<MiChatRoom> {
+		isSilenced?: boolean;
+		announcement?: string;
+		announcementPinned?: boolean;
+		avatarId?: MiDriveFile['id'] | null;
+	}, updaterId?: MiUser['id']): Promise<MiChatRoom> {
 		if (params.joinMode != null && !chatRoomJoinModes.includes(params.joinMode)) {
 			throw new Error('invalid join mode');
 		}
 
-		return this.chatRoomsRepository.createQueryBuilder().update()
-			.set(params)
+		const { avatarId, ...restParams } = params;
+		const setParams: Partial<MiChatRoom> = { ...restParams };
+
+		if (avatarId !== undefined) {
+			if (avatarId != null) {
+				// アバター画像は操作者本人がアップロードしたファイルから選ぶ（モデレーターがオーナー以外のルームを編集する場合に対応）
+				const file = await this.driveFilesRepository.findOneBy({ id: avatarId, userId: updaterId ?? room.ownerId });
+				if (file == null) {
+					throw new Error('no such file');
+				}
+				if (!file.type.startsWith('image/')) {
+					throw new Error('not an image');
+				}
+				setParams.avatarId = file.id;
+				setParams.avatarUrl = file.url;
+			} else {
+				setParams.avatarId = null;
+				setParams.avatarUrl = null;
+			}
+		}
+
+		const updated = await this.chatRoomsRepository.createQueryBuilder().update()
+			.set(setParams)
 			.where('id = :id', { id: room.id })
 			.returning('*')
 			.execute()
 			.then((response) => {
-				return response.raw[0];
+				return response.raw[0] as MiChatRoom;
 			});
+
+		this.deleteRoomMessageTargetCache(room.id);
+		this.globalEventService.publishChatRoomStream(room.id, 'roomUpdated', {
+			id: updated.id,
+			name: updated.name,
+			description: updated.description,
+			joinMode: updated.joinMode,
+			avatarUrl: updated.avatarId != null ? updated.avatarUrl : null,
+			isSilenced: updated.isSilenced,
+			announcement: updated.announcement,
+			announcementPinned: updated.announcementPinned,
+		});
+
+		return updated;
 	}
 
 	@bindThis

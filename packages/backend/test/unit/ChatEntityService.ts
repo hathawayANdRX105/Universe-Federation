@@ -93,6 +93,7 @@ describe('ChatEntityService chat message mention cache', () => {
 			{} as never,
 			chatRoomMembershipsRepository as never,
 			chatRoomUserMutingsRepository as never,
+			{} as never,
 			{ chatRoomDefaultMemberLimit: 500 } as never,
 			redisClient as never,
 			userEntityService as never,

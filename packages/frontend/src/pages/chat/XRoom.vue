@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <MkA :to="`/chat/room/${room.id}`" :class="$style.root">
 	<div :class="$style.header">
-		<MkAvatar :user="room.owner" :link="false" :class="$style.headerAvatar"/>
+		<XRoomAvatar :room="room" :class="$style.headerAvatar"/>
 		<div :class="$style.titleBlock">
 			<div :class="$style.name">{{ room.name }}</div>
 			<div :class="$style.description">{{ room.description || i18n.ts.noDescription }}</div>
@@ -17,6 +17,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import * as Misskey from 'misskey-js';
+import XRoomAvatar from './XRoomAvatar.vue';
 import { i18n } from '@/i18n.js';
 
 const props = defineProps<{

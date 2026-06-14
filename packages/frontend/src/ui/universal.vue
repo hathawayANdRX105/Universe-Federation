@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div :class="[$style.root, { '_forceShrinkSpacer': deviceKind === 'smartphone' }]">
 	<XTitlebar v-if="prefer.r.showTitlebar.value" style="flex-shrink: 0;"/>
 
-	<div :class="$style.nonTitlebarArea">
+	<div :class="[$style.nonTitlebarArea, pageMetadata?.needWideArea && pageMetadata?.keepWidgets ? $style.wideWithWidgets : null]">
 		<XSidebar v-if="!isMobile" :class="$style.sidebar" :showWidgetButton="!isDesktop" @widgetButtonClick="widgetsShowing = true"/>
 
 		<div :class="[
@@ -25,7 +25,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<XMobileFooterMenu v-if="isMobile" ref="navFooter" v-model:drawerMenuShowing="drawerMenuShowing" v-model:widgetsShowing="widgetsShowing"/>
 		</div>
 
-		<div v-if="isDesktop && !pageMetadata?.needWideArea" :class="$style.widgets">
+		<div v-if="isDesktop && (!pageMetadata?.needWideArea || pageMetadata?.keepWidgets)" :class="$style.widgets">
 			<XWidgets/>
 		</div>
 	</div>
@@ -153,6 +153,21 @@ $widgets-hide-threshold: 1090px;
 	max-width: var(--layout-page-max-width);
 	margin-inline: auto;
 	align-self: center;
+}
+
+// チャットなどの全幅レイアウト + ウィジェット併用ページ。
+// 通常ページの最大幅(1540px)の制限を外し、ビューポート全体を使う。
+// これにより画面が広いほど本文カラムが広がり、ウィジェット出現によるレイアウト破綻を防ぐ。
+.wideWithWidgets {
+	width: 100%;
+	max-width: none;
+
+	// 会話サイドバー + 本文の幅を優先し、超ワイド画面でのみウィジェットを表示する
+	.widgets {
+		@media (max-width: 1600px) {
+			display: none;
+		}
+	}
 }
 
 .sidebar {

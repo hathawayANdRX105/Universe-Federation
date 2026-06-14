@@ -8,6 +8,57 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkInfo>{{ i18n.ts._chat.managementDescription }}</MkInfo>
 
 	<div :class="$style.section">
+		<div :class="$style.title">{{ i18n.ts._chat.announcement }}</div>
+		<MkTextarea v-model="announcement" :max="2048">
+			<template #label>{{ i18n.ts._chat.announcementContent }}</template>
+			<template #caption>{{ i18n.ts._chat.announcementDescription }}</template>
+		</MkTextarea>
+		<MkSwitch v-model="announcementPinned">
+			<template #label>{{ i18n.ts._chat.pinAnnouncement }}</template>
+			<template #caption>{{ i18n.ts._chat.pinAnnouncementDescription }}</template>
+		</MkSwitch>
+		<MkButton primary :disabled="!announcementChanged" @click="saveAnnouncement">{{ i18n.ts.save }}</MkButton>
+	</div>
+
+	<div :class="$style.section">
+		<div :class="$style.title">{{ i18n.ts._chat.silenceAll }}</div>
+		<MkSwitch v-model="isSilenced" @update:modelValue="saveSilenced">
+			<template #label>{{ i18n.ts._chat.silenceAll }}</template>
+			<template #caption>{{ i18n.ts._chat.silenceAllDescription }}</template>
+		</MkSwitch>
+	</div>
+
+	<div :class="$style.section">
+		<div :class="$style.title">{{ i18n.ts._chat.mutedMembers }}</div>
+		<MkLoading v-if="mutedFetching"/>
+		<div v-else-if="mutedMembers.length === 0" :class="$style.caption">{{ i18n.ts._chat.noMutedMembers }}</div>
+		<div v-else :class="$style.banList">
+			<div v-for="m in mutedMembers" :key="m.id" :class="$style.banRow">
+				<MkA :class="$style.banRowLink" :to="`${userPage(m.user!)}`">
+					<MkUserCardMini :user="m.user!" :withChart="false"/>
+				</MkA>
+				<span :class="$style.mutedUntilLabel">{{ mutedUntilText(m) }}</span>
+				<MkButton rounded :class="$style.banRowButton" @click="unmuteMember(m)">{{ i18n.ts._chat.unmuteMember }}</MkButton>
+			</div>
+		</div>
+	</div>
+
+	<div :class="$style.section">
+		<div :class="$style.title">{{ i18n.ts._chat.banList }}</div>
+		<MkLoading v-if="bansFetching"/>
+		<div v-else-if="bans.length === 0" :class="$style.caption">{{ i18n.ts._chat.noBannedUsers }}</div>
+		<div v-else :class="$style.banList">
+			<div v-for="ban in bans" :key="ban.id" :class="$style.banRow">
+				<MkA :class="$style.banRowLink" :to="`${userPage(ban.user)}`">
+					<MkUserCardMini :user="ban.user" :withChart="false"/>
+				</MkA>
+				<MkButton rounded :class="$style.banRowButton" @click="unban(ban)">{{ i18n.ts._chat.unbanUser }}</MkButton>
+			</div>
+		</div>
+		<MkButton v-if="bansCanFetchMore" rounded :wait="bansMoreFetching" style="margin: 0 auto;" @click="fetchMoreBans">{{ i18n.ts.loadMore }}</MkButton>
+	</div>
+
+	<div :class="$style.section">
 		<div :class="$style.title">{{ i18n.ts._chat.messageStats }}</div>
 		<div v-if="stats == null" :class="$style.loading"><MkLoading :mini="true"/></div>
 		<template v-else>
@@ -63,8 +114,11 @@ import * as Misskey from 'misskey-js';
 import MkButton from '@/components/MkButton.vue';
 import MkInfo from '@/components/MkInfo.vue';
 import MkInput from '@/components/MkInput.vue';
+import MkTextarea from '@/components/MkTextarea.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
 import MkLoading from '@/components/global/MkLoading.vue';
+import MkUserCardMini from '@/components/MkUserCardMini.vue';
+import { userPage } from '@/filters/user.js';
 import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
@@ -84,6 +138,17 @@ const emit = defineEmits<{
 const retentionEnabled = ref(props.room.messageRetentionDays != null);
 const retentionDays = ref<number | string>(props.room.messageRetentionDays ?? 30);
 const stats = ref<Misskey.Endpoints['chat/rooms/manage/stats']['res'] | null>(null);
+const isSilenced = ref(props.room.isSilenced);
+const announcement = ref(props.room.announcement);
+const announcementPinned = ref(props.room.announcementPinned);
+const announcementChanged = computed(() => announcement.value !== props.room.announcement || announcementPinned.value !== props.room.announcementPinned);
+const bans = ref<Misskey.entities.ChatRoomsBansListResponse>([]);
+const bansFetching = ref(true);
+const bansMoreFetching = ref(false);
+const bansCanFetchMore = ref(false);
+const BANS_LIMIT = 30;
+const mutedMembers = ref<Misskey.entities.ChatRoomMembership[]>([]);
+const mutedFetching = ref(true);
 
 const normalizedRetentionDays = computed(() => {
 	if (!retentionEnabled.value) return null;
@@ -98,12 +163,110 @@ const maxDailyCount = computed(() => Math.max(1, ...(stats.value?.daily.map(item
 watch(() => props.room, () => {
 	retentionEnabled.value = props.room.messageRetentionDays != null;
 	retentionDays.value = props.room.messageRetentionDays ?? 30;
+	isSilenced.value = props.room.isSilenced;
+	announcement.value = props.room.announcement;
+	announcementPinned.value = props.room.announcementPinned;
 	loadStats();
 });
 
 onMounted(() => {
 	loadStats();
+	loadBans();
+	loadMutedMembers();
 });
+
+function isMutedNow(membership: Misskey.entities.ChatRoomMembership) {
+	return membership.mutedUntil != null && Date.parse(membership.mutedUntil) > Date.now();
+}
+
+function mutedUntilText(membership: Misskey.entities.ChatRoomMembership) {
+	if (membership.mutedUntil == null) return '';
+	if (new Date(membership.mutedUntil).getFullYear() >= 9999) return i18n.ts._chat.mutedForever;
+	return i18n.tsx._chat.mutedUntil({ time: dateString(membership.mutedUntil) });
+}
+
+async function loadMutedMembers() {
+	mutedFetching.value = true;
+	try {
+		// 禁言中のメンバーは多くないため、メンバー一覧を取得してフィルタする
+		const res = await misskeyApi('chat/rooms/members', {
+			roomId: props.room.id,
+			limit: 100,
+		});
+		mutedMembers.value = res.filter(m => isMutedNow(m) && m.user != null);
+	} catch {
+		mutedMembers.value = [];
+	} finally {
+		mutedFetching.value = false;
+	}
+}
+
+async function unmuteMember(membership: Misskey.entities.ChatRoomMembership) {
+	await os.apiWithDialog('chat/rooms/unmute-member', {
+		roomId: props.room.id,
+		userId: membership.userId,
+	});
+	mutedMembers.value = mutedMembers.value.filter(m => m.id !== membership.id);
+}
+
+async function saveSilenced(value: boolean) {
+	const updated = await os.apiWithDialog('chat/rooms/update', {
+		roomId: props.room.id,
+		isSilenced: value,
+	});
+	emit('updated', updated);
+}
+
+async function saveAnnouncement() {
+	const updated = await os.apiWithDialog('chat/rooms/update', {
+		roomId: props.room.id,
+		announcement: announcement.value,
+		announcementPinned: announcementPinned.value,
+	});
+	emit('updated', updated);
+}
+
+async function loadBans() {
+	bansFetching.value = true;
+	try {
+		const res = await misskeyApi('chat/rooms/bans/list', {
+			roomId: props.room.id,
+			limit: BANS_LIMIT,
+		});
+		bans.value = res.filter(b => b.user != null);
+		bansCanFetchMore.value = res.length >= BANS_LIMIT;
+	} catch {
+		bans.value = [];
+	} finally {
+		bansFetching.value = false;
+	}
+}
+
+async function fetchMoreBans() {
+	const untilId = bans.value.at(-1)?.id;
+	if (untilId == null || bansMoreFetching.value) return;
+
+	bansMoreFetching.value = true;
+	try {
+		const res = await misskeyApi('chat/rooms/bans/list', {
+			roomId: props.room.id,
+			limit: BANS_LIMIT,
+			untilId,
+		});
+		bans.value = [...bans.value, ...res];
+		bansCanFetchMore.value = res.length >= BANS_LIMIT;
+	} finally {
+		bansMoreFetching.value = false;
+	}
+}
+
+async function unban(ban: Misskey.entities.ChatRoomsBansListResponse[number]) {
+	await os.apiWithDialog('chat/rooms/bans/delete', {
+		roomId: props.room.id,
+		userId: ban.userId,
+	});
+	bans.value = bans.value.filter(b => b.id !== ban.id);
+}
 
 function dateString(value: string) {
 	return new Date(value).toLocaleDateString();
@@ -114,10 +277,15 @@ function barHeight(count: number) {
 }
 
 async function loadStats() {
-	stats.value = await misskeyApi('chat/rooms/manage/stats', {
-		roomId: props.room.id,
-		days: 14,
-	});
+	try {
+		stats.value = await misskeyApi('chat/rooms/manage/stats', {
+			roomId: props.room.id,
+			days: 14,
+		});
+	} catch {
+		// 取得失敗時はローディング表示のままにせず空扱いにする
+		stats.value = { total: 0, oldestAt: null, newestAt: null, daily: [] } as Misskey.Endpoints['chat/rooms/manage/stats']['res'];
+	}
 }
 
 async function saveRetention() {
@@ -249,6 +417,39 @@ async function deleteAllMessages() {
 .caption {
 	color: color(from var(--MI_THEME-fg) srgb r g b / 0.75);
 	font-size: 0.9em;
+}
+
+.banList {
+	display: grid;
+	gap: 10px;
+	min-width: 0;
+}
+
+.banRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.banRowLink {
+	flex: 1;
+	min-width: 0;
+
+	&:hover {
+		text-decoration: none;
+	}
+}
+
+.banRowButton {
+	flex: 0 0 auto;
+}
+
+.mutedUntilLabel {
+	flex: 0 0 auto;
+	color: var(--MI_THEME-warn);
+	font-size: 0.82em;
+	white-space: nowrap;
 }
 
 @media (max-width: 600px) {

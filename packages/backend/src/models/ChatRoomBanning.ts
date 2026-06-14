@@ -8,23 +8,15 @@ import { id } from './util/id.js';
 import { MiUser } from './User.js';
 import { MiChatRoom } from './ChatRoom.js';
 
-@Entity('chat_room_membership')
-@Index(['userId', 'roomId'], { unique: true })
-export class MiChatRoomMembership {
+@Entity('chat_room_banning')
+@Index(['roomId', 'userId'], { unique: true })
+export class MiChatRoomBanning {
 	@PrimaryColumn(id())
 	public id: string;
 
 	@Index()
-	@Column({
-		...id(),
-	})
-	public userId: MiUser['id'];
-
-	@ManyToOne(type => MiUser, {
-		onDelete: 'CASCADE',
-	})
-	@JoinColumn()
-	public user: MiUser | null;
+	@Column('timestamp with time zone')
+	public createdAt: Date;
 
 	@Index()
 	@Column({
@@ -38,13 +30,15 @@ export class MiChatRoomMembership {
 	@JoinColumn()
 	public room: MiChatRoom | null;
 
-	@Column('boolean', {
-		default: false,
+	@Index()
+	@Column({
+		...id(),
 	})
-	public isMuted: boolean;
+	public userId: MiUser['id'];
 
-	@Column('timestamp with time zone', {
-		nullable: true,
+	@ManyToOne(type => MiUser, {
+		onDelete: 'CASCADE',
 	})
-	public mutedUntil: Date | null;
+	@JoinColumn()
+	public user: MiUser | null;
 }

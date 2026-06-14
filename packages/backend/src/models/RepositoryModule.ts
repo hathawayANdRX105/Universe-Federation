@@ -87,6 +87,7 @@ import {
 	MiChatRoomMembership,
 	MiChatRoomInvitation,
 	MiChatRoomUserMuting,
+	MiChatRoomBanning,
 	MiChatApproval,
 	NoteEdit,
 	SkApContext,
@@ -582,6 +583,12 @@ const $chatRoomUserMutingsRepository: Provider = {
 	inject: [DI.db],
 };
 
+const $chatRoomBanningsRepository: Provider = {
+	provide: DI.chatRoomBanningsRepository,
+	useFactory: (db: DataSource) => db.getRepository(MiChatRoomBanning).extend(miRepository as MiRepository<MiChatRoomBanning>),
+	inject: [DI.db],
+};
+
 const $chatApprovalsRepository: Provider = {
 	provide: DI.chatApprovalsRepository,
 	useFactory: (db: DataSource) => db.getRepository(MiChatApproval).extend(miRepository as MiRepository<MiChatApproval>),
@@ -688,6 +695,7 @@ export const repositoryProviders: Provider[] = [
 		$chatRoomMembershipsRepository,
 		$chatRoomInvitationsRepository,
 		$chatRoomUserMutingsRepository,
+		$chatRoomBanningsRepository,
 		$chatApprovalsRepository,
 		$noteEditRepository,
 		$bubbleGameRecordsRepository,

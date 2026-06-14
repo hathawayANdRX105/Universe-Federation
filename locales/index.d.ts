@@ -5826,6 +5826,186 @@ export interface Locale extends ILocale {
          * 自分からチャットメッセージを送った相手とはこの設定に関わらずチャットが可能です。
          */
         "chatAllowedUsers_note": string;
+        /**
+         * ミュートしたユーザー
+         */
+        "mutedUsers": string;
+        /**
+         * このルームでミュートしたユーザーを管理します。ミュートしたユーザーの新しいメッセージ、履歴、検索結果はあなたには表示されません。
+         */
+        "mutedUsersDescription": string;
+        /**
+         * このルームにのみ適用されます。ダイレクトメッセージ、他のルーム、ノートには影響しません。
+         */
+        "mutedUsersScope": string;
+        /**
+         * このユーザーをミュート
+         */
+        "muteUserInRoom": string;
+        /**
+         * このルームでのみメッセージを非表示にします
+         */
+        "muteUserInRoomCaption": string;
+        /**
+         * ミュート解除
+         */
+        "unmuteUserInRoom": string;
+        /**
+         * ミュートすると、このルームでこのユーザーのメッセージが表示されなくなります。ミュートしますか？
+         */
+        "muteUserInRoomConfirm": string;
+        /**
+         * ミュートしたユーザーはいません
+         */
+        "noMutedUsers": string;
+        /**
+         * チャットで送信者のアバターを右クリックまたは長押しして、「このユーザーをミュート」を選択します。
+         */
+        "noMutedUsersDescription": string;
+        /**
+         * ミュートした日時
+         */
+        "mutedAt": string;
+        /**
+         * ルームのアイコン
+         */
+        "roomAvatar": string;
+        /**
+         * ルームのアイコンを変更
+         */
+        "changeRoomAvatar": string;
+        /**
+         * ルームのアイコンを削除
+         */
+        "removeRoomAvatar": string;
+        /**
+         * ルームから削除
+         */
+        "kickUser": string;
+        /**
+         * このメンバーをルームから削除しますか？
+         */
+        "kickUserConfirm": string;
+        /**
+         * 削除して再参加を禁止
+         */
+        "kickAndBanUser": string;
+        /**
+         * このメンバーをルームから削除し、再参加を禁止しますか？
+         */
+        "kickAndBanUserConfirm": string;
+        /**
+         * このルームから削除されました。
+         */
+        "youWereKickedFromRoom": string;
+        /**
+         * ブラックリスト
+         */
+        "banList": string;
+        /**
+         * 再参加を禁止されているユーザーはいません
+         */
+        "noBannedUsers": string;
+        /**
+         * 禁止を解除
+         */
+        "unbanUser": string;
+        /**
+         * このユーザーはこのルームへの参加を禁止されています。
+         */
+        "userIsBanned": string;
+        /**
+         * 発言を禁止
+         */
+        "muteMember": string;
+        /**
+         * 発言禁止を解除
+         */
+        "unmuteMember": string;
+        /**
+         * 10分間
+         */
+        "muteFor10Minutes": string;
+        /**
+         * 1時間
+         */
+        "muteFor1Hour": string;
+        /**
+         * 1日
+         */
+        "muteFor1Day": string;
+        /**
+         * 無期限
+         */
+        "muteForever": string;
+        /**
+         * {time}まで発言禁止
+         */
+        "mutedUntil": ParameterizedString<"time">;
+        /**
+         * 無期限に発言禁止
+         */
+        "mutedForever": string;
+        /**
+         * あなたはこのルームで発言を禁止されています。
+         */
+        "youAreMutedInRoom": string;
+        /**
+         * あなたは{time}までこのルームで発言を禁止されています。
+         */
+        "youAreMutedInRoomUntil": ParameterizedString<"time">;
+        /**
+         * 全員発言禁止
+         */
+        "silenceAll": string;
+        /**
+         * オンにすると、オーナー以外のメンバーはメッセージを送信できなくなります。
+         */
+        "silenceAllDescription": string;
+        /**
+         * 発言禁止中のメンバー
+         */
+        "mutedMembers": string;
+        /**
+         * 発言禁止中のメンバーはいません
+         */
+        "noMutedMembers": string;
+        /**
+         * アナウンス
+         */
+        "announcement": string;
+        /**
+         * アナウンスの内容
+         */
+        "announcementContent": string;
+        /**
+         * ルームのアナウンスを設定します。空にするとアナウンスは表示されません。
+         */
+        "announcementDescription": string;
+        /**
+         * チャット上部に固定表示する
+         */
+        "pinAnnouncement": string;
+        /**
+         * オンにすると、アナウンスがチャットの上部に固定表示されます。
+         */
+        "pinAnnouncementDescription": string;
+        /**
+         * 全員発言禁止中のため、オーナーのみメッセージを送信できます。
+         */
+        "roomIsSilenced": string;
+        /**
+         * 会話を選択してチャットを開始
+         */
+        "selectConversation": string;
+        /**
+         * ダイレクトメッセージ
+         */
+        "directMessages": string;
+        /**
+         * ルーム
+         */
+        "groupChats": string;
         "_chatAllowedUsers": {
             /**
              * 誰でも

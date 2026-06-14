@@ -50,6 +50,8 @@ const headerTabs = computed(() => [{
 definePage(() => ({
 	title: i18n.ts.chat + ' (beta)',
 	icon: 'ti ti-messages',
+	needWideArea: true,
+	keepWidgets: true,
 }));
 </script>
 
