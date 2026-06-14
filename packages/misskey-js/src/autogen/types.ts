@@ -2252,6 +2252,28 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    '/admin/recommendation/get-config': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * admin/recommendation/get-config
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:admin:recommendation*
+         */
+        post: operations['admin___recommendation___get-config'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/admin/recommendation/pinned-list': {
         parameters: {
             query?: never;
@@ -2312,6 +2334,28 @@ export type paths = {
          *     **Credential required**: *Yes* / **Permission**: *write:admin:recommendation*
          */
         post: operations['admin___recommendation___update'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/admin/recommendation/update-config': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * admin/recommendation/update-config
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:recommendation*
+         */
+        post: operations['admin___recommendation___update-config'];
         delete?: never;
         options?: never;
         head?: never;
@@ -21351,6 +21395,104 @@ export interface operations {
             };
         };
     };
+    'admin___recommendation___get-config': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        current: {
+                            enabled: boolean;
+                            lowValueTags: string[];
+                            promoKeywords: string[];
+                            bugKeywords: string[];
+                            qualityKeywords: string[];
+                            qualityTags: string[];
+                            weights: {
+                                lowValueTagPenalty: number;
+                                promoPenalty: number;
+                                bugPenalty: number;
+                                affLinkPenalty: number;
+                                qualityBoost: number;
+                            };
+                            excludeThreshold: number;
+                        };
+                        default: {
+                            enabled: boolean;
+                            lowValueTags: string[];
+                            promoKeywords: string[];
+                            bugKeywords: string[];
+                            qualityKeywords: string[];
+                            qualityTags: string[];
+                            weights: {
+                                lowValueTagPenalty: number;
+                                promoPenalty: number;
+                                bugPenalty: number;
+                                affLinkPenalty: number;
+                                qualityBoost: number;
+                            };
+                            excludeThreshold: number;
+                        };
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
     'admin___recommendation___pinned-list': {
         parameters: {
             query?: never;
@@ -21546,6 +21688,105 @@ export interface operations {
                         noteId: string;
                         pinned: boolean;
                         scoreBoost: number;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    'admin___recommendation___update-config': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': {
+                    enabled?: boolean;
+                    lowValueTags?: string[];
+                    promoKeywords?: string[];
+                    bugKeywords?: string[];
+                    qualityKeywords?: string[];
+                    qualityTags?: string[];
+                    weights?: {
+                        lowValueTagPenalty?: number;
+                        promoPenalty?: number;
+                        bugPenalty?: number;
+                        affLinkPenalty?: number;
+                        qualityBoost?: number;
+                    };
+                    excludeThreshold?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        enabled: boolean;
+                        lowValueTags: string[];
+                        promoKeywords: string[];
+                        bugKeywords: string[];
+                        qualityKeywords: string[];
+                        qualityTags: string[];
+                        weights: {
+                            lowValueTagPenalty: number;
+                            promoPenalty: number;
+                            bugPenalty: number;
+                            affLinkPenalty: number;
+                            qualityBoost: number;
+                        };
+                        excludeThreshold: number;
                     };
                 };
             };

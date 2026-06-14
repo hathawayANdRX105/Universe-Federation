@@ -19,6 +19,8 @@ export * as 'admin/abuse-user-reports' from './endpoints/admin/abuse-user-report
 export * as 'admin/recommendation/update' from './endpoints/admin/recommendation/update.js';
 export * as 'admin/recommendation/show' from './endpoints/admin/recommendation/show.js';
 export * as 'admin/recommendation/pinned-list' from './endpoints/admin/recommendation/pinned-list.js';
+export * as 'admin/recommendation/get-config' from './endpoints/admin/recommendation/get-config.js';
+export * as 'admin/recommendation/update-config' from './endpoints/admin/recommendation/update-config.js';
 export * as 'admin/accounts/create' from './endpoints/admin/accounts/create.js';
 export * as 'admin/accounts/delete' from './endpoints/admin/accounts/delete.js';
 export * as 'admin/accounts/find-by-email' from './endpoints/admin/accounts/find-by-email.js';

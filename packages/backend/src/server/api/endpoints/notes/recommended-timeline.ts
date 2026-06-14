@@ -14,6 +14,7 @@ import { RoleService } from '@/core/RoleService.js';
 import { IdService } from '@/core/IdService.js';
 import { TimeService } from '@/global/TimeService.js';
 import { RecommendationService } from '@/core/RecommendationService.js';
+import { containsKeyword, hasAnyTag, type RecommendationConfig } from '@/core/RecommendationConfig.js';
 import { DI } from '@/di-symbols.js';
 import { ApiError } from '../../error.js';
 
@@ -31,9 +32,14 @@ const CANDIDATE_WINDOW = 1000 * 60 * 60 * 24 * 7;
 const FRESH_PRIORITY_HOURS = 48;
 const OLD_CONTENT_HOURS = 72;
 const OLD_CONTENT_MAX_SCORE = 58;
-const LOW_VALUE_TAGS = ['签到', '打卡', '水贴', 'key', 'Key', '广告', '推广', '返利', 'aff', '引流', '招商'];
-const QUALITY_TAGS = ['教程', 'ai', 'AI', '资源', '公告', 'Bug', 'bug', '问题', '讨论', '指南'];
 const LOW_VALUE_CHANNEL_NAME_PATTERN = '^(Key|白嫖|签到|打卡)$';
+
+// 管理者が設定したキーワード配列を Postgres POSIX 正規表現(~ 用)に変換する。
+// 正規表現メタ文字はエスケープし、空配列のときはどのテキストにも一致しないセンチネルを返す。
+function buildPgKeywordPattern(keywords: string[]): string {
+	if (keywords.length === 0) return '__never_match_sentinel_zzqx__';
+	return '(' + keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')';
+}
 const EXPLORE_SLOT_RATIO = 0.18;
 // Time-decayed hotness model (replaces the old exposure-divided engagement rate,
 // which collapsed to ~0 because the global exposure counter inflated ~100x faster
@@ -138,6 +144,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (me) {
 				this.userService.markUserActive(me);
 			}
+
+			// 管理者が調整可能な推薦設定(降权/加点する語と重み)。SQL の事前スコアと JS の精スコア両方で使う。
+			const recConfig = await this.recommendationService.getRecommendationConfig();
+			const qualityKeywordPattern = buildPgKeywordPattern(recConfig.qualityKeywords);
 
 			const sinceId = ps.sinceId ?? (ps.sinceDate ? this.idService.gen(ps.sinceDate) : null);
 			const untilId = ps.untilId ?? (ps.untilDate ? this.idService.gen(ps.untilDate) : null);
@@ -257,7 +267,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 								AND note.id <> ALL(COALESCE(channel."pinnedNoteIds", ARRAY[]::varchar[]))
 								AND NOT (
 									note.tags && CAST(:qualityTags AS varchar[])
-									OR LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|求助|ai|claude|codex|gpt)'
+									OR LOWER(COALESCE(note.text, '')) ~ :qualityKeywordPattern
 								)
 							THEN -45
 							WHEN note.id < :fresh3dId
@@ -276,15 +286,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 								AND note.id <> ALL(COALESCE(channel."pinnedNoteIds", ARRAY[]::varchar[]))
 								AND NOT (
 									note.tags && CAST(:qualityTags AS varchar[])
-									OR LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|求助|ai|claude|codex|gpt)'
+									OR LOWER(COALESCE(note.text, '')) ~ :qualityKeywordPattern
 								)
 							THEN -45
 							ELSE 0
 						END
 					)
 				`, 'recommendation_score')
-				.setParameter('lowValueTags', LOW_VALUE_TAGS)
-				.setParameter('qualityTags', QUALITY_TAGS)
+				.setParameter('lowValueTags', recConfig.lowValueTags)
+				.setParameter('qualityTags', recConfig.qualityTags)
+				.setParameter('qualityKeywordPattern', qualityKeywordPattern)
 				.setParameter('keyTags', ['Key', 'key', 'Token', 'token'])
 				.setParameter('bugTags', ['Bug', 'bug'])
 				.setParameter('lowValueChannelNamePattern', LOW_VALUE_CHANNEL_NAME_PATTERN)
@@ -355,7 +366,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				// by engagement/cold-start score) and just run diversify — it walks the input
 				// order greedily, so it preserves recency while still applying the per-author
 				// (≤2), per-channel (≤2) and duplicate-text caps.
-				notes = this.diversify(candidates, ps.limit);
+				notes = this.diversify(candidates, ps.limit, recConfig);
 			} else {
 				const now = this.timeService.now;
 				// Per-request seed: varies the exploration shuffle between refreshes so
@@ -367,7 +378,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					this.recommendationService.getNoteOverrides(candidates.map(c => c.id)),
 				]);
 				const effectiveRankMode = category === 'trending' ? 'trending' : rankMode;
-				notes = this.diversify(this.rankCandidates(candidates, signals, authorFlood, category, sort, effectiveRankMode, now, overrides), ps.limit, now);
+				notes = this.diversify(this.rankCandidates(candidates, signals, authorFlood, category, sort, effectiveRankMode, now, recConfig, overrides), ps.limit, recConfig, now);
 			}
 
 			// 管理者がホーム推薦に固定したノートを最上部に注入する(ホーム・先頭ページのみ)
@@ -524,6 +535,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		sort: RecommendationSort,
 		rankMode: RecommendationRankMode,
 		now: number,
+		config: RecommendationConfig,
 		overrides?: Map<string, { pinned: boolean; scoreBoost: number }>,
 	): T[] {
 		return notes
@@ -547,10 +559,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				const hotnessScore = (engagementValue + hotScore) * freshnessDecay;
 				// Quality gate: obvious 灌水 (short text w/o media, or flagged by
 				// getLowValuePenalty) only gets a fraction of the cold-start boost.
-				const lowValuePenalty = this.getLowValuePenalty(note);
+				const lowValuePenalty = this.getLowValuePenalty(note, config);
 				const compactLen = (note.text ?? '').replace(/\s+/g, '').length;
 				const hasMedia = (note.fileIds?.length ?? 0) > 0;
-				const qualityScore = this.getQualityScore(note);
+				const qualityScore = this.getQualityScore(note, config);
 				const isPinnedInChannel = note.channel?.pinnedNoteIds?.includes(note.id) ?? false;
 				const oldContentPenalty = ageHours >= FRESH_PRIORITY_HOURS
 					? Math.min(42, (ageHours - FRESH_PRIORITY_HOURS) * 0.75)
@@ -634,7 +646,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.map(entry => entry.note);
 	}
 
-	private diversify<T extends { id: string; userId: string; text: string | null; channelId?: string | null; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; tags?: string[]; channel?: { pinnedNoteIds?: string[]; name?: string | null } | null }>(notes: T[], limit: number, now = this.timeService.now): T[] {
+	private diversify<T extends { id: string; userId: string; text: string | null; channelId?: string | null; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; tags?: string[]; channel?: { pinnedNoteIds?: string[]; name?: string | null } | null }>(notes: T[], limit: number, config: RecommendationConfig, now = this.timeService.now): T[] {
 		const selected: T[] = [];
 		const authorCounts = new Map<string, number>();
 		const channelCounts = new Map<string, number>();
@@ -645,8 +657,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const ageHours = Math.max(0, (now - this.idService.parse(note.id).date.getTime()) / (1000 * 60 * 60));
 			const isPinnedInChannel = note.channel?.pinnedNoteIds?.includes(note.id) ?? false;
 			if (ageHours >= 24 * 7 && !isPinnedInChannel) continue;
-			if (ageHours >= OLD_CONTENT_HOURS && !isPinnedInChannel && !this.hasOldContentQuality(note)) continue;
-			if (this.getLowValuePenalty(note) >= 60 && !this.hasStrongEngagement(note)) continue;
+			if (ageHours >= OLD_CONTENT_HOURS && !isPinnedInChannel && !this.hasOldContentQuality(note, config)) continue;
+			if (this.getLowValuePenalty(note, config) >= config.excludeThreshold && !this.hasStrongEngagement(note)) continue;
 			const authorCount = authorCounts.get(note.userId) ?? 0;
 			if (authorCount >= 2) continue;
 			if (note.channelId != null && (channelCounts.get(note.channelId) ?? 0) >= 2) continue;
@@ -667,8 +679,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const ageHours = Math.max(0, (now - this.idService.parse(note.id).date.getTime()) / (1000 * 60 * 60));
 			const isPinnedInChannel = note.channel?.pinnedNoteIds?.includes(note.id) ?? false;
 			if (ageHours >= 24 * 7 && !isPinnedInChannel) continue;
-			if (ageHours >= OLD_CONTENT_HOURS && !isPinnedInChannel && !this.hasOldContentQuality(note)) continue;
-			if (this.getLowValuePenalty(note) >= 60 && !this.hasStrongEngagement(note)) continue;
+			if (ageHours >= OLD_CONTENT_HOURS && !isPinnedInChannel && !this.hasOldContentQuality(note, config)) continue;
+			if (this.getLowValuePenalty(note, config) >= config.excludeThreshold && !this.hasStrongEngagement(note)) continue;
 			if ((limit - selected.length) > exploreSlots && selected.length >= Math.max(limit - exploreSlots, 0)) continue;
 			selected.push(note);
 		}
@@ -680,8 +692,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		return this.getEngagementScore(note) >= 10;
 	}
 
-	private hasOldContentQuality(note: { text: string | null; tags?: string[]; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[] }): boolean {
-		return this.getEngagementScore(note) >= 6 || this.getQualityScore(note) >= 18;
+	private hasOldContentQuality(note: { text: string | null; tags?: string[]; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[] }, config: RecommendationConfig): boolean {
+		return this.getEngagementScore(note) >= 6 || this.getQualityScore(note, config) >= 18;
 	}
 
 	private getEngagementScore(note: { repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number> }): number {
@@ -689,29 +701,33 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		return reactionCount + (note.repliesCount ?? 0) * 2 + (note.renoteCount ?? 0) * 2 + (note.clippedCount ?? 0) * 3;
 	}
 
-	private getQualityScore(note: { text: string | null; tags?: string[]; channelId?: string | null; fileIds?: string[] }): number {
+	private getQualityScore(note: { text: string | null; tags?: string[]; channelId?: string | null; fileIds?: string[] }, config: RecommendationConfig): number {
 		const text = (note.text ?? '').trim();
 		const lower = text.toLowerCase();
 		let score = 0;
-		if ((note.tags ?? []).some(tag => QUALITY_TAGS.includes(tag))) score += 18;
-		if (/(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|求助|ai|claude|codex|gpt)/i.test(text)) score += 18;
-		if (/(token|key|资源)/i.test(lower) && /(教程|指南|配置|部署|使用方法|说明|讨论|问题|怎么|如何|求助)/i.test(text)) score += 10;
+		// ----- 管理者が調整可能な加点(良質タグ/キーワード) -----
+		if (config.enabled) {
+			if (hasAnyTag(note.tags, config.qualityTags)) score += config.weights.qualityBoost;
+			if (containsKeyword(text, config.qualityKeywords)) score += config.weights.qualityBoost;
+		}
+		// ----- 内蔵の構造的加点 -----
+		if (/(token|key|资源)/i.test(lower) && /(教程|指南|配置|部署|使用方法|说明|讨论|怎么用|如何)/i.test(text)) score += 10;
 		if (text.replace(/\s+/g, '').length >= 80) score += 10;
 		if ((note.fileIds?.length ?? 0) > 0) score += 4;
 		if (note.channelId != null) score += 6;
 		return score;
 	}
 
-	private getLowValuePenalty(note: { text: string | null; tags?: string[]; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; channel?: { name?: string | null } | null }): number {
+	private getLowValuePenalty(note: { text: string | null; tags?: string[]; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; channel?: { name?: string | null } | null }, config: RecommendationConfig): number {
 		const text = (note.text ?? '').trim();
 		const compactText = text.replace(/\s+/g, '');
 		const engagement = this.getEngagementScore(note);
-		const hasQualityContext = this.getQualityScore(note) > 0;
+		const hasQualityContext = this.getQualityScore(note, config) > 0;
 		let penalty = 0;
+		// ===== 内蔵の構造的ルール(調整対象外:極端に短い・連投・キー羅列・裸リンク 等) =====
 		if (compactText.length < 6 && (note.fileIds?.length ?? 0) === 0) penalty += 42;
 		if (compactText.length < 18 && engagement === 0 && (note.fileIds?.length ?? 0) === 0) penalty += 30;
 		if (/^(签到|打卡|水|路过|测试|1|11|111|。|，|哈)+$/i.test(compactText)) penalty += 50;
-		if ((note.tags ?? []).some(tag => LOW_VALUE_TAGS.includes(tag))) penalty += 18;
 		if (/^(.)\1{5,}$/.test(compactText)) penalty += 24;
 		if (/(邀请|注册送|倍率|白嫖|来蹬|轻蹬|随便用|限时密钥|限时\s*key|私\s*key|号池)/i.test(text)) penalty += 38;
 		if (/(tp-[a-z0-9_-]{16,}|api[_ -]?key|密钥)/i.test(text)) penalty += 38;
@@ -720,12 +736,21 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		if (/^https?:\/\/\S+$/i.test(text)) penalty += 26;
 		if (/https?:\/\/\S+/i.test(text) && compactText.length < 90 && !hasQualityContext) penalty += 18;
 		if (/https?:\/\/\S+/i.test(text) && /(强不强|偷着乐|点\s*star|点\s*start|买不了吃亏|买不了上当|推荐.*机场)/i.test(text)) penalty += 34;
-		// aff/引流/推广 広告: 联系方式引流・返利分销・aff联盟・带货变现など。教程など正当な文脈(hasQualityContext)は除外して誤爆を防ぐ
-		const promoPattern = /(加.{0,3}(微信|威信|vx|wx|q\s*群|qq\s*群|电报|飞机|tg|telegram))|(返利|佣金|返佣|分销|代理|招商|加盟|拉新|地推|带货|变现|副业|兼职|日入|月入|躺赚|薅羊毛|割韭菜)|(\baff\b|affiliate|联盟营销|推广链接|邀请链接|优惠码|折扣码)/i;
-		if (promoPattern.test(text) && !hasQualityContext) penalty += 42;
-		// 外链 + マーケ語 = 強い aff/引流
-		if (/https?:\/\/\S+/i.test(text) && /(返利|佣金|代理|招商|推广|引流|优惠码|折扣码|限时|福利|低价|秒杀|清仓|下单|购买|加微信|加群)/i.test(text) && !hasQualityContext) penalty += 36;
 		if (note.channel?.name != null && new RegExp(LOW_VALUE_CHANNEL_NAME_PATTERN, 'i').test(note.channel.name)) penalty += 42;
+
+		// ===== 管理者が調整可能なルール(語と重みは meta.recommendationConfig / 管理画面で変更可) =====
+		if (config.enabled) {
+			// 低品質タグ(签到/打卡/广告/bug 等)
+			if (hasAnyTag(note.tags, config.lowValueTags)) penalty += config.weights.lowValueTagPenalty;
+			// 広告/引流キーワード(返利/加微信/中转/机场 等)。正当な文脈(教程など)は除外して誤爆を防ぐ
+			if (containsKeyword(text, config.promoKeywords) && !hasQualityContext) penalty += config.weights.promoPenalty;
+			// bug/不具合・要望(タグ #bug もしくは bug キーワード)。一般ユーザー向けの推薦には不向き → 降权
+			if (hasAnyTag(note.tags, ['bug']) || /(^|[\s#])bug([\s#]|$)/i.test(text) || containsKeyword(text, config.bugKeywords)) penalty += config.weights.bugPenalty;
+			// aff リンク(?aff=)は明確な広告 → 強く降权
+			if (/[?&]aff[=_-]/i.test(text)) penalty += config.weights.affLinkPenalty;
+			// 登録/招待リンクの引流(正当なチュートリアル文脈は除外)
+			if (/https?:\/\/\S*\/(register|signup|sign-up|invite|ref)\b/i.test(text) && !hasQualityContext) penalty += config.weights.promoPenalty;
+		}
 		return penalty;
 	}
 

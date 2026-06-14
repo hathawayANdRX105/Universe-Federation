@@ -187,6 +187,11 @@ const menuDef = computed<SuperMenuDef[]>(() => [{
 		to: '/admin/ads',
 		active: currentPage.value?.route.name === 'ads',
 	}, {
+		icon: 'ti ti-sparkles',
+		text: i18n.ts._recommendationAdmin.title,
+		to: '/admin/recommendation',
+		active: currentPage.value?.route.name === 'recommendation',
+	}, {
 		icon: 'ti ti-exclamation-circle',
 		text: i18n.ts.abuseReports,
 		to: '/admin/abuses',

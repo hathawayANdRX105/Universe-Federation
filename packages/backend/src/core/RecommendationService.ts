@@ -5,12 +5,14 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import * as Redis from 'ioredis';
-import { In } from 'typeorm';
+import { In, IsNull, Not } from 'typeorm';
 import { DI } from '@/di-symbols.js';
-import type { ChannelFollowingsRepository, FollowingsRepository, MiNote, MutingsRepository, NoteRecommendationsRepository, NotesRepository } from '@/models/_.js';
+import type { ChannelFollowingsRepository, FollowingsRepository, MetasRepository, MiNote, MutingsRepository, NoteRecommendationsRepository, NotesRepository } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { normalizeForSearch } from '@/misc/normalize-for-search.js';
 import { TimeService } from '@/global/TimeService.js';
+import { MetaService } from '@/core/MetaService.js';
+import { mergeRecommendationConfig, type RecommendationConfig } from '@/core/RecommendationConfig.js';
 
 export const recommendationEventTypes = ['impression', 'click', 'expand', 'dwell', 'react', 'renote', 'reply', 'clip'] as const;
 export type RecommendationEventType = typeof recommendationEventTypes[number];
@@ -52,6 +54,8 @@ const DELIVERED_MAX_ITEMS = 600;
 const MAX_PROFILE_ITEMS = 160;
 const EXPOSURE_KEY = 'recommendation:exposure:notes';
 const HOT_KEY = 'recommendation:hot:notes';
+// 推薦設定の per-process キャッシュ TTL。変更は最大この時間で全プロセスに反映される。
+const RECOMMENDATION_CONFIG_CACHE_MS = 1000 * 20;
 const LOW_VALUE_TERMS = new Set(['签到', '打卡', '水贴', '路过', '测试']);
 const EVENT_WEIGHTS: Record<RecommendationEventType, number> = {
 	impression: 0.05,
@@ -66,6 +70,9 @@ const EVENT_WEIGHTS: Record<RecommendationEventType, number> = {
 
 @Injectable()
 export class RecommendationService {
+	// 推薦設定の per-process キャッシュ(getRecommendationConfig 用)
+	private cachedConfig: { value: RecommendationConfig; at: number } | null = null;
+
 	constructor(
 		@Inject(DI.redis)
 		private redisClient: Redis.Redis,
@@ -85,8 +92,56 @@ export class RecommendationService {
 		@Inject(DI.noteRecommendationsRepository)
 		private noteRecommendationsRepository: NoteRecommendationsRepository,
 
+		@Inject(DI.metasRepository)
+		private metasRepository: MetasRepository,
+
+		private readonly metaService: MetaService,
 		private readonly timeService: TimeService,
 	) {
+	}
+
+	/**
+	 * 設定を DB から直接読む(authoritative)。8 プロセス構成で DI.meta の伝播に依存しないよう、
+	 * プロセスごとに短い TTL でキャッシュする(高トラフィックでも DB は ~1 query/20s/process)。
+	 */
+	@bindThis
+	private async fetchRecommendationConfigFresh(): Promise<RecommendationConfig> {
+		const meta = await this.metasRepository.findOne({ where: { id: Not(IsNull()) }, order: { id: 'DESC' } });
+		return mergeRecommendationConfig(meta?.recommendationConfig);
+	}
+
+	/**
+	 * 管理者が調整可能な推薦設定(降权/加点する語と重み)を取得する。
+	 * 部分設定を既定値で補完して返す。変更は最大 RECOMMENDATION_CONFIG_CACHE_MS 後に全プロセスへ反映される。
+	 */
+	@bindThis
+	public async getRecommendationConfig(): Promise<RecommendationConfig> {
+		const now = this.timeService.now;
+		if (this.cachedConfig != null && (now - this.cachedConfig.at) < RECOMMENDATION_CONFIG_CACHE_MS) {
+			return this.cachedConfig.value;
+		}
+		const value = await this.fetchRecommendationConfigFresh();
+		this.cachedConfig = { value, at: now };
+		return value;
+	}
+
+	/**
+	 * 設定を更新する(管理画面から)。部分更新は現在の設定に重ねてから検証・保存する。
+	 * (一部フィールドだけ送られても他フィールドが既定値に戻らないようにする)
+	 */
+	@bindThis
+	public async updateRecommendationConfig(partial: unknown): Promise<RecommendationConfig> {
+		const current = await this.fetchRecommendationConfigFresh();
+		const p = (partial != null && typeof partial === 'object' ? partial : {}) as Partial<RecommendationConfig> & { weights?: Partial<RecommendationConfig['weights']> };
+		const merged = mergeRecommendationConfig({
+			...current,
+			...p,
+			weights: { ...current.weights, ...(p.weights ?? {}) },
+		});
+		await this.metaService.update({ recommendationConfig: merged as unknown as Record<string, any> });
+		// このプロセスのキャッシュは即時無効化(他プロセスは TTL 経過で反映)
+		this.cachedConfig = null;
+		return merged;
 	}
 
 	/** 候補ノートの管理者上書き(ピン留め・スコア調整)をまとめて取得 */

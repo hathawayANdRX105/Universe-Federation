@@ -416,6 +416,9 @@ type AdminQueueShowJobRequest = operations['admin___queue___show-job']['requestB
 type AdminQueueStatsResponse = operations['admin___queue___stats']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type AdminRecommendationGetConfigResponse = operations['admin___recommendation___get-config']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type AdminRecommendationPinnedListResponse = operations['admin___recommendation___pinned-list']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
@@ -423,6 +426,12 @@ type AdminRecommendationShowRequest = operations['admin___recommendation___show'
 
 // @public (undocumented)
 type AdminRecommendationShowResponse = operations['admin___recommendation___show']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type AdminRecommendationUpdateConfigRequest = operations['admin___recommendation___update-config']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminRecommendationUpdateConfigResponse = operations['admin___recommendation___update-config']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type AdminRecommendationUpdateRequest = operations['admin___recommendation___update']['requestBody']['content']['application/json'];
@@ -2213,11 +2222,14 @@ declare namespace entities {
         AdminQueueRetryJobRequest,
         AdminQueueShowJobRequest,
         AdminQueueStatsResponse,
+        AdminRecommendationGetConfigResponse,
         AdminRecommendationPinnedListResponse,
         AdminRecommendationShowRequest,
         AdminRecommendationShowResponse,
         AdminRecommendationUpdateRequest,
         AdminRecommendationUpdateResponse,
+        AdminRecommendationUpdateConfigRequest,
+        AdminRecommendationUpdateConfigResponse,
         AdminRejectQuotesRequest,
         AdminRelaysAddRequest,
         AdminRelaysAddResponse,

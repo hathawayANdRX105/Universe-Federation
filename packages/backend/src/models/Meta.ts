@@ -703,6 +703,11 @@ export class MiMeta {
 	})
 	public policies: Record<string, any>;
 
+	@Column('jsonb', {
+		default: { },
+	})
+	public recommendationConfig: Record<string, any>;
+
 	@Column('text', {
 		array: true,
 		default: '{}',

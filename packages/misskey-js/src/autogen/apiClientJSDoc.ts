@@ -1136,6 +1136,17 @@ declare module '../api.js' {
      * 
      * **Credential required**: *Yes* / **Permission**: *read:admin:recommendation*
      */
+    request<E extends 'admin/recommendation/get-config', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params?: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     * 
+     * **Credential required**: *Yes* / **Permission**: *read:admin:recommendation*
+     */
     request<E extends 'admin/recommendation/pinned-list', P extends Endpoints[E]['req']>(
       endpoint: E,
       params?: P,
@@ -1159,6 +1170,17 @@ declare module '../api.js' {
      * **Credential required**: *Yes* / **Permission**: *write:admin:recommendation*
      */
     request<E extends 'admin/recommendation/update', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     * 
+     * **Credential required**: *Yes* / **Permission**: *write:admin:recommendation*
+     */
+    request<E extends 'admin/recommendation/update-config', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,

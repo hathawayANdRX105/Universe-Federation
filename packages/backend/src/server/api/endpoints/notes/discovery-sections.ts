@@ -13,11 +13,32 @@ import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { QueryService } from '@/core/QueryService.js';
 import { SearchTrendService } from '@/core/SearchTrendService.js';
 import { IdService } from '@/core/IdService.js';
+import { RecommendationService } from '@/core/RecommendationService.js';
+import type { RecommendationConfig } from '@/core/RecommendationConfig.js';
 import { TimeService } from '@/global/TimeService.js';
 import { DI } from '@/di-symbols.js';
 
 const DISCOVERY_WINDOW = 1000 * 60 * 60 * 24 * 7;
 const DISCOVERY_FRESH_PRIORITY_HOURS = 48;
+// 候補プールを limit より大きく取り、その中から上位偏重の重み付きランダムで選ぶことで
+// 「万年不変」を解消しつつ品質を保つ。
+const POOL_MULTIPLIER = 4;
+// 構造的な低品質シグナル(調整対象外):キー羅列・注册送・裸の招待リンク 等。
+const STRUCTURAL_DISCOVERY_PATTERN = '签到|打卡|限时密钥|限时\\s*key|私\\s*key|tp-[a-z0-9_-]{16,}|sk-[a-z0-9_-]{12,}|白嫖|注册送|倍率|号池|强不强|偷着乐|点\\s*star|点\\s*start|买不了吃亏|买不了上当|[?&]aff[=_-]|/(register|signup|invite|ref)\\?';
+
+// 管理者設定のキーワードを Postgres POSIX 正規表現の選択肢に変換(メタ文字エスケープ)。
+function escapeForPgRegex(s: string): string {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// 発見セクションから除外する低品質テキストパターン(構造的 + 管理者設定の広告/bug 語)。
+function buildDiscoveryLowValuePattern(config: RecommendationConfig): string {
+	const words = [...config.promoKeywords, ...config.bugKeywords]
+		.map(w => w.trim())
+		.filter(w => w.length > 0)
+		.map(escapeForPgRegex);
+	return words.length > 0 ? `${STRUCTURAL_DISCOVERY_PATTERN}|${words.join('|')}` : STRUCTURAL_DISCOVERY_PATTERN;
+}
 
 export const meta = {
 	tags: ['notes'],
@@ -97,15 +118,18 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private queryService: QueryService,
 		private searchTrendService: SearchTrendService,
 		private idService: IdService,
+		private recommendationService: RecommendationService,
 		private readonly timeService: TimeService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			const sinceId = this.idService.gen(this.timeService.now - DISCOVERY_WINDOW);
+			// 管理者が調整可能な推薦設定(低品質/広告/bug 語の除外に使う)
+			const config = await this.recommendationService.getRecommendationConfig();
 			const [trends, coverNotes, hotNotes, tutorialNotes, channels, users] = await Promise.all([
 				this.searchTrendService.getTrends(ps.limit),
-				this.getCoverNotes(sinceId, ps.limit, me),
-				this.getHotNotes(sinceId, ps.limit, me),
-				this.getTutorialNotes(sinceId, ps.limit, me),
+				this.getCoverNotes(sinceId, ps.limit, me, config),
+				this.getHotNotes(sinceId, ps.limit, me, config),
+				this.getTutorialNotes(sinceId, ps.limit, me, config),
 				this.getChannels(ps.limit, me),
 				this.getUsers(ps.limit, me),
 			]);
@@ -121,7 +145,27 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		});
 	}
 
-	private baseNotesQuery(sinceId: string, me: Parameters<QueryService['generateVisibilityQuery']>[1]) {
+	// 上位偏重の重み付きランダム抽出。スコア順の候補プールから count 件を選び、
+	// 毎回の更新で並びと顔ぶれが変わるようにする(上位ほど選ばれやすい)。
+	private pickWeighted<T>(pool: T[], count: number): T[] {
+		if (pool.length <= count) return pool;
+		const items = pool.map((item, i) => ({ item, weight: Math.pow(pool.length - i, 1.6) }));
+		const picked: T[] = [];
+		while (picked.length < count && items.length > 0) {
+			const total = items.reduce((s, e) => s + e.weight, 0);
+			let r = Math.random() * total;
+			let idx = items.length - 1;
+			for (let i = 0; i < items.length; i++) {
+				r -= items[i].weight;
+				if (r <= 0) { idx = i; break; }
+			}
+			picked.push(items[idx].item);
+			items.splice(idx, 1);
+		}
+		return picked;
+	}
+
+	private baseNotesQuery(sinceId: string, me: Parameters<QueryService['generateVisibilityQuery']>[1], config: RecommendationConfig) {
 		const query = this.notesRepository.createQueryBuilder('note')
 			.where('note.id > :sinceId', { sinceId })
 			.andWhere('note.visibility = \'public\'')
@@ -137,8 +181,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				qb.orWhere('note.tags IS NULL');
 				qb.orWhere('NOT (note.tags && CAST(:discoveryLowValueTags AS varchar[]))');
 			}))
-			.setParameter('discoveryLowValuePattern', '签到|打卡|限时密钥|限时\\s*key|私\\s*key|tp-[a-z0-9_-]{16,}|sk-[a-z0-9_-]{12,}|白嫖|注册送|倍率|号池|强不强|偷着乐|点\\s*star|点\\s*start|买不了吃亏|买不了上当')
-			.setParameter('discoveryLowValueTags', ['签到', '打卡', '水贴', 'Key', 'key']);
+			.setParameter('discoveryLowValuePattern', buildDiscoveryLowValuePattern(config))
+			.setParameter('discoveryLowValueTags', config.lowValueTags.length > 0 ? config.lowValueTags : ['__never_match_sentinel_zzqx__']);
 		this.queryService.generateVisibilityQuery(query, me);
 		this.queryService.generateReplyTargetVisibilityQuery(query, me);
 		this.queryService.generateBlockedHostQueryForNote(query);
@@ -152,10 +196,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		return query;
 	}
 
-	private async getCoverNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1]) {
+	private async getCoverNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1], config: RecommendationConfig) {
 		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * DISCOVERY_FRESH_PRIORITY_HOURS);
 		const fresh3dId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 3);
-		const query = this.baseNotesQuery(sinceId, me)
+		const query = this.baseNotesQuery(sinceId, me, config)
 			.andWhere('note.fileIds != \'{}\'')
 			.andWhere('user.isBot = FALSE')
 			.andWhere(new Brackets(qb => {
@@ -173,14 +217,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.addOrderBy('note.id', 'DESC')
 			.setParameter('fresh48hId', fresh48hId)
 			.setParameter('fresh3dId', fresh3dId)
-			.limit(limit);
-		return this.noteEntityService.packMany(await query.getMany(), me);
+			.limit(limit * POOL_MULTIPLIER);
+		return this.noteEntityService.packMany(this.pickWeighted(await query.getMany(), limit), me);
 	}
 
-	private async getHotNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1]) {
+	private async getHotNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1], config: RecommendationConfig) {
 		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * DISCOVERY_FRESH_PRIORITY_HOURS);
 		const fresh3dId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 3);
-		const query = this.baseNotesQuery(sinceId, me)
+		const query = this.baseNotesQuery(sinceId, me, config)
 			.andWhere('user.isBot = FALSE')
 			.andWhere('LENGTH(COALESCE(note.text, \'\')) >= 20')
 			.andWhere(new Brackets(qb => {
@@ -202,19 +246,19 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				+ CASE WHEN note."channelId" IS NOT NULL THEN 8 ELSE 0 END
 				+ CASE WHEN note.id > :fresh48hId THEN 52 ELSE -38 END
 				+ CASE WHEN note.id > :fresh3dId THEN 12 ELSE -18 END
-				+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|怎么|如何|说明|公告|更新|修复|bug|问题|讨论|求助|ai|claude|codex|gpt)' THEN 12 ELSE 0 END
+				+ CASE WHEN LOWER(COALESCE(note.text, '')) ~ '(教程|指南|配置|部署|使用方法|怎么用|如何|说明|公告|更新|讨论|分享|经验|科普|ai|claude|codex|gpt)' THEN 12 ELSE 0 END
 			)`, 'DESC')
 			.addOrderBy('note.id', 'DESC')
 			.setParameter('fresh48hId', fresh48hId)
 			.setParameter('fresh3dId', fresh3dId)
-			.limit(limit);
-		return this.noteEntityService.packMany(await query.getMany(), me);
+			.limit(limit * POOL_MULTIPLIER);
+		return this.noteEntityService.packMany(this.pickWeighted(await query.getMany(), limit), me);
 	}
 
-	private async getTutorialNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1]) {
+	private async getTutorialNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1], config: RecommendationConfig) {
 		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * DISCOVERY_FRESH_PRIORITY_HOURS);
 		const fresh3dId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 3);
-		const query = this.baseNotesQuery(sinceId, me)
+		const query = this.baseNotesQuery(sinceId, me, config)
 			.andWhere('user.isBot = FALSE')
 			.andWhere(new Brackets(qb => {
 				qb.orWhere('note.tags && CAST(:tutorialTags AS varchar[])');
@@ -225,8 +269,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				qb.orWhere('note."repliesCount" + note."renoteCount" + note."clippedCount" >= 2');
 				qb.orWhere('LENGTH(COALESCE(note.text, \'\')) >= 120');
 			}))
-			.setParameter('tutorialTags', ['教程', 'AI', 'ai', 'Token', 'token', '资源', '指南', 'Bug', 'bug', '问题', '讨论'])
-			.setParameter('tutorialPattern', '教程|指南|配置|部署|api|claude|codex|ai|gpt|token|key|资源|问题|讨论|求助')
+			.setParameter('tutorialTags', ['教程', 'AI', 'ai', 'Token', 'token', '资源', '指南', '讨论', '分享', '经验'])
+			.setParameter('tutorialPattern', '教程|指南|配置|部署|api|claude|codex|ai|gpt|token|资源|讨论|分享|经验|科普')
 			.orderBy(`(
 				note."repliesCount" * 4
 				+ note."renoteCount" * 3
@@ -239,8 +283,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.addOrderBy('note.id', 'DESC')
 			.setParameter('fresh48hId', fresh48hId)
 			.setParameter('fresh3dId', fresh3dId)
-			.limit(limit);
-		return this.noteEntityService.packMany(await query.getMany(), me);
+			.limit(limit * POOL_MULTIPLIER);
+		return this.noteEntityService.packMany(this.pickWeighted(await query.getMany(), limit), me);
 	}
 
 	private async getChannels(limit: number, me: Parameters<ChannelEntityService['packMany']>[1]) {
@@ -258,21 +302,35 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			)`, 'DESC')
 			.setParameter('lowValueChannelPattern', '^(Key|key|白嫖|签到|打卡)$')
 			.addOrderBy('channel.lastNotedAt', 'DESC', 'NULLS LAST')
-			.limit(limit)
+			.limit(limit * POOL_MULTIPLIER)
 			.getMany();
-		return this.channelEntityService.packMany(channels, me);
+		return this.channelEntityService.packMany(this.pickWeighted(channels, limit), me);
 	}
 
 	private async getUsers(limit: number, me: Parameters<UserEntityService['packMany']>[1]) {
-		const users = await this.usersRepository.createQueryBuilder('user')
+		const query = this.usersRepository.createQueryBuilder('user')
 			.where('user.host IS NULL')
 			.andWhere('user.isSuspended = FALSE')
 			.andWhere('user.isDeleted = FALSE')
 			.andWhere('user.isBot = FALSE')
-			.orderBy('"user"."followersCount"', 'DESC')
+			.andWhere('user.notesCount >= 3');
+		if (me) {
+			// 自分自身と、すでにフォロー済みのユーザーは「おすすめ」から除外する
+			// ("user" は予約語なので、生サブクエリ内では必ずクォートする)
+			query.andWhere('"user"."id" != :meId', { meId: me.id });
+			query.andWhere('NOT EXISTS (SELECT 1 FROM "following" f WHERE f."followerId" = :meId AND f."followeeId" = "user"."id")', { meId: me.id });
+		}
+		const users = await query
+			.orderBy(`(
+				LEAST("user"."followersCount", 500) * 1.0
+				+ LEAST("user"."notesCount", 300) * 0.2
+				+ CASE WHEN "user"."updatedAt" > now() - interval '14 days' THEN 40 ELSE 0 END
+				+ CASE WHEN "user"."updatedAt" > now() - interval '60 days' THEN 15 ELSE -25 END
+			)`, 'DESC')
+			.addOrderBy('"user"."followersCount"', 'DESC')
 			.addOrderBy('"user"."notesCount"', 'DESC')
-			.limit(limit)
+			.limit(limit * POOL_MULTIPLIER)
 			.getMany();
-		return this.userEntityService.packMany(users, me);
+		return this.userEntityService.packMany(this.pickWeighted(users, limit), me);
 	}
 }

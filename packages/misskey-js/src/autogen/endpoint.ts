@@ -126,11 +126,14 @@ import type {
 	AdminQueueRetryJobRequest,
 	AdminQueueShowJobRequest,
 	AdminQueueStatsResponse,
+	AdminRecommendationGetConfigResponse,
 	AdminRecommendationPinnedListResponse,
 	AdminRecommendationShowRequest,
 	AdminRecommendationShowResponse,
 	AdminRecommendationUpdateRequest,
 	AdminRecommendationUpdateResponse,
+	AdminRecommendationUpdateConfigRequest,
+	AdminRecommendationUpdateConfigResponse,
 	AdminRejectQuotesRequest,
 	AdminRelaysAddRequest,
 	AdminRelaysAddResponse,
@@ -864,9 +867,11 @@ export type Endpoints = {
 	'admin/queue/retry-job': { req: AdminQueueRetryJobRequest; res: EmptyResponse };
 	'admin/queue/show-job': { req: AdminQueueShowJobRequest; res: EmptyResponse };
 	'admin/queue/stats': { req: EmptyRequest; res: AdminQueueStatsResponse };
+	'admin/recommendation/get-config': { req: EmptyRequest; res: AdminRecommendationGetConfigResponse };
 	'admin/recommendation/pinned-list': { req: EmptyRequest; res: AdminRecommendationPinnedListResponse };
 	'admin/recommendation/show': { req: AdminRecommendationShowRequest; res: AdminRecommendationShowResponse };
 	'admin/recommendation/update': { req: AdminRecommendationUpdateRequest; res: AdminRecommendationUpdateResponse };
+	'admin/recommendation/update-config': { req: AdminRecommendationUpdateConfigRequest; res: AdminRecommendationUpdateConfigResponse };
 	'admin/reject-quotes': { req: AdminRejectQuotesRequest; res: EmptyResponse };
 	'admin/relays/add': { req: AdminRelaysAddRequest; res: AdminRelaysAddResponse };
 	'admin/relays/list': { req: EmptyRequest; res: AdminRelaysListResponse };

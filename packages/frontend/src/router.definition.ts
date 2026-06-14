@@ -501,6 +501,10 @@ export const ROUTE_DEF = [{
 		name: 'chat-settings',
 		component: iAmAdmin ? page(() => import('@/pages/admin/chat-settings.vue')) : page(() => import('@/pages/not-found.vue')),
 	}, {
+		path: '/recommendation',
+		name: 'recommendation',
+		component: page(() => import('@/pages/admin/recommendation.vue')),
+	}, {
 		path: '/branding',
 		name: 'branding',
 		component: page(() => import('@/pages/admin/branding.vue')),

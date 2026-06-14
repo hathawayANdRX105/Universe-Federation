@@ -6099,6 +6099,112 @@ export interface Locale extends ILocale {
          */
         "saved": string;
     };
+    "_recommendationAdmin": {
+        /**
+         * おすすめ管理
+         */
+        "title": string;
+        /**
+         * ホームのおすすめアルゴリズムを動的に調整します:どの語を降格・加点するか、その重み、そして何点未満を除外するか。1行に1語、空欄でそのルールを無効化。
+         */
+        "about": string;
+        /**
+         * 語ベースの調整を有効化
+         */
+        "enabled": string;
+        /**
+         * オフにすると下記の語リストと重みは無視されます(内蔵の構造的フィルタのみ残ります)。
+         */
+        "enabledCaption": string;
+        /**
+         * 降格(広告/低品質/フィードバック)
+         */
+        "demote": string;
+        /**
+         * 加点(良質コンテンツ)
+         */
+        "promote": string;
+        /**
+         * 除外しきい値
+         */
+        "threshold": string;
+        /**
+         * 1行に1つ。カンマ区切りも可
+         */
+        "listCaption": string;
+        /**
+         * 投稿のハッシュタグに一致
+         */
+        "tagsCaption": string;
+        /**
+         * 低品質タグ
+         */
+        "lowValueTags": string;
+        /**
+         * 低品質タグの減点
+         */
+        "lowValueTagPenalty": string;
+        /**
+         * 広告/勧誘キーワード
+         */
+        "promoKeywords": string;
+        /**
+         * 一致で降格(チュートリアル等の正当な文脈は除外)
+         */
+        "promoCaption": string;
+        /**
+         * 広告キーワードの減点
+         */
+        "promoPenalty": string;
+        /**
+         * bug/フィードバック/エラー キーワード
+         */
+        "bugKeywords": string;
+        /**
+         * 不具合報告や要望は一般フィードには不向きです
+         */
+        "bugCaption": string;
+        /**
+         * bug/フィードバックの減点
+         */
+        "bugPenalty": string;
+        /**
+         * aff リンクの減点
+         */
+        "affLinkPenalty": string;
+        /**
+         * ?aff= を含む明確な勧誘リンク
+         */
+        "affLinkCaption": string;
+        /**
+         * 良質タグ
+         */
+        "qualityTags": string;
+        /**
+         * 良質コンテンツ キーワード
+         */
+        "qualityKeywords": string;
+        /**
+         * チュートリアル・共有・議論などは一致で加点
+         */
+        "qualityCaption": string;
+        /**
+         * 良質コンテンツの加点
+         */
+        "qualityBoost": string;
+        /**
+         * 除外しきい値
+         */
+        "excludeThreshold": string;
+        /**
+         * 減点の合計がこの値に達し、かつ強いエンゲージメントが無い投稿はおすすめから除外されます(既定 60)。
+         */
+        "excludeThresholdCaption": string;
+        /**
+         * 既定に戻す
+         */
+        "restoreDefaults": string;
+    };
     "_emojiPalette": {
         /**
          * パレット
