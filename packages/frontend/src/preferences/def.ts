@@ -135,14 +135,11 @@ export const PREF_DEF = {
 	menu: {
 		default: [
 			'notifications',
-			'explore',
 			'channels',
 			'followRequests',
 			'-',
 			'announcements',
 			'favorites',
-			'drive',
-			'achievements',
 			'chat',
 			'ai',
 		],
