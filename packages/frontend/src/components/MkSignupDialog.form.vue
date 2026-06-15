@@ -232,6 +232,7 @@ function onChangeEmail(): void {
 			result.reason === 'format' ? 'unavailable:format' :
 			result.reason === 'disposable' ? 'unavailable:disposable' :
 			result.reason === 'banned' ? 'unavailable:banned' :
+			result.reason === 'notAllowed' ? 'unavailable:banned' :
 			result.reason === 'mx' ? 'unavailable:mx' :
 			result.reason === 'smtp' ? 'unavailable:smtp' :
 			'unavailable';

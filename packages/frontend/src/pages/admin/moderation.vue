@@ -24,6 +24,45 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<template #label>{{ i18n.ts.approvalRequiredForSignup }}</template>
 				</MkSwitch>
 
+				<MkFolder>
+					<template #icon><i class="ti ti-mail-cog"></i></template>
+					<template #label>{{ i18n.ts.signupEmailRestriction }}</template>
+
+					<div class="_gaps">
+						<MkSwitch v-model="signupEmailRestriction" @update:modelValue="save_signupEmailRestriction">
+							<template #label>{{ i18n.ts.enableSignupEmailRestriction }}</template>
+							<template #caption>{{ i18n.ts.signupEmailRestrictionDescription }}</template>
+						</MkSwitch>
+
+						<div class="_gaps_s">
+							<div v-for="(rule, i) in signupEmailRules" :key="i" :class="$style.ruleRow">
+								<MkInput v-model="rule.domain" :class="$style.ruleDomain" :spellcheck="false" placeholder="qq.com">
+									<template #label>{{ i18n.ts.domain }}</template>
+								</MkInput>
+								<MkInput v-model="rule.localPartRegex" :class="$style.ruleRegex" :spellcheck="false" placeholder="^[0-9]{1,10}$">
+									<template #label>{{ i18n.ts.localPartRegex }}</template>
+								</MkInput>
+								<button class="_button" :class="$style.ruleDel" @click="signupEmailRules.splice(i, 1)"><i class="ti ti-trash"></i></button>
+							</div>
+							<div :class="$style.ruleActions">
+								<MkButton rounded @click="signupEmailRules.push({ domain: '', localPartRegex: '' })"><i class="ti ti-plus"></i> {{ i18n.ts.add }}</MkButton>
+								<MkButton rounded @click="applyEmailPreset">✨ Gmail + QQ</MkButton>
+							</div>
+						</div>
+
+						<MkInput v-model="emailTest" :spellcheck="false" placeholder="123456@qq.com">
+							<template #label>{{ i18n.ts.testEmail }}</template>
+							<template #caption>
+								<span v-if="emailTest.includes('@')" :style="{ color: emailTestResult ? 'var(--MI_THEME-success)' : 'var(--MI_THEME-error)', fontWeight: 700 }">
+									<i :class="emailTestResult ? 'ti ti-check' : 'ti ti-x'"></i> {{ emailTestResult ? i18n.ts.emailAllowed : i18n.ts.emailNotAllowed }}
+								</span>
+							</template>
+						</MkInput>
+
+						<MkButton primary @click="save_signupEmailRules">{{ i18n.ts.save }}</MkButton>
+					</div>
+				</MkFolder>
+
 				<FormLink to="/admin/server-rules">{{ i18n.ts.serverRules }}</FormLink>
 
 				<MkFolder>
@@ -231,7 +270,29 @@ SPDX-License-Identifier: AGPL-3.0-only
 	const blockedHosts = ref<string>('');
 	const silencedHosts = ref<string>('');
 	const mediaSilencedHosts = ref<string>('');
+	const signupEmailRestriction = ref<boolean>(false);
+	const signupEmailRules = ref<{ domain: string; localPartRegex: string; }[]>([]);
+	const emailTest = ref<string>('');
 	const newRootUser = shallowRef<Misskey.entities.UserDetailed | null>(null);
+
+	const emailTestResult = computed(() => {
+		const email = emailTest.value.trim();
+		const at = email.lastIndexOf('@');
+		if (at <= 0) return false;
+		const local = email.slice(0, at);
+		const domain = email.slice(at + 1).toLowerCase();
+		if (!signupEmailRestriction.value) return true;
+		const rule = signupEmailRules.value.find(r => r.domain.trim().toLowerCase() === domain);
+		if (rule == null) return false;
+		if (rule.localPartRegex.trim().length > 0) {
+			try {
+				return new RegExp(rule.localPartRegex.trim()).test(local);
+			} catch {
+				return true;
+			}
+		}
+		return true;
+	});
 
 	async function init() {
 		const meta = await misskeyApi('admin/meta');
@@ -249,6 +310,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 		blockedHosts.value = meta.blockedHosts.join('\n');
 		silencedHosts.value = meta.silencedHosts?.join('\n') ?? '';
 		mediaSilencedHosts.value = meta.mediaSilencedHosts.join('\n');
+		signupEmailRestriction.value = meta.signupEmailRestriction ?? false;
+		signupEmailRules.value = (meta.signupEmailRules ?? []).map(r => ({ domain: r.domain, localPartRegex: r.localPartRegex }));
 	}
 
 	async function onChange_enableRegistration(value: boolean) {
@@ -387,6 +450,35 @@ SPDX-License-Identifier: AGPL-3.0-only
 		});
 	}
 
+	function save_signupEmailRestriction(value: boolean) {
+		os.apiWithDialog('admin/update-meta', {
+			signupEmailRestriction: value,
+		}).then(() => {
+			fetchInstance(true);
+		});
+	}
+
+	function save_signupEmailRules() {
+		const cleaned = signupEmailRules.value
+			.map(r => ({ domain: r.domain.trim().toLowerCase(), localPartRegex: r.localPartRegex.trim() }))
+			.filter(r => r.domain.length > 0);
+		os.apiWithDialog('admin/update-meta', {
+			signupEmailRules: cleaned,
+		}).then(() => {
+			signupEmailRules.value = cleaned;
+			fetchInstance(true);
+		});
+	}
+
+	function applyEmailPreset() {
+		// QQ: 纯数字(防别名) / Gmail: 仅字母数字(禁 . 和 + 别名)
+		signupEmailRules.value = [
+			{ domain: 'qq.com', localPartRegex: '^[0-9]{1,10}$' },
+			{ domain: 'gmail.com', localPartRegex: '^[a-zA-Z0-9]+$' },
+		];
+		signupEmailRestriction.value = true;
+	}
+
 	function selectUser() {
 		os.selectUser({
 			includeSelf: true,
@@ -418,5 +510,36 @@ SPDX-License-Identifier: AGPL-3.0-only
 .folderHeader {
 	padding: var(--MI-marginHalf);
 	gap: var(--MI-marginHalf);
+}
+
+.ruleRow {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+}
+
+.ruleDomain {
+	flex: 0 0 40%;
+	min-width: 0;
+}
+
+.ruleRegex {
+	flex: 1;
+	min-width: 0;
+}
+
+.ruleDel {
+	flex: 0 0 auto;
+	padding: 8px 10px;
+	margin-bottom: 2px;
+	color: var(--MI_THEME-error);
+
+	&:hover { background: var(--MI_THEME-buttonHoverBg); }
+}
+
+.ruleActions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
 }
 </style>

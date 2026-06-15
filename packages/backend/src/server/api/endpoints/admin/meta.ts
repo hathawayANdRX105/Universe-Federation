@@ -219,6 +219,22 @@ export const meta = {
 					optional: false, nullable: false,
 				},
 			},
+			signupEmailRestriction: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
+			signupEmailRules: {
+				type: 'array',
+				optional: false, nullable: false,
+				items: {
+					type: 'object',
+					optional: false, nullable: false,
+					properties: {
+						domain: { type: 'string', optional: false, nullable: false },
+						localPartRegex: { type: 'string', optional: false, nullable: false },
+					},
+				},
+			},
 			preservedUsernames: {
 				type: 'array',
 				optional: false, nullable: false,
@@ -816,6 +832,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				robotsTxt: instance.robotsTxt,
 				enableIdenticonGeneration: instance.enableIdenticonGeneration,
 				bannedEmailDomains: instance.bannedEmailDomains,
+				signupEmailRestriction: instance.signupEmailRestriction,
+				signupEmailRules: instance.signupEmailRules,
 				policies: { ...DEFAULT_POLICIES, ...instance.policies },
 				manifestJsonOverride: instance.manifestJsonOverride,
 				enableFanoutTimeline: instance.enableFanoutTimeline,

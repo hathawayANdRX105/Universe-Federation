@@ -727,6 +727,18 @@ export class MiMeta {
 	})
 	public bannedEmailDomains: string[];
 
+	// 注册邮箱白名单限制：开启后，注册/换绑邮箱仅允许 signupEmailRules 中列出的域名，
+	// 且本地部分(@前)需匹配该域名的正则(用于防 qq 别名、gmail 的 . / + 别名等)。
+	@Column('boolean', {
+		default: false,
+	})
+	public signupEmailRestriction: boolean;
+
+	@Column('jsonb', {
+		default: [],
+	})
+	public signupEmailRules: { domain: string; localPartRegex: string; }[];
+
 	@Column('varchar', {
 		length: 1024, array: true, default: '{admin,administrator,root,system,maintainer,host,mod,moderator,owner,superuser,staff,auth,i,me,everyone,all,mention,mentions,example,user,users,account,accounts,official,help,helps,support,supports,info,information,informations,announce,announces,announcement,announcements,notice,notification,notifications,dev,developer,developers,tech,misskey}',
 	})

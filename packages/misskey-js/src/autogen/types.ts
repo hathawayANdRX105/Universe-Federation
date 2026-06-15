@@ -20653,6 +20653,11 @@ export interface operations {
                         prohibitedWords: string[];
                         prohibitedWordsForNameOfUser: string[];
                         bannedEmailDomains?: string[];
+                        signupEmailRestriction: boolean;
+                        signupEmailRules: {
+                            domain: string;
+                            localPartRegex: string;
+                        }[];
                         preservedUsernames: string[];
                         bubbleInstances: string[];
                         hcaptchaSecretKey: string | null;
@@ -25624,6 +25629,11 @@ export interface operations {
                     enableIdenticonGeneration?: boolean;
                     serverRules?: string[];
                     bannedEmailDomains?: string[];
+                    signupEmailRestriction?: boolean;
+                    signupEmailRules?: {
+                        domain: string;
+                        localPartRegex?: string;
+                    }[];
                     preservedUsernames?: string[];
                     bubbleInstances?: string[];
                     manifestJsonOverride?: string;

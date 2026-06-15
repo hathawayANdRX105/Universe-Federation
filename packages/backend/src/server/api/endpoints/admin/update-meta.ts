@@ -172,6 +172,18 @@ export const paramDef = {
 		enableIdenticonGeneration: { type: 'boolean' },
 		serverRules: { type: 'array', items: { type: 'string' } },
 		bannedEmailDomains: { type: 'array', items: { type: 'string' } },
+		signupEmailRestriction: { type: 'boolean' },
+		signupEmailRules: {
+			type: 'array',
+			items: {
+				type: 'object',
+				properties: {
+					domain: { type: 'string' },
+					localPartRegex: { type: 'string' },
+				},
+				required: ['domain'],
+			},
+		},
 		preservedUsernames: { type: 'array', items: { type: 'string' } },
 		bubbleInstances: { type: 'array', items: { type: 'string' } },
 		manifestJsonOverride: { type: 'string' },
@@ -785,6 +797,23 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (ps.bannedEmailDomains !== undefined) {
 				set.bannedEmailDomains = ps.bannedEmailDomains;
+			}
+
+			if (ps.signupEmailRestriction !== undefined) {
+				set.signupEmailRestriction = ps.signupEmailRestriction;
+			}
+
+			if (ps.signupEmailRules !== undefined) {
+				// 正规化:去空域名、域名转小写、localPartRegex 缺省为空串、校验正则合法(非法则丢弃该条)
+				set.signupEmailRules = ps.signupEmailRules
+					.map(r => ({ domain: (r.domain ?? '').trim().toLowerCase(), localPartRegex: (r.localPartRegex ?? '').trim() }))
+					.filter(r => {
+						if (r.domain.length === 0) return false;
+						if (r.localPartRegex.length > 0) {
+							try { new RegExp(r.localPartRegex); } catch { return false; }
+						}
+						return true;
+					});
 			}
 
 			if (ps.urlPreviewEnabled !== undefined) {

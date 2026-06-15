@@ -184,7 +184,7 @@ export class EmailService {
 	@bindThis
 	public async validateEmailForAccount(emailAddress: string): Promise<{
 		available: boolean;
-		reason: null | 'used' | 'format' | 'disposable' | 'mx' | 'smtp' | 'banned' | 'network' | 'blacklist';
+		reason: null | 'used' | 'format' | 'disposable' | 'mx' | 'smtp' | 'banned' | 'network' | 'blacklist' | 'notAllowed';
 	}> {
 		if (!this.utilityService.validateEmailFormat(emailAddress)) {
 			return {
@@ -251,6 +251,31 @@ export class EmailService {
 				available: false,
 				reason: 'banned',
 			};
+		}
+
+		// 管理者が設定した「注册邮箱白名单+正则」制限。
+		if (this.meta.signupEmailRestriction && Array.isArray(this.meta.signupEmailRules) && this.meta.signupEmailRules.length > 0) {
+			const localPart = emailAddress.slice(0, emailAddress.lastIndexOf('@'));
+			const domain = emailDomain.toLowerCase();
+			const rule = this.meta.signupEmailRules.find(r => typeof r?.domain === 'string' && r.domain.toLowerCase() === domain);
+
+			if (rule == null) {
+				// 白名单外の域名は不可
+				return { available: false, reason: 'notAllowed' };
+			}
+
+			if (typeof rule.localPartRegex === 'string' && rule.localPartRegex.length > 0) {
+				let matched = false;
+				try {
+					matched = new RegExp(rule.localPartRegex).test(localPart);
+				} catch {
+					// 设置了非法正则时不连累所有人：放行(管理员应修正配置)
+					matched = true;
+				}
+				if (!matched) {
+					return { available: false, reason: 'notAllowed' };
+				}
+			}
 		}
 
 		return {

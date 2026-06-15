@@ -2787,6 +2787,34 @@ export interface Locale extends ILocale {
      */
     "groupDimension": string;
     /**
+     * 登録メール制限
+     */
+    "signupEmailRestriction": string;
+    /**
+     * 許可ドメイン+正規表現のみ登録可
+     */
+    "enableSignupEmailRestriction": string;
+    /**
+     * オンにすると、登録(およびメール変更)は下記のドメインのみ許可され、ローカル部(@より前)はそのドメインの正規表現に一致する必要があります。QQの数字のみ(別名防止)、Gmailの . や + 別名の禁止などに使えます。
+     */
+    "signupEmailRestrictionDescription": string;
+    /**
+     * ローカル部の正規表現(@より前)
+     */
+    "localPartRegex": string;
+    /**
+     * 許可
+     */
+    "emailAllowed": string;
+    /**
+     * 不許可
+     */
+    "emailNotAllowed": string;
+    /**
+     * ドメイン
+     */
+    "domain": string;
+    /**
      * IP 記録はまだありません。設定 → セキュリティで「IP ログ」を有効にすると記録が始まります（以降のアクセスのみ）。
      */
     "noIpRecords": string;
