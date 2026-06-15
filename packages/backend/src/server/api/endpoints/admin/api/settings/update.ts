@@ -7,7 +7,7 @@ import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { MetaService } from '@/core/MetaService.js';
 import { apiAccessModes } from '@/const.js';
-import { getApiPublicPermissions, normalizeApiPermissions } from '@/server/api/api-access-utils.js';
+import { getApiNoApprovalPermissions, getApiPublicPermissions, normalizeApiPermissions } from '@/server/api/api-access-utils.js';
 
 export const meta = {
 	tags: ['admin', 'api'],
@@ -25,6 +25,8 @@ export const paramDef = {
 		oidcEnabled: { type: 'boolean' },
 		requireAppApproval: { type: 'boolean' },
 		publicPermissions: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+		noApprovalPermissions: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+		allowDeveloperTokens: { type: 'boolean' },
 		defaultTokenRateLimit: { type: 'integer', minimum: 0, maximum: 100000 },
 		writeTokenRateLimit: { type: 'integer', minimum: 0, maximum: 100000 },
 	},
@@ -43,6 +45,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				...(ps.oidcEnabled !== undefined ? { enableOidc: ps.oidcEnabled } : {}),
 				...(ps.requireAppApproval !== undefined ? { apiRequireAppApproval: ps.requireAppApproval } : {}),
 				...(ps.publicPermissions !== undefined ? { apiPublicPermissions: normalizeApiPermissions(ps.publicPermissions) } : {}),
+				...(ps.noApprovalPermissions !== undefined ? { apiNoApprovalPermissions: normalizeApiPermissions(ps.noApprovalPermissions) } : {}),
+				...(ps.allowDeveloperTokens !== undefined ? { apiAllowDeveloperTokens: ps.allowDeveloperTokens } : {}),
 				...(ps.defaultTokenRateLimit !== undefined ? { apiDefaultTokenRateLimit: ps.defaultTokenRateLimit } : {}),
 				...(ps.writeTokenRateLimit !== undefined ? { apiWriteTokenRateLimit: ps.writeTokenRateLimit } : {}),
 			};
@@ -55,6 +59,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				oidcEnabled: updated.enableOidc,
 				requireAppApproval: updated.apiRequireAppApproval,
 				publicPermissions: getApiPublicPermissions(updated),
+				noApprovalPermissions: getApiNoApprovalPermissions(updated),
+				allowDeveloperTokens: updated.apiAllowDeveloperTokens,
 				defaultTokenRateLimit: updated.apiDefaultTokenRateLimit,
 				writeTokenRateLimit: updated.apiWriteTokenRateLimit,
 			};

@@ -17,7 +17,7 @@ import { AuthenticateService } from '@/server/api/AuthenticateService.js';
 import type { ApiAccessGrantsRepository } from '@/models/_.js';
 import type { MiAccessToken } from '@/models/AccessToken.js';
 import type { MiLocalUser } from '@/models/User.js';
-import { getApiPublicPermissions, isDeveloperApiAccessApproved, isSafeOAuthRedirectUri } from '@/server/api/api-access-utils.js';
+import { getApiPublicPermissions, isApprovalRequiredForScopes, isDeveloperApiAccessApproved, isSafeOAuthRedirectUri } from '@/server/api/api-access-utils.js';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 const oidcUserinfoScopes = ['read:profile', 'read:account'] as const;
@@ -244,10 +244,13 @@ export class OAuth2ProviderService {
 			};
 		}
 
-		const developerUserId = token.app ? token.app.userId : token.userId;
-		const approved = await isDeveloperApiAccessApproved(this.instanceMeta, this.apiAccessGrantsRepository, developerUserId);
-		if (!approved) {
-			return { status: 403, error: 'insufficient_scope', description: 'API access requires administrator approval.' };
+		// 免申请：令牌持有的 scope 全在免申请白名单内时跳过开发者审批。
+		if (isApprovalRequiredForScopes(this.instanceMeta.apiAccessMode, this.instanceMeta.apiNoApprovalPermissions, token.permission)) {
+			const developerUserId = token.app ? token.app.userId : token.userId;
+			const approved = await isDeveloperApiAccessApproved(this.instanceMeta, this.apiAccessGrantsRepository, developerUserId);
+			if (!approved) {
+				return { status: 403, error: 'insufficient_scope', description: 'API access requires administrator approval.' };
+			}
 		}
 
 		return null;

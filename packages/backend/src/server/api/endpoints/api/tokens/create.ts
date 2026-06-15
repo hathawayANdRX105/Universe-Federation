@@ -6,7 +6,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { ApiError } from '@/server/api/error.js';
-import type { AccessTokensRepository, ApiAccessGrantsRepository } from '@/models/_.js';
+import type { AccessTokensRepository, ApiAccessGrantsRepository, MetasRepository } from '@/models/_.js';
 import type { MiMeta } from '@/models/Meta.js';
 import { IdService } from '@/core/IdService.js';
 import { NotificationService } from '@/core/NotificationService.js';
@@ -14,7 +14,7 @@ import { TimeService } from '@/global/TimeService.js';
 import { unique } from '@/misc/prelude/array.js';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
 import { DI } from '@/di-symbols.js';
-import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope } from '@/server/api/api-access-utils.js';
+import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope, isApprovalRequiredForScopes } from '@/server/api/api-access-utils.js';
 
 export const meta = {
 	tags: ['api'],
@@ -57,6 +57,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		@Inject(DI.meta)
 		private readonly instanceMeta: MiMeta,
 
+		@Inject(DI.metasRepository)
+		private readonly metasRepository: MetasRepository,
+
 		@Inject(DI.apiAccessGrantsRepository)
 		private readonly apiAccessGrantsRepository: ApiAccessGrantsRepository,
 
@@ -68,22 +71,32 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private readonly timeService: TimeService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
-			if (this.instanceMeta.apiAccessMode === 'closed') {
+			// meta 热更新失效 → 直读 DB，确保管理员改的 API 设置即时生效。
+			const m = await this.metasRepository.findOneByOrFail({ id: this.instanceMeta.id }).catch(() => this.instanceMeta);
+			const isRoot = m.rootUserId === me.id;
+
+			if (m.apiAccessMode === 'closed') {
 				throw new ApiError(apiAccessErrors.apiClosed);
 			}
 
-			if (this.instanceMeta.apiAccessMode === 'approval') {
-				const grant = await this.apiAccessGrantsRepository.findOneBy({ userId: me.id });
-				if (grant?.status !== 'approved') {
-					throw new ApiError(apiAccessErrors.apiApprovalRequired);
-				}
+			// 源头管控：禁用个人开发者令牌时普通用户不可创建（root 例外），防第三方"API中转"收割。
+			if (m.apiAllowDeveloperTokens === false && !isRoot) {
+				throw new ApiError(apiAccessErrors.apiClosed);
 			}
 
-			const publicPermissions = getApiPublicPermissions(this.instanceMeta);
+			const publicPermissions = getApiPublicPermissions(m);
 			const permission = unique(ps.permission.map(v => v.replace(/^(.+)(\/|-)(read|write)$/, '$3:$1')))
 				.filter(scope => !isAdminApiScope(scope) && publicPermissions.includes(scope));
 			if (permission.length === 0) {
 				throw new ApiError(apiAccessErrors.apiScopeDisabled);
+			}
+
+			// 免申请：仅当请求 scope 超出免申请白名单时才要求开发者审批（root 例外）。
+			if (!isRoot && isApprovalRequiredForScopes(m.apiAccessMode, m.apiNoApprovalPermissions, permission)) {
+				const grant = await this.apiAccessGrantsRepository.findOneBy({ userId: me.id });
+				if (grant?.status !== 'approved') {
+					throw new ApiError(apiAccessErrors.apiApprovalRequired);
+				}
 			}
 
 			const now = this.timeService.date;

@@ -47,6 +47,7 @@ export * as 'admin/api/access-requests/reject' from './endpoints/admin/api/acces
 export * as 'admin/api/access-requests/suspend' from './endpoints/admin/api/access-requests/suspend.js';
 export * as 'admin/api/apps/approve' from './endpoints/admin/api/apps/approve.js';
 export * as 'admin/api/apps/delete' from './endpoints/admin/api/apps/delete.js';
+export * as 'admin/api/apps/delete-bulk' from './endpoints/admin/api/apps/delete-bulk.js';
 export * as 'admin/api/apps/list' from './endpoints/admin/api/apps/list.js';
 export * as 'admin/api/apps/reject' from './endpoints/admin/api/apps/reject.js';
 export * as 'admin/api/apps/show' from './endpoints/admin/api/apps/show.js';
@@ -57,7 +58,9 @@ export * as 'admin/api/settings/show' from './endpoints/admin/api/settings/show.
 export * as 'admin/api/settings/update' from './endpoints/admin/api/settings/update.js';
 export * as 'admin/api/tokens/list' from './endpoints/admin/api/tokens/list.js';
 export * as 'admin/api/tokens/revoke' from './endpoints/admin/api/tokens/revoke.js';
+export * as 'admin/api/tokens/revoke-bulk' from './endpoints/admin/api/tokens/revoke-bulk.js';
 export * as 'admin/api/tokens/suspend' from './endpoints/admin/api/tokens/suspend.js';
+export * as 'admin/api/tokens/update' from './endpoints/admin/api/tokens/update.js';
 export * as 'admin/api/usage/summary' from './endpoints/admin/api/usage/summary.js';
 export * as 'admin/approve-user' from './endpoints/admin/approve-user.js';
 export * as 'admin/avatar-decorations/create' from './endpoints/admin/avatar-decorations/create.js';

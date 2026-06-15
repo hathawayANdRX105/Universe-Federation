@@ -27,6 +27,7 @@ export const paramDef = {
 		status: { type: 'string', enum: [...apiAppStatuses, null], nullable: true },
 		query: { type: 'string', nullable: true, maxLength: 128 },
 		userId: { type: 'string', nullable: true, format: 'misskey:id' },
+		ownerless: { type: 'boolean', default: false },
 		withTotal: { type: 'boolean', default: false },
 		limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
 		offset: { type: 'integer', minimum: 0, default: 0 },
@@ -56,6 +57,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (ps.userId) {
 				query.andWhere('app."userId" = :userId', { userId: ps.userId });
+			}
+
+			if (ps.ownerless) {
+				query.andWhere('app."userId" IS NULL');
 			}
 
 			const q = ps.query?.trim();

@@ -13,7 +13,7 @@ import { unique } from '@/misc/prelude/array.js';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
 import { AppEntityService } from '@/core/entities/AppEntityService.js';
 import { DI } from '@/di-symbols.js';
-import { apiAccessErrors, getApiPublicPermissions, hasUnsafeOAuthRedirectUri, isAdminApiScope, normalizeOAuthRedirectUris } from '@/server/api/api-access-utils.js';
+import { apiAccessErrors, getApiPublicPermissions, hasUnsafeOAuthRedirectUri, isAdminApiScope, isApprovalRequiredForScopes, normalizeOAuthRedirectUris } from '@/server/api/api-access-utils.js';
 
 export const meta = {
 	tags: ['app'],
@@ -64,13 +64,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(apiAccessErrors.apiClosed);
 			}
 
-			if (this.instanceMeta.apiAccessMode !== 'open' || this.instanceMeta.apiRequireAppApproval) {
-				throw new ApiError(apiAccessErrors.apiApprovalRequired);
-			}
-
-			// Generate secret
-			const secret = secureRndstr(32);
-
 			// for backward compatibility
 			const publicPermissions = getApiPublicPermissions(this.instanceMeta);
 			const permission = unique(ps.permission.map(v => v.replace(/^(.+)(\/|-)(read|write)$/, '$3:$1')))
@@ -78,6 +71,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (permission.length === 0) {
 				throw new ApiError(apiAccessErrors.apiScopeDisabled);
 			}
+
+			// approval モード時、要求スコープが免申請ホワイトリストに収まらない（or 管理者がアプリ審批必須）なら審批要求。
+			if (isApprovalRequiredForScopes(this.instanceMeta.apiAccessMode, this.instanceMeta.apiNoApprovalPermissions, permission) || this.instanceMeta.apiRequireAppApproval) {
+				throw new ApiError(apiAccessErrors.apiApprovalRequired);
+			}
+
+			// Generate secret
+			const secret = secureRndstr(32);
 
 			const requestedCallbackUrls = ps.callbackUrls !== undefined
 				? ps.callbackUrls

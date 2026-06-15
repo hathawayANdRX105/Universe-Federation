@@ -108,6 +108,21 @@ export class MiMeta {
 	})
 	public apiWriteTokenRateLimit: number;
 
+	// 免申请权限白名单：apiAccessMode='approval' 时，若令牌/应用请求的 scope 全在此集合内，
+	// 则跳过「需管理员审批」这一步（低风险只读放行；写/敏感/admin 仍需审批）。
+	@Column('varchar', {
+		length: 64,
+		array: true,
+		default: '{}',
+	})
+	public apiNoApprovalPermissions: string[];
+
+	// 是否允许普通用户创建个人开发者令牌（关掉可从源头封堵第三方"API中转"收割账号令牌）。
+	@Column('boolean', {
+		default: true,
+	})
+	public apiAllowDeveloperTokens: boolean;
+
 	@Column('varchar', {
 		length: 1024, array: true, default: '{}',
 	})

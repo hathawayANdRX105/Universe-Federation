@@ -61,6 +61,31 @@ export function getApiPublicPermissions(meta: MiMeta): string[] {
 	return normalizeApiPermissions(meta.apiPublicPermissions);
 }
 
+/**
+ * 「免申请」白名单：管理员配置的、无需审批即可使用的 scope 集合（admin scope 一律排除）。
+ */
+export function getApiNoApprovalPermissions(meta: Pick<MiMeta, 'apiNoApprovalPermissions'>): string[] {
+	return Array.from(new Set((meta.apiNoApprovalPermissions ?? []).filter(p => permissionSet.has(p) && !p.includes(':admin:'))));
+}
+
+/**
+ * 给定「申请/令牌持有的 scope 集」，判断是否仍需要管理员审批。
+ * - apiAccessMode 非 'approval' → 不需要审批。
+ * - 请求的 scope 非空且全部落在免申请白名单内 → 不需要审批（低风险放行）。
+ * - 否则（含写/敏感/admin scope，或 scope 为空）→ 需要审批。
+ */
+export function isApprovalRequiredForScopes(
+	apiAccessMode: MiMeta['apiAccessMode'],
+	noApprovalPermissions: readonly string[] | null | undefined,
+	scopes: readonly string[] | null | undefined,
+): boolean {
+	if (apiAccessMode !== 'approval') return false;
+	const requested = (scopes ?? []).filter(s => s.length > 0);
+	if (requested.length === 0) return true;
+	const allowed = new Set((noApprovalPermissions ?? []).filter(p => !p.includes(':admin:')));
+	return !requested.every(s => allowed.has(s));
+}
+
 export function isWriteApiScope(scope: string | null | undefined): boolean {
 	return scope?.startsWith('write:') ?? false;
 }

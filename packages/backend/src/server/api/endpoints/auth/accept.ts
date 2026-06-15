@@ -12,7 +12,7 @@ import { IdService } from '@/core/IdService.js';
 import { TimeService } from '@/global/TimeService.js';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
 import { DI } from '@/di-symbols.js';
-import { apiAccessErrors, isDeveloperApiAccessApproved } from '@/server/api/api-access-utils.js';
+import { apiAccessErrors, isApprovalRequiredForScopes, isDeveloperApiAccessApproved } from '@/server/api/api-access-utils.js';
 import { ApiError } from '../../error.js';
 
 export const meta = {
@@ -92,9 +92,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (app.status !== 'approved') {
 				throw new ApiError(apiAccessErrors.apiAppUnavailable);
 			}
-			const developerApproved = await isDeveloperApiAccessApproved(this.instanceMeta, this.apiAccessGrantsRepository, app.userId);
-			if (!developerApproved) {
-				throw new ApiError(apiAccessErrors.apiApprovalRequired);
+			// 免申请：应用请求的 scope 全在免申请白名单内时跳过开发者审批。
+			if (isApprovalRequiredForScopes(this.instanceMeta.apiAccessMode, this.instanceMeta.apiNoApprovalPermissions, app.permission)) {
+				const developerApproved = await isDeveloperApiAccessApproved(this.instanceMeta, this.apiAccessGrantsRepository, app.userId);
+				if (!developerApproved) {
+					throw new ApiError(apiAccessErrors.apiApprovalRequired);
+				}
 			}
 
 			if (!exist) {

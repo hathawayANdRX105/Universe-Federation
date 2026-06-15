@@ -21,7 +21,7 @@ import type { Config } from '@/config.js';
 import { sendRateLimitHeaders } from '@/misc/rate-limit-utils.js';
 import { SkRateLimiterService } from '@/server/SkRateLimiterService.js';
 import { ServerUtilityService } from '@/server/ServerUtilityService.js';
-import type { ApiAccessGrantsRepository } from '@/models/_.js';
+import type { ApiAccessGrantsRepository, MetasRepository } from '@/models/_.js';
 import { TimeService } from '@/global/TimeService.js';
 import { CacheManagementService, type ManagedMemoryKVCache } from '@/global/CacheManagementService.js';
 import { EnvService } from '@/global/EnvService.js';
@@ -30,7 +30,7 @@ import { renderFullError } from '@/misc/render-full-error.js';
 import { ApiError } from './error.js';
 import { ApiLoggerService } from './ApiLoggerService.js';
 import { AuthenticateService, AuthenticationError } from './AuthenticateService.js';
-import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope, isDeveloperApiAccessApproved, isWriteApiScope } from './api-access-utils.js';
+import { apiAccessErrors, getApiPublicPermissions, isAdminApiScope, isApprovalRequiredForScopes, isDeveloperApiAccessApproved, isWriteApiScope } from './api-access-utils.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { IEndpointMeta, IEndpoint } from './endpoints.js';
 
@@ -45,10 +45,15 @@ export class ApiCallService {
 	private readonly logger: Logger;
 	private readonly userIpHistories: ManagedMemoryKVCache<Set<string>>;
 	private readonly userFingerprintHistories: ManagedMemoryKVCache<Set<string>>;
+	// meta 热更新在本实例失效，API 强制判定处用 5s TTL 直读 DB，确保改设置近实时生效但不每请求查库。
+	private apiAccessMetaCache: { at: number; meta: MiMeta } | null = null;
 
 	constructor(
 		@Inject(DI.meta)
 		private meta: MiMeta,
+
+		@Inject(DI.metasRepository)
+		private metasRepository: MetasRepository,
 
 		@Inject(DI.config)
 		private config: Config,
@@ -500,6 +505,18 @@ export class ApiCallService {
 		}
 	}
 
+	// meta 热更新失效，这里用 5s TTL 直读 DB 取一份新鲜 meta（仅第三方令牌请求会走到，量不大）。
+	@bindThis
+	private async getApiAccessMeta(): Promise<MiMeta> {
+		const now = this.timeService.now;
+		if (this.apiAccessMetaCache != null && (now - this.apiAccessMetaCache.at) < 5000) {
+			return this.apiAccessMetaCache.meta;
+		}
+		const fresh = await this.metasRepository.findOneByOrFail({ id: this.meta.id }).catch(() => this.meta);
+		this.apiAccessMetaCache = { at: now, meta: fresh };
+		return fresh;
+	}
+
 	@bindThis
 	private async assertDeveloperApiAccess(
 		ep: IEndpoint,
@@ -515,18 +532,28 @@ export class ApiCallService {
 			throw new ApiError(apiAccessErrors.apiAppUnavailable);
 		}
 
-		if (this.meta.apiAccessMode === 'closed') {
+		const apiMeta = await this.getApiAccessMeta();
+
+		if (apiMeta.apiAccessMode === 'closed') {
 			throw new ApiError(apiAccessErrors.apiClosed);
 		}
 
-		const developerUserId = token.app ? token.app.userId : token.userId;
-		const developerApproved = await isDeveloperApiAccessApproved(this.meta, this.apiAccessGrantsRepository, developerUserId);
-		if (!developerApproved) {
-			throw new ApiError(apiAccessErrors.apiApprovalRequired);
+		// 個人開発者トークンが無効化されている場合は拒否（"API中転"収割対策のキルスイッチ）。
+		if (token.app == null && token.isDeveloperToken && apiMeta.apiAllowDeveloperTokens === false) {
+			throw new ApiError(apiAccessErrors.apiClosed);
+		}
+
+		// 要求スコープが免申請ホワイトリストに収まらない場合のみ、開発者の審批を要求する。
+		if (isApprovalRequiredForScopes(apiMeta.apiAccessMode, apiMeta.apiNoApprovalPermissions, token.permission)) {
+			const developerUserId = token.app ? token.app.userId : token.userId;
+			const developerApproved = await isDeveloperApiAccessApproved(apiMeta, this.apiAccessGrantsRepository, developerUserId);
+			if (!developerApproved) {
+				throw new ApiError(apiAccessErrors.apiApprovalRequired);
+			}
 		}
 
 		if (ep.meta.kind && !isAdminApiScope(ep.meta.kind)) {
-			const allowedPermissions = getApiPublicPermissions(this.meta);
+			const allowedPermissions = getApiPublicPermissions(apiMeta);
 			if (!allowedPermissions.includes(ep.meta.kind)) {
 				throw new ApiError(apiAccessErrors.apiScopeDisabled);
 			}
@@ -534,7 +561,7 @@ export class ApiCallService {
 
 		const rateLimitPerMinute = token.rateLimitPerMinute
 			?? token.app?.rateLimitPerMinute
-			?? (isWriteApiScope(ep.meta.kind) ? this.meta.apiWriteTokenRateLimit : this.meta.apiDefaultTokenRateLimit);
+			?? (isWriteApiScope(ep.meta.kind) ? apiMeta.apiWriteTokenRateLimit : apiMeta.apiDefaultTokenRateLimit);
 		if (rateLimitPerMinute > 0 && this.envService.env.NODE_ENV !== 'test') {
 			const info = await this.rateLimiterService.limit({
 				key: `developer-api:${token.id}:${isWriteApiScope(ep.meta.kind) ? 'write' : 'read'}`,
