@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader :actions="headerActions" :tabs="headerTabs">
-	<div class="_spacer" style="--MI_SPACER-w: 900px;">
+	<div class="_spacer" style="--MI_SPACER-w: 1100px;">
 		<div class="_gaps">
 			<div :class="$style.inputs">
 				<MkButton style="margin-left: auto" @click="resetQuery">{{ i18n.ts.reset }}</MkButton>
@@ -13,10 +13,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div :class="$style.inputs">
 				<MkSelect v-model="sort" style="flex: 1;">
 					<template #label>{{ i18n.ts.sort }}</template>
-					<option value="-createdAt">{{ i18n.ts.registeredDate }} ({{ i18n.ts.ascendingOrder }})</option>
 					<option value="+createdAt">{{ i18n.ts.registeredDate }} ({{ i18n.ts.descendingOrder }})</option>
-					<option value="-updatedAt">{{ i18n.ts.lastUsed }} ({{ i18n.ts.ascendingOrder }})</option>
+					<option value="-createdAt">{{ i18n.ts.registeredDate }} ({{ i18n.ts.ascendingOrder }})</option>
+					<option value="+lastActiveDate">{{ i18n.ts.lastActiveDate }} ({{ i18n.ts.descendingOrder }})</option>
+					<option value="-lastActiveDate">{{ i18n.ts.lastActiveDate }} ({{ i18n.ts.ascendingOrder }})</option>
+					<option value="+notes">{{ i18n.ts.notes }} ({{ i18n.ts.descendingOrder }})</option>
+					<option value="-notes">{{ i18n.ts.notes }} ({{ i18n.ts.ascendingOrder }})</option>
+					<option value="+follower">{{ i18n.ts.followers }} ({{ i18n.ts.descendingOrder }})</option>
+					<option value="-follower">{{ i18n.ts.followers }} ({{ i18n.ts.ascendingOrder }})</option>
 					<option value="+updatedAt">{{ i18n.ts.lastUsed }} ({{ i18n.ts.descendingOrder }})</option>
+					<option value="-updatedAt">{{ i18n.ts.lastUsed }} ({{ i18n.ts.ascendingOrder }})</option>
 				</MkSelect>
 				<MkSelect v-model="state" style="flex: 1;">
 					<template #label>{{ i18n.ts.state }}</template>
@@ -60,19 +66,40 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 
 			<MkPagination v-slot="{items}" ref="paginationComponent" :pagination="pagination" :displayLimit="50">
-				<div :class="$style.users">
-					<MkA v-for="row in items" :key="row.user.id" :class="$style.row" :to="`/admin/user/${row.user.id}`">
-						<MkUserCardMini :user="row.user"/>
-						<div :class="$style.meta">
-							<span v-if="row.suspended" :class="[$style.badge, $style.badgeDanger]">{{ i18n.ts.suspend }}</span>
-							<span v-if="!row.approved" :class="[$style.badge, $style.badgeWarn]">{{ i18n.ts.notApproved }}</span>
-							<span :class="$style.metaItem"><i class="ti ti-mail"></i> {{ row.email ?? '-' }}</span>
-							<span :class="$style.metaItem"><i class="ti ti-network"></i> {{ row.lastIp ?? '-' }}<template v-if="row.ipCount > 1"> ({{ row.ipCount }})</template></span>
-							<span :class="$style.metaItem"><i class="ti ti-fingerprint"></i> {{ row.fingerprintCount }}</span>
-							<span :class="$style.metaItem"><i class="ti ti-login"></i> {{ row.signinCount }}</span>
-							<span :class="$style.metaItem"><i class="ti ti-calendar"></i> {{ dateString(row.createdAt) }}</span>
+				<div :class="$style.tableWrap">
+					<div :class="$style.table">
+						<div :class="[$style.tr, $style.head]">
+							<div :class="$style.cUser">{{ i18n.ts.user }}</div>
+							<div :class="$style.cEmail"><i class="ti ti-mail"></i> {{ i18n.ts.email }}</div>
+							<div :class="$style.cNum" :title="i18n.ts.ip"><i class="ti ti-network"></i></div>
+							<div :class="$style.cNum" :title="i18n.ts.fingerprint"><i class="ti ti-fingerprint"></i></div>
+							<div :class="$style.cNum" :title="i18n.ts.notes"><i class="ti ti-pencil"></i></div>
+							<div :class="$style.cNum" :title="i18n.ts.followers"><i class="ti ti-users"></i></div>
+							<div :class="$style.cNum" :title="i18n.ts.loginHistory"><i class="ti ti-login"></i></div>
+							<div :class="$style.cDate">{{ i18n.ts.lastActiveDate }}</div>
+							<div :class="$style.cDate">{{ i18n.ts.registeredDate }}</div>
 						</div>
-					</MkA>
+						<MkA v-for="row in items" :key="row.id" :class="$style.tr" :to="`/admin/user/${row.id}`">
+							<div :class="[$style.cUser, $style.userCell]">
+								<MkAvatar :class="$style.avatar" :user="row.user" indicator/>
+								<div :class="$style.userText">
+									<div :class="$style.userName"><MkUserName :user="row.user"/>
+										<span v-if="row.suspended" :class="[$style.badge, $style.badgeDanger]">{{ i18n.ts.suspend }}</span>
+										<span v-if="!row.approved" :class="[$style.badge, $style.badgeWarn]">{{ i18n.ts.notApproved }}</span>
+									</div>
+									<div :class="$style.acct">@{{ row.user.username }}</div>
+								</div>
+							</div>
+							<div :class="$style.cEmail" :title="row.email ?? ''">{{ row.email ?? '-' }}</div>
+							<div :class="[$style.cNum, row.ipCount > 1 && $style.flag]" :title="row.lastIp ?? ''">{{ row.ipCount }}</div>
+							<div :class="[$style.cNum, row.fingerprintCount > 1 && $style.flag]">{{ row.fingerprintCount }}</div>
+							<div :class="$style.cNum">{{ row.notesCount }}</div>
+							<div :class="$style.cNum">{{ row.followersCount }}</div>
+							<div :class="$style.cNum">{{ row.signinCount }}</div>
+							<div :class="$style.cDate">{{ row.lastActiveDate ? dateString(row.lastActiveDate) : '-' }}</div>
+							<div :class="$style.cDate">{{ dateString(row.createdAt) }}</div>
+						</MkA>
+					</div>
 				</div>
 			</MkPagination>
 		</div>
@@ -91,7 +118,6 @@ import * as os from '@/os.js';
 import { lookupUser } from '@/utility/admin-lookup.js';
 import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
-import MkUserCardMini from '@/components/MkUserCardMini.vue';
 import { dateString } from '@/filters/date.js';
 
 type SearchQuery = {
@@ -217,45 +243,90 @@ definePage(() => ({
 	flex-wrap: wrap;
 }
 
-.users {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-
-.row {
-	display: block;
-	padding: 10px 12px;
+.tableWrap {
+	overflow-x: auto;
 	border: solid 1px var(--MI_THEME-divider);
 	border-radius: var(--MI-radius-sm);
-	background: var(--MI_THEME-panel);
+}
 
-	&:hover {
+.table {
+	min-width: 880px;
+}
+
+$cols: minmax(180px, 2fr) minmax(150px, 2fr) 56px 56px 56px 64px 56px 110px 110px;
+
+.tr {
+	display: grid;
+	grid-template-columns: $cols;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: solid 1px var(--MI_THEME-divider);
+	color: var(--MI_THEME-fg);
+	font-size: 0.88em;
+
+	&:last-child { border-bottom: none; }
+
+	&:not(.head):hover {
 		text-decoration: none;
-		border-color: var(--MI_THEME-accent);
+		background: var(--MI_THEME-buttonHoverBg);
 	}
 }
 
-.meta {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px 14px;
-	margin-top: 8px;
-	font-size: 0.85em;
+.head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--MI_THEME-panel);
+	font-weight: 700;
+	font-size: 0.82em;
 	color: var(--MI_THEME-fgTransparentWeak);
+
+	i { opacity: 0.8; }
 }
 
-.metaItem {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	white-space: nowrap;
-	word-break: break-all;
+.cUser { min-width: 0; }
+.cEmail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cNum { text-align: center; font-variant-numeric: tabular-nums; }
+.cDate { font-size: 0.92em; color: var(--MI_THEME-fgTransparentWeak); white-space: nowrap; }
 
-	> i {
-		opacity: 0.7;
-	}
+.flag {
+	color: var(--MI_THEME-warn);
+	font-weight: 700;
+}
+
+.userCell {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.avatar {
+	width: 34px;
+	height: 34px;
+	flex: 0 0 auto;
+}
+
+.userText {
+	min-width: 0;
+}
+
+.userName {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 600;
+}
+
+.acct {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.85em;
+	opacity: 0.7;
 }
 
 .badge {

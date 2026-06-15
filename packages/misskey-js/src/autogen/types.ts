@@ -25763,7 +25763,7 @@ export interface operations {
                     /** @default 0 */
                     offset?: number;
                     /** @enum {string} */
-                    sort?: '+createdAt' | '-createdAt' | '+updatedAt' | '-updatedAt' | '+lastActiveDate' | '-lastActiveDate' | '+follower' | '-follower';
+                    sort?: '+createdAt' | '-createdAt' | '+updatedAt' | '-updatedAt' | '+lastActiveDate' | '-lastActiveDate' | '+follower' | '-follower' | '+notes' | '-notes';
                     /**
                      * @default all
                      * @enum {string}
@@ -25795,6 +25795,7 @@ export interface operations {
                 };
                 content: {
                     'application/json': {
+                        id: string;
                         user: components['schemas']['UserLite'];
                         email: string | null;
                         emailVerified: boolean;
@@ -25802,6 +25803,10 @@ export interface operations {
                         suspended: boolean;
                         /** Format: date-time */
                         createdAt: string;
+                        /** Format: date-time */
+                        lastActiveDate: string | null;
+                        notesCount: number;
+                        followersCount: number;
                         lastIp: string | null;
                         ipCount: number;
                         fingerprintCount: number;

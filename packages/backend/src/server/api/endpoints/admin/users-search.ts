@@ -28,12 +28,16 @@ export const meta = {
 			type: 'object',
 			nullable: false, optional: false,
 			properties: {
+				id: { type: 'string', optional: false, nullable: false },
 				user: { type: 'object', optional: false, nullable: false, ref: 'UserLite' },
 				email: { type: 'string', optional: false, nullable: true },
 				emailVerified: { type: 'boolean', optional: false, nullable: false },
 				approved: { type: 'boolean', optional: false, nullable: false },
 				suspended: { type: 'boolean', optional: false, nullable: false },
 				createdAt: { type: 'string', optional: false, nullable: false, format: 'date-time' },
+				lastActiveDate: { type: 'string', optional: false, nullable: true, format: 'date-time' },
+				notesCount: { type: 'integer', optional: false, nullable: false },
+				followersCount: { type: 'integer', optional: false, nullable: false },
 				lastIp: { type: 'string', optional: false, nullable: true },
 				ipCount: { type: 'integer', optional: false, nullable: false },
 				fingerprintCount: { type: 'integer', optional: false, nullable: false },
@@ -48,7 +52,7 @@ export const paramDef = {
 	properties: {
 		limit: { type: 'integer', minimum: 1, maximum: 100, default: 30 },
 		offset: { type: 'integer', default: 0 },
-		sort: { type: 'string', enum: ['+createdAt', '-createdAt', '+updatedAt', '-updatedAt', '+lastActiveDate', '-lastActiveDate', '+follower', '-follower'] },
+		sort: { type: 'string', enum: ['+createdAt', '-createdAt', '+updatedAt', '-updatedAt', '+lastActiveDate', '-lastActiveDate', '+follower', '-follower', '+notes', '-notes'] },
 		state: { type: 'string', enum: ['all', 'alive', 'available', 'admin', 'moderator', 'adminOrModerator', 'suspended', 'approved'], default: 'all' },
 		origin: { type: 'string', enum: ['combined', 'local', 'remote'], default: 'local' },
 		username: { type: 'string', nullable: true, default: null },
@@ -132,6 +136,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			switch (ps.sort) {
 				case '+follower': query.orderBy('user.followersCount', 'DESC'); break;
 				case '-follower': query.orderBy('user.followersCount', 'ASC'); break;
+				case '+notes': query.orderBy('user.notesCount', 'DESC'); break;
+				case '-notes': query.orderBy('user.notesCount', 'ASC'); break;
 				case '+createdAt': query.orderBy('user.id', 'DESC'); break;
 				case '-createdAt': query.orderBy('user.id', 'ASC'); break;
 				case '+updatedAt': query.orderBy('user.updatedAt', 'DESC', 'NULLS LAST'); break;
@@ -169,12 +175,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			return users.map(u => {
 				const profile = profileMap.get(u.id);
 				return {
+					id: u.id,
 					user: packedMap.get(u.id)!,
 					email: profile?.email ?? null,
 					emailVerified: profile?.emailVerified ?? false,
 					approved: u.approved,
 					suspended: u.isSuspended,
 					createdAt: this.idService.parse(u.id).date.toISOString(),
+					lastActiveDate: u.lastActiveDate?.toISOString() ?? null,
+					notesCount: u.notesCount,
+					followersCount: u.followersCount,
 					lastIp: lastIpMap.get(u.id) ?? null,
 					ipCount: ipCountMap.get(u.id) ?? 0,
 					fingerprintCount: fpCountMap.get(u.id) ?? 0,
