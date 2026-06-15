@@ -2767,6 +2767,10 @@ export interface Locale extends ILocale {
      */
     "fingerprint": string;
     /**
+     * 詳細な指紋はまだ記録されていません（この機能の有効化以降、ユーザーがWebクライアントをまだ開いていません）。
+     */
+    "fingerprintComponentsUnavailable": string;
+    /**
      * メールアドレス
      */
     "emailAddress": string;

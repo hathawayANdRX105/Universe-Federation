@@ -520,11 +520,31 @@ export function getNoteMenu(props: {
 				menuItems.push({
 					icon: 'ti ti-fingerprint',
 					text: `${i18n.ts.ip} / ${i18n.ts.fingerprint}`,
-					action: () => {
+					action: async () => {
+						const lines = [`IP: ${appearNote.ip ?? '-'}`, `${i18n.ts.fingerprint}: ${appearNote.fingerprint ?? '-'}`];
+						if (appearNote.fingerprint) {
+							// 哈希反查 user_fingerprint，取出各分量明细一并展示。
+							const rows = await misskeyApi('admin/search-fingerprints', { fingerprint: appearNote.fingerprint, limit: 1 }).catch(() => [] as Misskey.entities.AdminSearchFingerprintsResponse);
+							const components = rows[0]?.components;
+							if (components != null) {
+								lines.push('');
+								for (const [k, v] of Object.entries(components)) {
+									if (v != null && typeof v === 'object' && !Array.isArray(v)) {
+										for (const [k2, v2] of Object.entries(v as Record<string, unknown>)) {
+											lines.push(`${k}.${k2}: ${String(v2)}`);
+										}
+									} else {
+										lines.push(`${k}: ${Array.isArray(v) ? (v as unknown[]).join(', ') : String(v)}`);
+									}
+								}
+							} else {
+								lines.push('', i18n.ts.fingerprintComponentsUnavailable);
+							}
+						}
 						os.alert({
 							type: 'info',
 							title: `${i18n.ts.ip} / ${i18n.ts.fingerprint}`,
-							text: `IP: ${appearNote.ip ?? '-'}\n${i18n.ts.fingerprint}: ${appearNote.fingerprint ?? '-'}`,
+							text: lines.join('\n'),
 						});
 					},
 				});
