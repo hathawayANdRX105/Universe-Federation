@@ -288,7 +288,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<MkButton rounded primary @click="applyAppFilters()"><i class="ti ti-search"></i> 查询</MkButton>
 								<MkButton rounded :disabled="!appFilterActive" @click="clearAppFilters()"><i class="ti ti-x"></i> 清空</MkButton>
 								<MkButton rounded :wait="appsState.loading" @click="loadApps()"><i class="ti ti-refresh"></i> 刷新</MkButton>
-								<MkButton rounded danger @click="cleanOwnerlessApps()"><i class="ti ti-trash"></i> 一键清理无主应用</MkButton>
+								<MkButton rounded primary @click="recoverAppOwners()"><i class="ti ti-user-check"></i> 恢复无主应用所有者</MkButton>
+								<MkButton rounded danger @click="cleanOwnerlessApps()"><i class="ti ti-trash"></i> 清理无主且无令牌应用</MkButton>
 							</div>
 						</div>
 
@@ -311,6 +312,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<div :class="$style.meta">回调：{{ (app.callbackUrls ?? [app.callbackUrl]).filter(Boolean).join(', ') || '未设置' }}</div>
 								</div>
 								<div class="_buttons">
+									<MkButton rounded @click="editAppPermission(app)"><i class="ti ti-pencil"></i> 编辑权限</MkButton>
+									<MkButton rounded @click="setAppOwner(app)"><i class="ti ti-user-cog"></i> 设置所有者</MkButton>
 									<MkButton v-if="app.status !== 'approved'" rounded primary :wait="isReviewingApp(app.id, 'approve')" @click="reviewApp(app.id, 'approve')">通过</MkButton>
 									<MkButton v-if="app.status !== 'rejected' && app.status !== 'suspended'" rounded :wait="isReviewingApp(app.id, 'reject')" @click="reviewApp(app.id, 'reject')">拒绝</MkButton>
 									<MkButton rounded danger :wait="isReviewingApp(app.id, app.status === 'suspended' ? 'unsuspend' : 'suspend')" @click="reviewApp(app.id, app.status === 'suspended' ? 'unsuspend' : 'suspend')">{{ app.status === 'suspended' ? '恢复' : '暂停' }}</MkButton>
@@ -885,6 +888,42 @@ async function cleanOwnerlessApps() {
 	if (canceled) return;
 	const res = await os.apiWithDialog('admin/api/apps/delete-bulk', { ownerless: true });
 	os.toast(`已清理 ${res.deleted} 个无主应用`);
+	await loadApps();
+}
+
+async function editAppPermission(app: ApiApp) {
+	const { canceled, result } = await os.inputText({
+		title: '编辑应用权限',
+		text: '用英文逗号分隔多个 scope（如 read:account, write:notes）。admin scope 会被忽略；留空表示无权限。',
+		default: (app.permission ?? []).join(', '),
+	});
+	if (canceled || result == null) return;
+	const permission = result.split(',').map(s => s.trim()).filter(s => s.length > 0);
+	await os.apiWithDialog('admin/api/apps/update', { appId: app.id, permission });
+	os.toast('已更新应用权限');
+	await loadApps();
+}
+
+async function setAppOwner(app: ApiApp) {
+	const { canceled, result } = await os.inputText({
+		title: '设置应用所有者',
+		text: '输入要设为所有者的本地用户 ID。',
+		default: app.user?.id ?? '',
+	});
+	if (canceled || result == null || result.trim().length === 0) return;
+	await os.apiWithDialog('admin/api/apps/set-owner', { appId: app.id, userId: result.trim() });
+	os.toast('已设置所有者');
+	await loadApps();
+}
+
+async function recoverAppOwners() {
+	const { canceled } = await os.confirm({
+		type: 'warning',
+		text: '将为「无主且仅有单一令牌用户」的应用，把该用户恢复为所有者（不影响现有用户的使用）。继续？',
+	});
+	if (canceled) return;
+	const res = await os.apiWithDialog('admin/api/apps/recover-owners', {});
+	os.toast(`已恢复 ${res.recovered} 个应用的所有者`);
 	await loadApps();
 }
 

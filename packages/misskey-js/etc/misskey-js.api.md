@@ -170,7 +170,13 @@ type AdminApiAppsDeleteRequest = operations['admin___api___apps___delete']['requ
 type AdminApiAppsListRequest = operations['admin___api___apps___list']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
+type AdminApiAppsRecoverOwnersResponse = operations['admin___api___apps___recover-owners']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type AdminApiAppsRejectRequest = operations['admin___api___apps___reject']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminApiAppsSetOwnerRequest = operations['admin___api___apps___set-owner']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
 type AdminApiAppsShowRequest = operations['admin___api___apps___show']['requestBody']['content']['application/json'];
@@ -2194,7 +2200,9 @@ declare namespace entities {
         AdminApiAppsDeleteBulkRequest,
         AdminApiAppsDeleteBulkResponse,
         AdminApiAppsListRequest,
+        AdminApiAppsRecoverOwnersResponse,
         AdminApiAppsRejectRequest,
+        AdminApiAppsSetOwnerRequest,
         AdminApiAppsShowRequest,
         AdminApiAppsSuspendRequest,
         AdminApiAppsUnsuspendRequest,

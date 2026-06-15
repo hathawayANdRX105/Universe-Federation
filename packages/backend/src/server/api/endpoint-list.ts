@@ -49,6 +49,8 @@ export * as 'admin/api/apps/approve' from './endpoints/admin/api/apps/approve.js
 export * as 'admin/api/apps/delete' from './endpoints/admin/api/apps/delete.js';
 export * as 'admin/api/apps/delete-bulk' from './endpoints/admin/api/apps/delete-bulk.js';
 export * as 'admin/api/apps/list' from './endpoints/admin/api/apps/list.js';
+export * as 'admin/api/apps/recover-owners' from './endpoints/admin/api/apps/recover-owners.js';
+export * as 'admin/api/apps/set-owner' from './endpoints/admin/api/apps/set-owner.js';
 export * as 'admin/api/apps/reject' from './endpoints/admin/api/apps/reject.js';
 export * as 'admin/api/apps/show' from './endpoints/admin/api/apps/show.js';
 export * as 'admin/api/apps/suspend' from './endpoints/admin/api/apps/suspend.js';

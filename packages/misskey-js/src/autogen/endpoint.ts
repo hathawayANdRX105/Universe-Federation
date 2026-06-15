@@ -44,7 +44,9 @@ import type {
 	AdminApiAppsDeleteBulkRequest,
 	AdminApiAppsDeleteBulkResponse,
 	AdminApiAppsListRequest,
+	AdminApiAppsRecoverOwnersResponse,
 	AdminApiAppsRejectRequest,
+	AdminApiAppsSetOwnerRequest,
 	AdminApiAppsShowRequest,
 	AdminApiAppsSuspendRequest,
 	AdminApiAppsUnsuspendRequest,
@@ -818,7 +820,9 @@ export type Endpoints = {
 	'admin/api/apps/delete': { req: AdminApiAppsDeleteRequest; res: EmptyResponse };
 	'admin/api/apps/delete-bulk': { req: AdminApiAppsDeleteBulkRequest; res: AdminApiAppsDeleteBulkResponse };
 	'admin/api/apps/list': { req: AdminApiAppsListRequest; res: EmptyResponse };
+	'admin/api/apps/recover-owners': { req: EmptyRequest; res: AdminApiAppsRecoverOwnersResponse };
 	'admin/api/apps/reject': { req: AdminApiAppsRejectRequest; res: EmptyResponse };
+	'admin/api/apps/set-owner': { req: AdminApiAppsSetOwnerRequest; res: EmptyResponse };
 	'admin/api/apps/show': { req: AdminApiAppsShowRequest; res: EmptyResponse };
 	'admin/api/apps/suspend': { req: AdminApiAppsSuspendRequest; res: EmptyResponse };
 	'admin/api/apps/unsuspend': { req: AdminApiAppsUnsuspendRequest; res: EmptyResponse };
