@@ -59,22 +59,23 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const hasFilter = (ps.name != null && ps.name.length > 0) || ps.userId != null;
 			if (!hasIds && !hasFilter) throw new ApiError(meta.errors.noTarget);
 
-			const qb = this.accessTokensRepository.createQueryBuilder('token')
+			// UPDATE クエリビルダーはテーブル別名を使えないため、列名は別名なしで参照する。
+			const qb = this.accessTokensRepository.createQueryBuilder()
 				.update()
 				.set({ status: 'revoked' })
-				.where('token.status != :revoked', { revoked: 'revoked' });
+				.where('"status" != :revoked', { revoked: 'revoked' });
 
 			if (hasIds) {
 				qb.andWhere({ id: In(ps.tokenIds!) });
 			} else {
 				if (ps.onlyDeveloperTokens !== false) {
-					qb.andWhere('(token."isDeveloperToken" = true OR token."appId" IS NULL)');
+					qb.andWhere('("isDeveloperToken" = true OR "appId" IS NULL)');
 				}
 				if (ps.name != null && ps.name.length > 0) {
-					qb.andWhere('token.name ILIKE :name', { name: '%' + sqlLikeEscape(ps.name) + '%' });
+					qb.andWhere('"name" ILIKE :name', { name: '%' + sqlLikeEscape(ps.name) + '%' });
 				}
 				if (ps.userId != null) {
-					qb.andWhere('token."userId" = :userId', { userId: ps.userId });
+					qb.andWhere('"userId" = :userId', { userId: ps.userId });
 				}
 			}
 
