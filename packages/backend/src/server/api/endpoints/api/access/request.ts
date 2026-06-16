@@ -29,6 +29,8 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		reason: { type: 'string', minLength: 1, maxLength: 2000 },
+		// 申请人希望使用的权限范围(scope)。仅作记录/审核参考。
+		permissions: { type: 'array', items: { type: 'string' } },
 	},
 	required: ['reason'],
 } as const;
@@ -53,6 +55,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const now = this.timeService.date;
 			const current = await this.apiAccessGrantsRepository.findOneBy({ userId: me.id });
 
+			// 申请的权限范围：去重、过滤掉 admin scope、限量记录（仅供审核参考）。
+			const requestedPermissions = Array.from(new Set((ps.permissions ?? [])
+				.map(p => p.trim())
+				.filter(p => p.length > 0 && p.length <= 256 && !p.includes(':admin:'))))
+				.slice(0, 80);
+
 			if (current == null) {
 				const grant = await this.apiAccessGrantsRepository.insertOne({
 					id: this.idService.gen(now.getTime()),
@@ -61,6 +69,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					userId: me.id,
 					status: this.instanceMeta.apiAccessMode === 'open' ? 'approved' : 'pending',
 					reason: ps.reason,
+					requestedPermissions,
 				});
 
 				return {
@@ -82,6 +91,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				updatedAt: now,
 				status,
 				reason: ps.reason,
+				requestedPermissions,
 				reviewNote: null,
 				reviewerId: null,
 				reviewedAt: null,

@@ -29,6 +29,8 @@ export const paramDef = {
 		withTotal: { type: 'boolean', default: false },
 		limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
 		offset: { type: 'integer', minimum: 0, default: 0 },
+		// 时间排序：createdAt=按申请时间，updatedAt=按最近更新。默认按申请时间倒序。
+		sort: { type: 'string', enum: ['createdAt', 'updatedAt'], default: 'createdAt' },
 	},
 	required: [],
 } as const;
@@ -45,7 +47,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const query = this.apiAccessGrantsRepository.createQueryBuilder('accessGrant')
 				.leftJoinAndSelect('accessGrant.user', 'user')
 				.leftJoinAndSelect('accessGrant.reviewer', 'reviewer')
-				.orderBy('accessGrant.updatedAt', 'DESC')
+				.orderBy(ps.sort === 'updatedAt' ? 'accessGrant.updatedAt' : 'accessGrant.createdAt', 'DESC')
 				.take(ps.limit)
 				.skip(ps.offset);
 
@@ -81,6 +83,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				id: grant.id,
 				status: grant.status,
 				reason: grant.reason,
+				requestedPermissions: grant.requestedPermissions ?? [],
 				reviewNote: grant.reviewNote,
 				createdAt: grant.createdAt.toISOString(),
 				updatedAt: grant.updatedAt.toISOString(),

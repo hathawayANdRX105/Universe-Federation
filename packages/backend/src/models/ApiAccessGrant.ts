@@ -47,6 +47,12 @@ export class MiApiAccessGrant {
 	})
 	public reason: string | null;
 
+	// 申请人希望使用的权限范围(scope)。仅作记录与审核参考(审批本身仍是开发者访问的整体放行)。
+	@Column('varchar', {
+		length: 256, array: true, default: '{}',
+	})
+	public requestedPermissions: string[];
+
 	@Column({
 		...id(),
 		nullable: true,

@@ -226,8 +226,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 									</div>
 									<div :class="$style.meta">申请人：<span class="_monospace">{{ userAcctLabel(request.user) }}</span> · 用户 ID：<span class="_monospace">{{ request.user?.id ?? '未知' }}</span></div>
 									<div :class="$style.meta">申请 ID：<span class="_monospace">{{ request.id }}</span></div>
-									<div :class="$style.meta">更新时间：{{ request.updatedAt }}</div>
-									<div :class="$style.meta">{{ request.reason || '无申请说明' }}</div>
+									<div :class="$style.meta">申请时间：{{ formatDateTime(request.createdAt) }}<span v-if="request.reviewedAt"> · 审核时间：{{ formatDateTime(request.reviewedAt) }}</span><span v-if="request.updatedAt !== request.createdAt"> · 更新：{{ formatDateTime(request.updatedAt) }}</span></div>
+									<div :class="$style.meta">
+										申请权限：
+										<template v-if="(request.requestedPermissions?.length ?? 0) > 0">
+											<code v-for="p in request.requestedPermissions" :key="p" :class="$style.permTag">{{ p }}</code>
+										</template>
+										<span v-else>未指定（开发者整体访问）</span>
+									</div>
+									<div :class="$style.meta">申请理由：{{ request.reason || '无申请说明' }}</div>
+									<div v-if="request.reviewNote" :class="$style.meta">审核备注：{{ request.reviewNote }}</div>
 								</div>
 								<div class="_buttons">
 									<MkButton v-if="request.status !== 'approved'" rounded primary :wait="isReviewingAccess(request.id, 'approve')" @click="reviewAccess(request.id, 'approve')">通过</MkButton>
@@ -479,8 +487,11 @@ type ApiAccessRequest = {
 	id: string;
 	status: ApiAccessStatusValue;
 	reason: string | null;
+	requestedPermissions: string[];
 	reviewNote: string | null;
+	createdAt: string;
 	updatedAt: string;
+	reviewedAt: string | null;
 	user: PackedUser | null;
 };
 
@@ -998,6 +1009,12 @@ function createPagedListState<T>(): PagedListState<T> {
 	}) as PagedListState<T>;
 }
 
+function formatDateTime(s: string | null | undefined): string {
+	if (s == null || s === '') return '—';
+	const d = new Date(s);
+	return Number.isNaN(d.getTime()) ? String(s) : d.toLocaleString();
+}
+
 async function loadAccessRequests(options: LoadListOptions = {}): Promise<void> {
 	await loadPagedList(accessRequestsState, 'admin/api/access-requests/list', filterStatusParam(accessRequestStatusFilter.value), options);
 }
@@ -1350,6 +1367,16 @@ definePage(() => ({
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 0.85em;
 	overflow-wrap: anywhere;
+}
+
+.permTag {
+	display: inline-block;
+	margin: 2px 4px 2px 0;
+	padding: 1px 7px;
+	border-radius: 6px;
+	background: var(--MI_THEME-buttonBg);
+	color: var(--MI_THEME-fg);
+	font-size: 0.92em;
 }
 
 .listTools {
