@@ -37,28 +37,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<template #label>申请用途</template>
 								<template #caption>说明你的网站、机器人或资源发布场景，方便管理员审核。</template>
 							</MkTextarea>
-							<div v-if="(accessStatus?.publicPermissions?.length ?? 0) > 0" :class="$style.reqPermBlock">
-								<div :class="$style.reqPermLabel">
-									选择你需要的权限范围（鼠标悬停看 scope）。
-									<span :class="[$style.reqPermFlag, $style.reqPermFlagFree]">免申请</span> = 通过后立即可用；
-									<span :class="[$style.reqPermFlag, $style.reqPermFlagReview]">需审核</span> = 需要管理员单独批准。
-									<template v-if="accessStatus?.mode === 'open'">（当前为开放模式，所有权限都免审核）</template>
-								</div>
-								<div :class="$style.reqPermChips">
-									<button
-										v-for="scope in accessStatus!.publicPermissions"
-										:key="scope"
-										class="_button"
-										:title="scope"
-										:class="[$style.reqPermChip, { [$style.reqPermChipActive]: accessPermissions.includes(scope) }]"
-										@click="toggleAccessPermission(scope)"
-									>
-										<i :class="accessPermissions.includes(scope) ? 'ti ti-check' : 'ti ti-plus'"></i>
-										<span :class="$style.reqPermName">{{ scopeLabel(scope) }}</span>
-										<span :class="[$style.reqPermFlag, scopeNeedsApproval(scope) ? $style.reqPermFlagReview : $style.reqPermFlagFree]">{{ scopeNeedsApproval(scope) ? '需审核' : '免申请' }}</span>
-									</button>
-								</div>
-							</div>
+							<MkApiScopePicker
+								v-if="(accessStatus?.publicPermissions?.length ?? 0) > 0"
+								v-model="accessPermissions"
+								:availableScopes="accessStatus!.publicPermissions"
+								:noApprovalScopes="accessStatus!.noApprovalPermissions"
+								:mode="accessStatus!.mode"
+							/>
 							<MkButton primary rounded :disabled="!accessReason.trim()" :wait="requestingAccess" @click="requestAccess">
 								<i class="ti ti-send"></i> 提交 API 使用申请
 							</MkButton>
@@ -79,7 +64,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								:key="template.key"
 								class="_button"
 								:class="[$style.templateCard, { [$style.templateActive]: selectedTemplateKey === template.key }]"
-								@click="selectedTemplateKey = template.key"
+								@click="applyAppTemplate(template)"
 							>
 								<i :class="template.icon"></i>
 								<strong>{{ template.title }}</strong>
@@ -103,6 +88,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<MkTextarea v-model="newAppDescription">
 							<template #label>应用说明</template>
 						</MkTextarea>
+						<div :class="$style.pickerBlock">
+							<div :class="$style.pickerLabel">应用权限范围（用户在授权页会看到这些；模板按钮可快捷填充）</div>
+							<MkApiScopePicker
+								v-model="newAppPermissions"
+								:availableScopes="accessStatus?.publicPermissions ?? []"
+								:noApprovalScopes="accessStatus?.noApprovalPermissions ?? []"
+								:mode="accessStatus?.mode ?? 'open'"
+							/>
+						</div>
 						<MkButton primary rounded :disabled="!canCreateApp" :wait="creatingApp" @click="createApp">
 							<i class="ti ti-plus"></i> 创建应用
 						</MkButton>
@@ -140,7 +134,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								:key="template.key"
 								class="_button"
 								:class="$style.templateCard"
-								@click="createToken(template)"
+								@click="applyTokenTemplate(template)"
 							>
 								<i :class="template.icon"></i>
 								<strong>{{ template.title }}</strong>
@@ -149,6 +143,22 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</button>
 						</div>
 
+						<MkInput v-model="newTokenName">
+							<template #prefix><i class="ti ti-tag"></i></template>
+							<template #label>Token 名称</template>
+						</MkInput>
+						<div :class="$style.pickerBlock">
+							<div :class="$style.pickerLabel">Token 权限范围（模板按钮可快捷填充，可再自定义增减）</div>
+							<MkApiScopePicker
+								v-model="newTokenPermissions"
+								:availableScopes="accessStatus?.publicPermissions ?? []"
+								:noApprovalScopes="accessStatus?.noApprovalPermissions ?? []"
+								:mode="accessStatus?.mode ?? 'open'"
+							/>
+						</div>
+						<MkButton primary rounded :disabled="!canCreateToken" :wait="creatingToken" @click="createToken">
+							<i class="ti ti-plus"></i> 创建 Token
+						</MkButton>
 						<MkFolder :defaultOpen="tokens.length > 0">
 							<template #icon><i class="ti ti-key"></i></template>
 							<template #label>我的开发者 Token</template>
@@ -250,6 +260,7 @@ import MkFolder from '@/components/MkFolder.vue';
 import MkInfo from '@/components/MkInfo.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkTextarea from '@/components/MkTextarea.vue';
+import MkApiScopePicker from '@/components/MkApiScopePicker.vue';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
@@ -309,22 +320,10 @@ const accessReason = ref('');
 const accessPermissions = ref<string[]>([]);
 const newAppName = ref('');
 
-function toggleAccessPermission(scope: string) {
-	accessPermissions.value = accessPermissions.value.includes(scope)
-		? accessPermissions.value.filter(s => s !== scope)
-		: [...accessPermissions.value, scope];
-}
-
-// 该 scope 的人类可读用途（复用 Misskey 的 _permissions 文案，没有则回退原始 scope）。
-function scopeLabel(scope: string): string {
-	return (i18n.ts._permissions as Record<string, string>)[scope] ?? scope;
-}
-
-// 该 scope 是否需要管理员审核：open 模式全部免审；approval 模式下，不在免申请白名单的即需审核。
-function scopeNeedsApproval(scope: string): boolean {
-	if (accessStatus.value?.mode !== 'approval') return false;
-	return !(accessStatus.value.noApprovalPermissions ?? []).includes(scope);
-}
+// 创建 OAuth 应用 / 个人 Token 时的精细权限选择（模板只是快捷填充）。
+const newAppPermissions = ref<string[]>([]);
+const newTokenName = ref('');
+const newTokenPermissions = ref<string[]>([]);
 const newAppCallbackUrl = ref('');
 const newAppDescription = ref('');
 const selectedTemplateKey = ref('login');
@@ -359,7 +358,18 @@ const tokenTemplates = appTemplates.filter(template => template.key !== 'login')
 
 const selectedTemplate = computed(() => appTemplates.find(template => template.key === selectedTemplateKey.value) ?? appTemplates[0]);
 const needsApproval = computed(() => accessStatus.value?.mode === 'approval' && accessStatus.value.effectiveStatus !== 'approved');
-const canCreateApp = computed(() => Boolean(newAppName.value.trim() && newAppCallbackUrl.value.trim() && accessStatus.value?.mode !== 'closed' && !needsApproval.value));
+const canCreateApp = computed(() => Boolean(newAppName.value.trim() && newAppCallbackUrl.value.trim() && newAppPermissions.value.length > 0 && accessStatus.value?.mode !== 'closed' && !needsApproval.value));
+const canCreateToken = computed(() => Boolean(newTokenName.value.trim() && newTokenPermissions.value.length > 0 && accessStatus.value?.mode !== 'closed' && !needsApproval.value));
+
+function applyAppTemplate(template: Template) {
+	selectedTemplateKey.value = template.key;
+	newAppPermissions.value = [...template.permissions];
+}
+
+function applyTokenTemplate(template: Template) {
+	newTokenName.value = template.title;
+	newTokenPermissions.value = [...template.permissions];
+}
 const defaultAppCallbackPlaceholder = computed(() => `${window.location.origin}/oauth/callback`);
 const modeLabel = computed(() => ({
 	open: '开放使用',
@@ -405,7 +415,7 @@ async function createApp() {
 		const app = await misskeyApi<ApiApp>('api/apps/create', {
 			name: newAppName.value.trim(),
 			description: newAppDescription.value.trim(),
-			permission: selectedTemplate.value.permissions,
+			permission: newAppPermissions.value,
 			callbackUrls: [newAppCallbackUrl.value.trim()],
 		});
 		await reload();
@@ -420,16 +430,18 @@ async function createApp() {
 	}
 }
 
-async function createToken(template: Template) {
-	if (creatingToken.value || accessStatus.value?.mode === 'closed' || needsApproval.value) return;
+async function createToken() {
+	if (creatingToken.value || !canCreateToken.value) return;
 	creatingToken.value = true;
 	try {
 		const result = await misskeyApi<{ id: string; token: string }>('api/tokens/create', {
-			name: template.title,
-			description: template.caption,
-			permission: template.permissions,
+			name: newTokenName.value.trim(),
+			description: '',
+			permission: newTokenPermissions.value,
 			rank: 'user',
 		});
+		newTokenName.value = '';
+		newTokenPermissions.value = [];
 		await reload();
 		await os.alert({
 			type: 'success',
@@ -543,6 +555,22 @@ definePage(() => ({
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: 0.85em;
 	overflow-wrap: anywhere;
+}
+
+.pickerBlock {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	border: solid 1px var(--MI_THEME-divider);
+	border-radius: var(--MI-radius-sm);
+	background: color(from var(--MI_THEME-panel) srgb r g b / 0.4);
+}
+
+.pickerLabel {
+	font-size: 0.88em;
+	font-weight: 700;
+	color: var(--MI_THEME-fg);
 }
 
 .reqPermBlock {
