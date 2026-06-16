@@ -38,16 +38,24 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<template #caption>说明你的网站、机器人或资源发布场景，方便管理员审核。</template>
 							</MkTextarea>
 							<div v-if="(accessStatus?.publicPermissions?.length ?? 0) > 0" :class="$style.reqPermBlock">
-								<div :class="$style.reqPermLabel">申请使用的权限范围（选择你需要的 scope，便于管理员审核）</div>
+								<div :class="$style.reqPermLabel">
+									选择你需要的权限范围（鼠标悬停看 scope）。
+									<span :class="[$style.reqPermFlag, $style.reqPermFlagFree]">免申请</span> = 通过后立即可用；
+									<span :class="[$style.reqPermFlag, $style.reqPermFlagReview]">需审核</span> = 需要管理员单独批准。
+									<template v-if="accessStatus?.mode === 'open'">（当前为开放模式，所有权限都免审核）</template>
+								</div>
 								<div :class="$style.reqPermChips">
 									<button
 										v-for="scope in accessStatus!.publicPermissions"
 										:key="scope"
 										class="_button"
+										:title="scope"
 										:class="[$style.reqPermChip, { [$style.reqPermChipActive]: accessPermissions.includes(scope) }]"
 										@click="toggleAccessPermission(scope)"
 									>
-										<i :class="accessPermissions.includes(scope) ? 'ti ti-check' : 'ti ti-plus'"></i> {{ scope }}
+										<i :class="accessPermissions.includes(scope) ? 'ti ti-check' : 'ti ti-plus'"></i>
+										<span :class="$style.reqPermName">{{ scopeLabel(scope) }}</span>
+										<span :class="[$style.reqPermFlag, scopeNeedsApproval(scope) ? $style.reqPermFlagReview : $style.reqPermFlagFree]">{{ scopeNeedsApproval(scope) ? '需审核' : '免申请' }}</span>
 									</button>
 								</div>
 							</div>
@@ -253,6 +261,7 @@ type ApiAccessStatus = {
 	oidcEnabled: boolean;
 	requireAppApproval: boolean;
 	publicPermissions: string[];
+	noApprovalPermissions: string[];
 	defaultTokenRateLimit: number;
 	writeTokenRateLimit: number;
 	grant: null | {
@@ -304,6 +313,17 @@ function toggleAccessPermission(scope: string) {
 	accessPermissions.value = accessPermissions.value.includes(scope)
 		? accessPermissions.value.filter(s => s !== scope)
 		: [...accessPermissions.value, scope];
+}
+
+// 该 scope 的人类可读用途（复用 Misskey 的 _permissions 文案，没有则回退原始 scope）。
+function scopeLabel(scope: string): string {
+	return (i18n.ts._permissions as Record<string, string>)[scope] ?? scope;
+}
+
+// 该 scope 是否需要管理员审核：open 模式全部免审；approval 模式下，不在免申请白名单的即需审核。
+function scopeNeedsApproval(scope: string): boolean {
+	if (accessStatus.value?.mode !== 'approval') return false;
+	return !(accessStatus.value.noApprovalPermissions ?? []).includes(scope);
 }
 const newAppCallbackUrl = ref('');
 const newAppDescription = ref('');
@@ -545,10 +565,10 @@ definePage(() => ({
 .reqPermChip {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
-	padding: 4px 10px;
+	gap: 6px;
+	padding: 5px 11px;
 	border-radius: 999px;
-	font-size: 0.8em;
+	font-size: 0.82em;
 	border: solid 1px var(--MI_THEME-divider);
 	color: var(--MI_THEME-fg);
 
@@ -559,9 +579,34 @@ definePage(() => ({
 	&.reqPermChipActive {
 		background: var(--MI_THEME-accentedBg);
 		border-color: transparent;
-		color: var(--MI_THEME-accent);
 		font-weight: 700;
 	}
+}
+
+.reqPermName {
+	max-width: 12em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.reqPermFlag {
+	flex-shrink: 0;
+	padding: 0 6px;
+	border-radius: 999px;
+	font-size: 0.82em;
+	font-weight: 700;
+	line-height: 1.6;
+}
+
+.reqPermFlagFree {
+	background: color(from var(--MI_THEME-success) srgb r g b / 0.18);
+	color: var(--MI_THEME-success);
+}
+
+.reqPermFlagReview {
+	background: color(from var(--MI_THEME-warn) srgb r g b / 0.18);
+	color: var(--MI_THEME-warn);
 }
 
 .docCard {

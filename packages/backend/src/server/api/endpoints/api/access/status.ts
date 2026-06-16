@@ -7,7 +7,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import type { ApiAccessGrantsRepository, MiApiAccessGrant } from '@/models/_.js';
 import { DI } from '@/di-symbols.js';
-import { getApiPublicPermissions } from '@/server/api/api-access-utils.js';
+import { getApiNoApprovalPermissions, getApiPublicPermissions } from '@/server/api/api-access-utils.js';
 import type { MiMeta } from '@/models/Meta.js';
 
 export const meta = {
@@ -53,6 +53,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				oidcEnabled: this.instanceMeta.enableOidc,
 				requireAppApproval: this.instanceMeta.apiRequireAppApproval,
 				publicPermissions: getApiPublicPermissions(this.instanceMeta),
+				// 免申请白名单(approval 模式下这些 scope 无需审核;open 模式下全部免审核)。
+				noApprovalPermissions: getApiNoApprovalPermissions(this.instanceMeta),
 				defaultTokenRateLimit: this.instanceMeta.apiDefaultTokenRateLimit,
 				writeTokenRateLimit: this.instanceMeta.apiWriteTokenRateLimit,
 				grant: packGrant(grant),
