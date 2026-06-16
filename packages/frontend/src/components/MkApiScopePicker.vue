@@ -20,12 +20,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 
 	<div v-for="group in groups" :key="group.key" :class="$style.group">
-		<button class="_button" :class="$style.groupHeader" @click="toggleGroup(group)">
+		<button class="_button" :class="$style.groupHeader" @click="onGroupHeaderClick(group)">
+			<i v-if="collapsible" class="ti ti-chevron-down" :class="[$style.chev, { [$style.chevOpen]: isOpen(group) }]"></i>
 			<i :class="group.icon"></i>
 			<span :class="$style.groupTitle">{{ group.title }}</span>
+			<span v-if="selectedInGroup(group) > 0" :class="$style.groupSelected">{{ selectedInGroup(group) }}</span>
 			<span :class="$style.groupCount">{{ selectedInGroup(group) }} / {{ group.scopes.length }}</span>
 		</button>
-		<div :class="$style.chips">
+		<div v-show="!collapsible || isOpen(group)" :class="$style.chips">
 			<button
 				v-for="scope in group.scopes"
 				:key="scope"
@@ -45,7 +47,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { buildScopeGroups, scopeLabel, type ApiScopeGroup } from '@/utility/api-permissions.js';
 
 const props = withDefaults(defineProps<{
@@ -53,10 +55,31 @@ const props = withDefaults(defineProps<{
 	availableScopes: string[];
 	noApprovalScopes?: string[];
 	mode?: 'approval' | 'open' | 'closed' | string;
+	// 折叠模式：分组默认收起(只显示标题+已选数)，点击展开；用于配置面板等空间有限处。
+	collapsible?: boolean;
 }>(), {
 	noApprovalScopes: () => [],
 	mode: 'open',
+	collapsible: false,
 });
+
+const openGroups = ref<Set<string>>(new Set());
+
+function isOpen(group: ApiScopeGroup): boolean {
+	return openGroups.value.has(group.key);
+}
+
+function toggleOpen(group: ApiScopeGroup) {
+	const next = new Set(openGroups.value);
+	if (next.has(group.key)) next.delete(group.key);
+	else next.add(group.key);
+	openGroups.value = next;
+}
+
+function onGroupHeaderClick(group: ApiScopeGroup) {
+	if (props.collapsible) toggleOpen(group);
+	else toggleGroup(group);
+}
 
 const emit = defineEmits<{
 	(ev: 'update:modelValue', value: string[]): void;
@@ -163,6 +186,24 @@ function clearAll() {
 .groupTitle {
 	flex: 1;
 	text-align: left;
+}
+
+.chev {
+	transition: transform 0.18s ease;
+	transform: rotate(-90deg);
+	opacity: 0.7;
+}
+
+.chevOpen {
+	transform: rotate(0deg);
+}
+
+.groupSelected {
+	padding: 0 7px;
+	border-radius: 999px;
+	font-size: 0.85em;
+	background: var(--MI_THEME-accentedBg);
+	color: var(--MI_THEME-accent);
 }
 
 .groupCount {

@@ -65,6 +65,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								:modelValue="settings?.publicPermissions ?? []"
 								:availableScopes="ALL_API_SCOPES"
 								mode="open"
+								collapsible
 								@update:modelValue="setPublicPermissions"
 							/>
 						</section>
@@ -80,6 +81,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								:modelValue="settings?.noApprovalPermissions ?? []"
 								:availableScopes="settings?.publicPermissions ?? []"
 								mode="open"
+								collapsible
 								@update:modelValue="setNoApprovalPermissions"
 							/>
 						</section>
