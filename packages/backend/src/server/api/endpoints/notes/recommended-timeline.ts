@@ -53,6 +53,7 @@ const FRESH_POOL_MULTIPLIER = 5;
 // demoted; the penalty fades linearly to 0 as it approaches the window edge,
 // so good content returns later (time-recovering de-dup, per user request).
 const DEDUP_WINDOW_MINUTES = 360; // 6h: within this, a just-seen note is suppressed
+const PINNED_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7; // 固定置顶投稿最多自动置顶7天,之后让位给新内容
 const DEDUP_MAX_PENALTY = 90; // strength of the demotion for a just-now-delivered note (must outweigh hotness so the feed visibly rotates)
 // Random jitter to break ties / add variation between refreshes (kept small so it
 // only reorders near-equal scores, never lets junk leap to the top).
@@ -367,7 +368,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				// by engagement/cold-start score) and just run diversify — it walks the input
 				// order greedily, so it preserves recency while still applying the per-author
 				// (≤2), per-channel (≤2) and duplicate-text caps.
-				notes = this.diversify(candidates, ps.limit, recConfig);
+				notes = this.diversify(candidates, ps.limit, recConfig, this.timeService.now, { relaxCaps: true });
 			} else {
 				const now = this.timeService.now;
 				// Per-request seed: varies the exploration shuffle between refreshes so
@@ -662,7 +663,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.map(entry => entry.note);
 	}
 
-	private diversify<T extends { id: string; userId: string; text: string | null; channelId?: string | null; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; tags?: string[]; channel?: { pinnedNoteIds?: string[]; name?: string | null } | null }>(notes: T[], limit: number, config: RecommendationConfig, now = this.timeService.now): T[] {
+	private diversify<T extends { id: string; userId: string; text: string | null; channelId?: string | null; repliesCount?: number; renoteCount?: number; clippedCount?: number; reactions?: Record<string, number>; fileIds?: string[]; tags?: string[]; channel?: { pinnedNoteIds?: string[]; name?: string | null } | null }>(notes: T[], limit: number, config: RecommendationConfig, now = this.timeService.now, options?: { relaxCaps?: boolean }): T[] {
 		const selected: T[] = [];
 		const authorCounts = new Map<string, number>();
 		const channelCounts = new Map<string, number>();
@@ -676,8 +677,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (ageHours >= OLD_CONTENT_HOURS && !isPinnedInChannel && !this.hasOldContentQuality(note, config)) continue;
 			if (this.getLowValuePenalty(note, config) >= config.excludeThreshold && !this.hasStrongEngagement(note)) continue;
 			const authorCount = authorCounts.get(note.userId) ?? 0;
-			if (authorCount >= 2) continue;
-			if (note.channelId != null && (channelCounts.get(note.channelId) ?? 0) >= 2) continue;
+			// 「最新回复」标签(relaxCaps)需要完整按时间展示,不做每作者/每频道≤2的限制,
+			// 否则同一用户/频道的多条新内容会被吃掉,导致"有些人发的内容看不到"。
+			if (!options?.relaxCaps && authorCount >= 2) continue;
+			if (!options?.relaxCaps && note.channelId != null && (channelCounts.get(note.channelId) ?? 0) >= 2) continue;
 
 			const textKey = (note.text ?? '').replace(/\s+/g, '').slice(0, 80);
 			if (textKey.length >= 8 && seenText.has(textKey)) continue;
@@ -772,7 +775,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 	// 管理者がピン留めしたノートを最上部に並べる。候補(7日窓)外でも単独取得し、重複は除去する。
 	private async prependPinnedNotes(notes: MiNote[], candidates: MiNote[]): Promise<MiNote[]> {
-		const pinnedIds = await this.recommendationService.getPinnedNoteIds();
+		const allPinnedIds = await this.recommendationService.getPinnedNoteIds();
+		// 仅自动置顶「较新」的固定投稿(默认7天内)。否则旧的固定投稿会永远霸占首页顶部、
+		// 每次刷新都重复出现且不是48小时内的新内容(固定关系本身仍保留,只是不再强制置顶)。
+		const pinnedCutoffId = this.idService.gen(this.timeService.now - PINNED_MAX_AGE_MS);
+		const pinnedIds = allPinnedIds.filter(id => id >= pinnedCutoffId);
 		if (pinnedIds.length === 0) return notes;
 		const byId = new Map<string, MiNote>(candidates.map(c => [c.id, c]));
 		const missingIds = pinnedIds.filter(id => !byId.has(id));
