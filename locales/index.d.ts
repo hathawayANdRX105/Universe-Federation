@@ -5633,7 +5633,35 @@ export interface Locale extends ILocale {
          */
         "allNotes": string;
         /**
-         * 本文を検索
+         * 総合検索
+         */
+        "combinedSearch": string;
+        /**
+         * 1つの入力で本文 / ユーザー名 / 投稿ID / IP / フィンガープリントを横断検索
+         */
+        "combinedSearchCaption": string;
+        /**
+         * 詳細フィルター
+         */
+        "advancedFilters": string;
+        /**
+         * 現在のページを全選択
+         */
+        "selectAllPage": string;
+        /**
+         * 一致するすべてを削除
+         */
+        "deleteAllMatching": string;
+        /**
+         * 現在のフィルターに一致するローカル投稿をすべて削除します（最大1000件・アーカイブされ復元可能）。理由を入力できます。続行しますか？
+         */
+        "deleteAllMatchingConfirm": string;
+        /**
+         * {n} 件削除しました
+         */
+        "deletedCount": ParameterizedString<"n">;
+        /**
+         * 本文キーワード
          */
         "searchText": string;
         /**

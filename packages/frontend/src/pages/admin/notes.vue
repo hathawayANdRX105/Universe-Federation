@@ -39,40 +39,59 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<template #label>{{ i18n.ts._noteManagement.allNotes }}</template>
 
 				<div class="_gaps_m">
+					<!-- 综合搜索：一框同时搜 正文 / 用户名 / 帖子ID / IP / 指纹 -->
 					<div :class="$style.filters">
-						<MkInput v-model="f.query" type="search" debounce :class="$style.grow"><template #prefix><i class="ti ti-search"></i></template><template #label>{{ i18n.ts._noteManagement.searchText }}</template></MkInput>
-						<MkInput v-model="f.username" :class="$style.filterItem"><template #label>{{ i18n.ts._noteManagement.username }}</template></MkInput>
-						<MkSelect v-model="f.visibility" :class="$style.filterItem">
-							<template #label>{{ i18n.ts.visibility }}</template>
-							<option value="all">{{ i18n.ts.all }}</option>
-							<option value="public">public</option>
-							<option value="home">home</option>
-							<option value="followers">followers</option>
-							<option value="specified">specified</option>
-						</MkSelect>
-						<MkSelect v-model="f.sort" :class="$style.filterItem">
+						<MkInput v-model="f.search" type="search" debounce :class="$style.grow" @update:modelValue="reloadNotes">
+							<template #prefix><i class="ti ti-search"></i></template>
+							<template #label>{{ i18n.ts._noteManagement.combinedSearch }}</template>
+							<template #caption>{{ i18n.ts._noteManagement.combinedSearchCaption }}</template>
+						</MkInput>
+						<MkSelect v-model="f.sort" :class="$style.filterItem" @update:modelValue="reloadNotes">
 							<template #label>{{ i18n.ts._noteManagement.sort }}</template>
 							<option value="+createdAt">{{ i18n.ts._noteManagement.newestFirst }}</option>
 							<option value="-createdAt">{{ i18n.ts._noteManagement.oldestFirst }}</option>
 						</MkSelect>
-					</div>
-					<div :class="$style.filters">
-						<MkInput v-model="f.ip" :class="$style.filterItem"><template #label>IP</template></MkInput>
-						<MkInput v-model="f.fingerprint" :class="$style.filterItem"><template #label>{{ i18n.ts._noteManagement.fingerprint }}</template></MkInput>
-						<MkInput v-model="f.sinceDate" type="date" :class="$style.filterItem"><template #label>{{ i18n.ts._noteManagement.since }}</template></MkInput>
-						<MkInput v-model="f.untilDate" type="date" :class="$style.filterItem"><template #label>{{ i18n.ts._noteManagement.until }}</template></MkInput>
-					</div>
-					<div :class="$style.switches">
-						<MkSwitch v-model="f.withFiles">{{ i18n.ts._noteManagement.withFiles }}</MkSwitch>
-						<MkSwitch v-model="f.repliesOnly">{{ i18n.ts._noteManagement.repliesOnly }}</MkSwitch>
-						<MkSwitch v-model="f.renotesOnly">{{ i18n.ts._noteManagement.renotesOnly }}</MkSwitch>
-						<MkSwitch v-model="f.reportedOnly">{{ i18n.ts._noteManagement.reportedOnly }}</MkSwitch>
-					</div>
-					<div :class="$style.bar">
 						<MkButton rounded @click="reloadNotes"><i class="ti ti-refresh"></i> {{ i18n.ts.reload }}</MkButton>
-						<div :class="$style.spacer"></div>
+					</div>
+
+					<MkFolder :defaultOpen="false">
+						<template #icon><i class="ti ti-filter"></i></template>
+						<template #label>{{ i18n.ts._noteManagement.advancedFilters }}</template>
+						<div class="_gaps_s">
+							<div :class="$style.filters">
+								<MkInput v-model="f.query" :class="$style.filterItem"><template #label>{{ i18n.ts._noteManagement.searchText }}</template></MkInput>
+								<MkInput v-model="f.username" :class="$style.filterItem"><template #label>{{ i18n.ts._noteManagement.username }}</template></MkInput>
+								<MkSelect v-model="f.visibility" :class="$style.filterItem">
+									<template #label>{{ i18n.ts.visibility }}</template>
+									<option value="all">{{ i18n.ts.all }}</option>
+									<option value="public">public</option>
+									<option value="home">home</option>
+									<option value="followers">followers</option>
+									<option value="specified">specified</option>
+								</MkSelect>
+							</div>
+							<div :class="$style.filters">
+								<MkInput v-model="f.ip" :class="$style.filterItem"><template #label>IP</template></MkInput>
+								<MkInput v-model="f.fingerprint" :class="$style.filterItem"><template #label>{{ i18n.ts._noteManagement.fingerprint }}</template></MkInput>
+								<MkInput v-model="f.sinceDate" type="date" :class="$style.filterItem"><template #label>{{ i18n.ts._noteManagement.since }}</template></MkInput>
+								<MkInput v-model="f.untilDate" type="date" :class="$style.filterItem"><template #label>{{ i18n.ts._noteManagement.until }}</template></MkInput>
+							</div>
+							<div :class="$style.switches">
+								<MkSwitch v-model="f.withFiles">{{ i18n.ts._noteManagement.withFiles }}</MkSwitch>
+								<MkSwitch v-model="f.repliesOnly">{{ i18n.ts._noteManagement.repliesOnly }}</MkSwitch>
+								<MkSwitch v-model="f.renotesOnly">{{ i18n.ts._noteManagement.renotesOnly }}</MkSwitch>
+								<MkSwitch v-model="f.reportedOnly">{{ i18n.ts._noteManagement.reportedOnly }}</MkSwitch>
+							</div>
+							<MkButton rounded primary @click="reloadNotes"><i class="ti ti-search"></i> {{ i18n.ts.search }}</MkButton>
+						</div>
+					</MkFolder>
+
+					<div :class="$style.bar">
+						<label :class="$style.selectAll"><input type="checkbox" :checked="allOnPageSelected" :disabled="items.length === 0" @change="toggleSelectAllPage"/> {{ i18n.ts._noteManagement.selectAllPage }}</label>
 						<span :class="$style.dim">{{ i18n.tsx._noteManagement.selectedCount({ n: selected.size }) }}</span>
+						<div :class="$style.spacer"></div>
 						<MkButton rounded danger :disabled="selected.size === 0" :wait="bulkDeleting" @click="bulkDelete"><i class="ti ti-trash"></i> {{ i18n.ts._noteManagement.bulkDelete }}</MkButton>
+						<MkButton rounded danger :wait="deletingAll" @click="deleteAllMatching"><i class="ti ti-trash-x"></i> {{ i18n.ts._noteManagement.deleteAllMatching }}</MkButton>
 					</div>
 
 					<MkLoading v-if="notesLoading"/>
@@ -241,7 +260,7 @@ async function saveEmergency() {
 
 // 全部帖子
 const f = reactive({
-	query: '', username: '', visibility: 'all', sort: '+createdAt' as '+createdAt' | '-createdAt',
+	search: '', query: '', username: '', visibility: 'all', sort: '+createdAt' as '+createdAt' | '-createdAt',
 	ip: '', fingerprint: '', sinceDate: '', untilDate: '',
 	withFiles: false, repliesOnly: false, renotesOnly: false, reportedOnly: false,
 });
@@ -252,10 +271,14 @@ const notesOffset = ref(0);
 const notesCanMore = ref(false);
 const selected = reactive(new Set<string>());
 const bulkDeleting = ref(false);
+const deletingAll = ref(false);
 
-function buildNoteParams() {
+// 当前页是否已全选
+const allOnPageSelected = computed(() => items.value.length > 0 && items.value.every(i => selected.has(i.note.id)));
+
+function buildFilterParams() {
 	return {
-		limit: NOTES_LIMIT, offset: notesOffset.value, sort: f.sort,
+		search: f.search.trim() || null,
 		query: f.query.trim() || null,
 		username: f.username.trim() || null,
 		visibility: f.visibility,
@@ -265,6 +288,10 @@ function buildNoteParams() {
 		sinceDate: f.sinceDate || null,
 		untilDate: f.untilDate || null,
 	};
+}
+
+function buildNoteParams() {
+	return { limit: NOTES_LIMIT, offset: notesOffset.value, sort: f.sort, ...buildFilterParams() };
 }
 
 async function loadNotes() {
@@ -284,6 +311,29 @@ async function nextNotes() { notesOffset.value += NOTES_LIMIT; await loadNotes()
 async function prevNotes() { notesOffset.value = Math.max(0, notesOffset.value - NOTES_LIMIT); await loadNotes(); }
 
 function toggleSelect(id: string) { if (selected.has(id)) selected.delete(id); else selected.add(id); }
+
+function toggleSelectAllPage() {
+	if (allOnPageSelected.value) {
+		for (const i of items.value) selected.delete(i.note.id);
+	} else {
+		for (const i of items.value) selected.add(i.note.id);
+	}
+}
+
+async function deleteAllMatching() {
+	const { canceled, result: reason } = await os.inputText({ title: i18n.ts._noteManagement.deleteAllMatchingConfirm });
+	if (canceled) return;
+	deletingAll.value = true;
+	try {
+		const res = await os.apiWithDialog('admin/notes/delete-bulk', { filter: buildFilterParams(), reason: reason || null }) as any;
+		await os.alert({ type: 'success', text: i18n.tsx._noteManagement.deletedCount({ n: res.deletedCount }) });
+		selected.clear();
+		notesOffset.value = 0;
+		await loadNotes();
+	} finally {
+		deletingAll.value = false;
+	}
+}
 
 async function deleteOne(id: string) {
 	const { canceled, result: reason } = await os.inputText({ title: i18n.ts._noteManagement.deleteReason });
@@ -421,6 +471,7 @@ loadArchive();
 .grow { flex: 2 1 240px; }
 .filterItem { flex: 1 1 160px; }
 .bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.selectAll { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 90%; }
 .spacer { flex: 1; }
 .dim { color: var(--MI_THEME-fgTransparentWeak); font-size: 90%; }
 .noteRow { display: flex; gap: 10px; padding: 12px; border: 1px solid var(--MI_THEME-divider); border-radius: var(--MI-radius); background: var(--MI_THEME-panel); }

@@ -4,7 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { In } from 'typeorm';
+import { In, Brackets } from 'typeorm';
 import type { NotesRepository, UsersRepository, UserProfilesRepository, UserIpsRepository, UserFingerprintsRepository } from '@/models/_.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { DI } from '@/di-symbols.js';
@@ -47,6 +47,8 @@ export const paramDef = {
 		limit: { type: 'integer', minimum: 1, maximum: 100, default: 30 },
 		offset: { type: 'integer', minimum: 0, default: 0 },
 		sort: { type: 'string', enum: ['+createdAt', '-createdAt'], default: '+createdAt' },
+		// 综合搜索：一个框同时匹配 正文 / 用户名 / 帖子ID / IP / 指纹
+		search: { type: 'string', nullable: true, default: null },
 		query: { type: 'string', nullable: true, default: null },
 		userId: { type: 'string', format: 'misskey:id', nullable: true, default: null },
 		username: { type: 'string', nullable: true, default: null },
@@ -89,6 +91,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				.innerJoinAndSelect('note.user', 'user')
 				.where('note.userHost IS NULL'); // 仅本地帖
 
+			if (ps.search) {
+				const s = ps.search.trim();
+				query.andWhere(new Brackets(qb => {
+					qb.orWhere('note.text ILIKE :s', { s: '%' + sqlLikeEscape(s) + '%' })
+						.orWhere('user.usernameLower ILIKE :su', { su: '%' + sqlLikeEscape(s.toLowerCase()) + '%' })
+						.orWhere('note.id = :sid', { sid: s })
+						.orWhere('note.ip = :sip', { sip: s })
+						.orWhere('note.fingerprint = :sfp', { sfp: s });
+				}));
+			}
 			if (ps.userId) query.andWhere('note.userId = :userId', { userId: ps.userId });
 			if (ps.username) query.andWhere('user.usernameLower like :username', { username: sqlLikeEscape(ps.username.toLowerCase()) + '%' });
 			if (ps.query) query.andWhere('note.text ILIKE :q', { q: '%' + sqlLikeEscape(ps.query) + '%' });

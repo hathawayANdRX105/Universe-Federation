@@ -4,7 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { In } from 'typeorm';
+import { Brackets } from 'typeorm';
 import type { NotesRepository } from '@/models/_.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { DI } from '@/di-symbols.js';
@@ -42,9 +42,14 @@ export const paramDef = {
 			nullable: true,
 			default: null,
 			properties: {
+				search: { type: 'string', nullable: true },
 				userId: { type: 'string', format: 'misskey:id', nullable: true },
+				username: { type: 'string', nullable: true },
 				query: { type: 'string', nullable: true },
 				visibility: { type: 'string', enum: ['all', 'public', 'home', 'followers', 'specified'] },
+				withFiles: { type: 'boolean' },
+				repliesOnly: { type: 'boolean' },
+				renotesOnly: { type: 'boolean' },
 				ip: { type: 'string', nullable: true },
 				fingerprint: { type: 'string', nullable: true },
 				reportedOnly: { type: 'boolean' },
@@ -76,9 +81,23 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				query.andWhere('note.id IN (:...noteIds)', { noteIds: ps.noteIds });
 			} else if (ps.filter) {
 				const f = ps.filter;
+				if (f.search) {
+					const s = f.search.trim();
+					query.andWhere(new Brackets(qb => {
+						qb.orWhere('note.text ILIKE :s', { s: '%' + sqlLikeEscape(s) + '%' })
+							.orWhere('user.usernameLower ILIKE :su', { su: '%' + sqlLikeEscape(s.toLowerCase()) + '%' })
+							.orWhere('note.id = :sid', { sid: s })
+							.orWhere('note.ip = :sip', { sip: s })
+							.orWhere('note.fingerprint = :sfp', { sfp: s });
+					}));
+				}
 				if (f.userId) query.andWhere('note.userId = :userId', { userId: f.userId });
+				if (f.username) query.andWhere('user.usernameLower like :username', { username: sqlLikeEscape(f.username.toLowerCase()) + '%' });
 				if (f.query) query.andWhere('note.text ILIKE :q', { q: '%' + sqlLikeEscape(f.query) + '%' });
 				if (f.visibility && f.visibility !== 'all') query.andWhere('note.visibility = :vis', { vis: f.visibility });
+				if (f.withFiles) query.andWhere('note.fileIds != \'{}\'');
+				if (f.repliesOnly) query.andWhere('note.replyId IS NOT NULL');
+				if (f.renotesOnly) query.andWhere('note.renoteId IS NOT NULL');
 				if (f.ip) query.andWhere('note.ip = :ip', { ip: f.ip });
 				if (f.fingerprint) query.andWhere('note.fingerprint = :fp', { fp: f.fingerprint });
 				if (f.reportedOnly) query.andWhere('note.userId IN (SELECT "targetUserId" FROM "abuse_user_report" WHERE "resolved" = false)');
