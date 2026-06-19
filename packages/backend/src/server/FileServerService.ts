@@ -9,14 +9,17 @@ import { dirname } from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
 import sharp from 'sharp';
 import { sharpBmp } from '@misskey-dev/sharp-read-bmp';
+import type { Agents } from 'got';
 import type { Config } from '@/config.js';
 import type { MiDriveFile, DriveFilesRepository, MiUser } from '@/models/_.js';
+import type { MiMeta } from '@/models/Meta.js';
 import { DI } from '@/di-symbols.js';
 import { createTemp } from '@/misc/create-temp.js';
 import { FILE_TYPE_BROWSERSAFE } from '@/const.js';
 import { StatusError } from '@/misc/status-error.js';
 import type Logger from '@/logger.js';
 import { DownloadService } from '@/core/DownloadService.js';
+import { UrlPreviewProxyService } from '@/core/UrlPreviewProxyService.js';
 import { IImageStreamable, ImageProcessingService, webpDefault } from '@/core/ImageProcessingService.js';
 import { VideoProcessingService } from '@/core/VideoProcessingService.js';
 import { InternalStorageService } from '@/core/InternalStorageService.js';
@@ -33,6 +36,13 @@ import { AuthenticateService, AuthenticationError } from '@/server/api/Authentic
 import { SkRateLimiterService } from '@/server/SkRateLimiterService.js';
 import { Keyed, RateLimit, sendRateLimitHeaders } from '@/misc/rate-limit-utils.js';
 import { renderInlineError } from '@/misc/render-inline-error.js';
+import {
+	describeUrlPreviewProxy,
+	renderUrlPreviewProxyError,
+	tryUrlPreviewOutboundProxies,
+	UrlPreviewProxyUnavailableError,
+	type UrlPreviewProxyMode,
+} from '@/misc/url-preview-proxy.js';
 import type { FastifyInstance, FastifyRequest, FastifyReply, FastifyPluginOptions } from 'fastify';
 
 const _filename = fileURLToPath(import.meta.url);
@@ -53,11 +63,15 @@ export class FileServerService {
 		@Inject(DI.config)
 		private config: Config,
 
+		@Inject(DI.meta)
+		private readonly meta: MiMeta,
+
 		@Inject(DI.driveFilesRepository)
 		private driveFilesRepository: DriveFilesRepository,
 
 		private fileInfoService: FileInfoService,
 		private downloadService: DownloadService,
+		private readonly urlPreviewProxyService: UrlPreviewProxyService,
 		private imageProcessingService: ImageProcessingService,
 		private videoProcessingService: VideoProcessingService,
 		private internalStorageService: InternalStorageService,
@@ -141,6 +155,18 @@ export class FileServerService {
 		if (err instanceof StatusError && (err.statusCode === 302 || err.isClientError)) {
 			reply.code(err.statusCode);
 			return;
+		}
+
+		if (err instanceof UrlPreviewProxyUnavailableError) {
+			reply.header('Cache-Control', 'max-age=30');
+			reply.code(503);
+			return reply.send({
+				error: {
+					message: 'URL preview outbound proxy is unavailable',
+					code: 'URL_PREVIEW_PROXY_UNAVAILABLE',
+					id: '37177db1-7f9b-4a39-8a76-a5404f576f6e',
+				},
+			});
 		}
 
 		reply.code(500);
@@ -286,8 +312,9 @@ export class FileServerService {
 
 		// アバタークロップなど、どうしてもオリジンである必要がある場合
 		const mustOrigin = 'origin' in request.query;
+		const useUrlPreviewProxy = 'preview' in request.query && this.getUrlPreviewProxyMode() === 'outbound';
 
-		if (this.config.externalMediaProxyEnabled && !mustOrigin) {
+		if (this.config.externalMediaProxyEnabled && !mustOrigin && !useUrlPreviewProxy) {
 			// 外部のメディアプロキシが有効なら、そちらにリダイレクト
 
 			reply.header('Cache-Control', 'public, max-age=259200'); // 3 days
@@ -311,7 +338,7 @@ export class FileServerService {
 		}
 
 		// Create temp file
-		const file = await this.getStreamAndTypeFromUrl(url);
+		const file = await this.getStreamAndTypeFromUrl(url, { useUrlPreviewProxy });
 		if (file === '404') {
 			reply.code(404);
 			reply.header('Cache-Control', 'max-age=86400');
@@ -450,7 +477,7 @@ export class FileServerService {
 	}
 
 	@bindThis
-	private async getStreamAndTypeFromUrl(url: string): Promise<
+	private async getStreamAndTypeFromUrl(url: string, options: { useUrlPreviewProxy?: boolean } = {}): Promise<
 		{ state: 'remote'; fileRole?: 'thumbnail' | 'webpublic' | 'original'; file?: MiDriveFile; mime: string; ext: string | null; path: string; cleanup: () => void; filename: string; }
 		| { state: 'stored_internal'; fileRole: 'thumbnail' | 'webpublic' | 'original'; file: MiDriveFile; filename: string; mime: string; ext: string | null; path: string; }
 		| '404'
@@ -463,16 +490,35 @@ export class FileServerService {
 			return await this.getFileFromKey(key);
 		}
 
+		if (options.useUrlPreviewProxy) {
+			return await this.downloadAndDetectTypeFromUrlWithUrlPreviewProxy(url);
+		}
+
 		return await this.downloadAndDetectTypeFromUrl(url);
 	}
 
 	@bindThis
-	private async downloadAndDetectTypeFromUrl(url: string): Promise<
+	private async downloadAndDetectTypeFromUrlWithUrlPreviewProxy(url: string): Promise<
+		{ state: 'remote'; mime: string; ext: string | null; path: string; cleanup: () => void; filename: string; }
+	> {
+		return tryUrlPreviewOutboundProxies(
+			this.meta.urlPreviewOutboundProxies ?? [],
+			proxy => this.downloadAndDetectTypeFromUrl(url, {
+				agent: this.urlPreviewProxyService.createAgents(proxy),
+			}),
+			(proxy, error) => {
+				this.logger.warn(`Failed URL preview media via proxy ${describeUrlPreviewProxy(proxy)}: ${renderUrlPreviewProxyError(error, proxy)}`);
+			},
+		);
+	}
+
+	@bindThis
+	private async downloadAndDetectTypeFromUrl(url: string, options: { agent?: Agents } = {}): Promise<
 		{ state: 'remote'; mime: string; ext: string | null; path: string; cleanup: () => void; filename: string; }
 	> {
 		const [path, cleanup] = await createTemp();
 		try {
-			const { filename } = await this.downloadService.downloadUrl(url, path);
+			const { filename } = await this.downloadService.downloadUrl(url, path, { agent: options.agent });
 
 			const { mime, ext } = await this.fileInfoService.detectType(path);
 
@@ -486,6 +532,10 @@ export class FileServerService {
 			cleanup();
 			throw e;
 		}
+	}
+
+	private getUrlPreviewProxyMode(): UrlPreviewProxyMode {
+		return this.meta.urlPreviewProxyMode ?? (this.meta.urlPreviewSummaryProxyUrl ? 'summaly' : 'direct');
 	}
 
 	@bindThis
@@ -685,4 +735,3 @@ export function parseRange(rangeHeader: string, size: number): ParsedRange | nul
 
 	return { start, end };
 }
-

@@ -166,6 +166,7 @@
 		"semver": "7.7.2",
 		"sharp": "0.34.4",
 		"slacc": "0.0.10",
+		"socks-proxy-agent": "8.0.5",
 		"systeminformation": "5.31.6",
 		"tinycolor2": "1.6.0",
 		"tmp": "0.2.5",

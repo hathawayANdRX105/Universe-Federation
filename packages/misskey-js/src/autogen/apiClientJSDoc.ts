@@ -1169,6 +1169,17 @@ declare module '../api.js' {
      * 
      * **Credential required**: *Yes* / **Permission**: *write:admin:note*
      */
+    request<E extends 'admin/notes/remote/delete-by-host', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     * 
+     * **Credential required**: *Yes* / **Permission**: *write:admin:note*
+     */
     request<E extends 'admin/notes/restore', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
@@ -1859,6 +1870,17 @@ declare module '../api.js' {
      * **Credential required**: *Yes* / **Permission**: *write:admin:user-note*
      */
     request<E extends 'admin/update-user-note', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     * 
+     * **Credential required**: *Yes* / **Permission**: *read:admin:meta*
+     */
+    request<E extends 'admin/url-preview/proxy/test', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,
@@ -5485,7 +5507,7 @@ declare module '../api.js' {
     /**
      * No description provided.
      * 
-     * **Credential required**: *No*
+     * **Credential required**: *Yes* / **Permission**: *read:admin:show-user*
      */
     request<E extends 'retention', P extends Endpoints[E]['req']>(
       endpoint: E,
@@ -5942,6 +5964,17 @@ declare module '../api.js' {
      * **Credential required**: *Yes* / **Permission**: *write:account*
      */
     request<E extends 'users/lists/update-membership', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     * 
+     * **Credential required**: *No*
+     */
+    request<E extends 'users/note-channels', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,

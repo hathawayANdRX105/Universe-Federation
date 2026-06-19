@@ -382,6 +382,9 @@ importers:
       slacc:
         specifier: 0.0.10
         version: 0.0.10
+      socks-proxy-agent:
+        specifier: 8.0.5
+        version: 8.0.5
       systeminformation:
         specifier: 5.31.6
         version: 5.31.6
@@ -1519,7 +1522,7 @@ packages:
     resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
 
   '@aiscript-dev/aiscript-languageserver@https://github.com/aiscript-dev/aiscript-languageserver/releases/download/0.1.6/aiscript-dev-aiscript-languageserver-0.1.6.tgz':
-    resolution: {tarball: https://github.com/aiscript-dev/aiscript-languageserver/releases/download/0.1.6/aiscript-dev-aiscript-languageserver-0.1.6.tgz}
+    resolution: {integrity: sha512-DBcHPHTeAVthlVi4lR4uFBYQU8AakaTYGMMVecGA8s8jFJPxscjkOgQ8/oOnJTcxbQx71V59ECQcoKahXMKcDw==, tarball: https://github.com/aiscript-dev/aiscript-languageserver/releases/download/0.1.6/aiscript-dev-aiscript-languageserver-0.1.6.tgz}
     version: 0.1.6
     hasBin: true
 

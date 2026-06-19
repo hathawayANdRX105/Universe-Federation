@@ -11,6 +11,7 @@ import { IsNull, Not } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
+import { UrlPreviewProxyService } from '@/core/UrlPreviewProxyService.js';
 import type Logger from '@/logger.js';
 import { query } from '@/misc/prelude/url.js';
 import { LoggerService } from '@/core/LoggerService.js';
@@ -32,6 +33,13 @@ import { BucketRateLimit, Keyed, sendRateLimitHeaders } from '@/misc/rate-limit-
 import type { MiLocalUser } from '@/models/User.js';
 import { getIpHash } from '@/misc/get-ip-hash.js';
 import { isRetryableError } from '@/misc/is-retryable-error.js';
+import {
+	describeUrlPreviewProxy,
+	renderUrlPreviewProxyError,
+	tryUrlPreviewOutboundProxies,
+	UrlPreviewProxyUnavailableError,
+	type UrlPreviewProxyMode,
+} from '@/misc/url-preview-proxy.js';
 import * as Acct from '@/misc/acct.js';
 import { isNote } from '@/core/activitypub/type.js';
 import { renderInlineError } from '@/misc/render-inline-error.js';
@@ -52,7 +60,7 @@ export type LocalSummalyResult = SummalyResult & {
 };
 
 // Increment this to invalidate cached previews after a major change.
-const cacheFormatVersion = 4;
+const cacheFormatVersion = 5;
 
 type PreviewRoute = {
 	Querystring: {
@@ -90,6 +98,7 @@ export class UrlPreviewService {
 		private readonly notesRepository: NotesRepository,
 
 		private httpRequestService: HttpRequestService,
+		private readonly urlPreviewProxyService: UrlPreviewProxyService,
 		private loggerService: LoggerService,
 		private readonly utilityService: UtilityService,
 		private readonly apUtilityService: ApUtilityService,
@@ -125,7 +134,10 @@ export class UrlPreviewService {
 
 		// But proxy everything else!
 		const mediaQuery = query({ url, preview: '1' });
-		return `${this.config.mediaProxy}/preview.webp?${mediaQuery}`;
+		const previewProxyBase = this.getProxyMode(this.meta) === 'outbound'
+			? new URL('/proxy', this.config.url).toString().replace(/\/$/, '')
+			: this.config.mediaProxy;
+		return `${previewProxyBase}/preview.webp?${mediaQuery}`;
 	}
 
 	@bindThis
@@ -205,9 +217,7 @@ export class UrlPreviewService {
 		}
 
 		try {
-			const summary: LocalSummalyResult = this.meta.urlPreviewSummaryProxyUrl
-				? await this.fetchSummaryFromProxy(url, this.meta, lang)
-				: await this.fetchSummary(url, this.meta, lang);
+			const summary: LocalSummalyResult = await this.fetchSummaryByMode(url, this.meta, lang);
 
 			this.validateUrls(summary);
 
@@ -229,12 +239,12 @@ export class UrlPreviewService {
 
 			// Summaly cannot always detect links to a fedi post, so do some additional tests to try and find missed cases.
 			if (!summary.activityPub) {
-				await this.inferActivityPubLink(summary);
+				await this.inferActivityPubLink(summary, this.getProxyMode(this.meta) !== 'outbound');
 			}
 
 			if (summary.activityPub && !summary.haveNoteLocally) {
 				// Avoid duplicate checks in case inferActivityPubLink already set this.
-				const exists = await this.noteExists(summary.activityPub, fetch);
+				const exists = await this.noteExists(summary.activityPub, this.getProxyMode(this.meta) !== 'outbound' && fetch);
 
 				// Remove the AP flag if we encounter a permanent error fetching the note.
 				if (exists === false) {
@@ -271,9 +281,25 @@ export class UrlPreviewService {
 		} catch (err) {
 			this.logger.warn(`Failed to get preview of ${url} for ${lang}: ${renderInlineError(err)}`);
 
+			if (err instanceof UrlPreviewProxyUnavailableError) {
+				return this.renderProxyUnavailable(reply);
+			}
+
 			const errorResponse = await this.cacheError(cacheKey, url, err);
 			return this.renderError(errorResponse, reply);
 		}
+	}
+
+	private renderProxyUnavailable(reply: FastifyReply): FastifyReply {
+		reply.header('Cache-Control', 'max-age=30');
+
+		return reply.code(503).send({
+			error: {
+				message: 'URL preview outbound proxy is unavailable',
+				code: 'URL_PREVIEW_PROXY_UNAVAILABLE',
+				id: 'fdf6dd5c-8d58-4c16-bd30-0b457f602178',
+			},
+		});
 	}
 
 	private async cacheError(cacheKey: string, url: string, error: unknown): Promise<LocalSummalyResult> {
@@ -345,7 +371,7 @@ export class UrlPreviewService {
 		// Check if note has loaded since we last cached the preview
 		if (summary.activityPub && !summary.haveNoteLocally) {
 			// Avoid duplicate checks in case inferActivityPubLink already set this.
-			const exists = await this.noteExists(summary.activityPub, fetch);
+			const exists = await this.noteExists(summary.activityPub, this.getProxyMode(this.meta) !== 'outbound' && fetch);
 
 			// Remove the AP flag if we encounter a permanent error fetching the note.
 			if (exists === false) {
@@ -383,6 +409,43 @@ export class UrlPreviewService {
 			contentLengthLimit: meta.urlPreviewMaximumContentLength,
 			contentLengthRequired: meta.urlPreviewRequireContentLength,
 		});
+	}
+
+	private fetchSummaryByMode(url: string, meta: MiMeta, lang?: string): Promise<SummalyResult> {
+		switch (this.getProxyMode(meta)) {
+			case 'outbound':
+				return this.fetchSummaryFromOutboundProxies(url, meta, lang);
+			case 'summaly':
+				if (!meta.urlPreviewSummaryProxyUrl) {
+					throw new UrlPreviewProxyUnavailableError([new Error('URL preview Summaly proxy endpoint is not configured')]);
+				}
+				return this.fetchSummaryFromProxy(url, meta, lang);
+			case 'direct':
+			default:
+				return this.fetchSummary(url, meta, lang);
+		}
+	}
+
+	private getProxyMode(meta: MiMeta): UrlPreviewProxyMode {
+		return meta.urlPreviewProxyMode ?? (meta.urlPreviewSummaryProxyUrl ? 'summaly' : 'direct');
+	}
+
+	private fetchSummaryFromOutboundProxies(url: string, meta: MiMeta, lang?: string): Promise<SummalyResult> {
+		return tryUrlPreviewOutboundProxies(
+			meta.urlPreviewOutboundProxies ?? [],
+			proxy => summaly(url, {
+				followRedirects: true,
+				lang: lang ?? 'ja-JP',
+				agent: this.urlPreviewProxyService.createAgents(proxy),
+				userAgent: meta.urlPreviewUserAgent ?? undefined,
+				operationTimeout: meta.urlPreviewTimeout,
+				contentLengthLimit: meta.urlPreviewMaximumContentLength,
+				contentLengthRequired: meta.urlPreviewRequireContentLength,
+			}),
+			(proxy, error) => {
+				this.logger.warn(`Failed URL preview via proxy ${describeUrlPreviewProxy(proxy)}: ${renderUrlPreviewProxyError(error, proxy)}`);
+			},
+		);
 	}
 
 	private fetchSummaryFromProxy(url: string, meta: MiMeta, lang?: string): Promise<SummalyResult> {
@@ -440,7 +503,7 @@ export class UrlPreviewService {
 		}
 	}
 
-	private async inferActivityPubLink(summary: LocalSummalyResult) {
+	private async inferActivityPubLink(summary: LocalSummalyResult, allowRemoteProbe = true) {
 		// Match canonical URI first.
 		// This covers local and remote links.
 		const isCanonicalUri = !!await this.apDbResolverService.getNoteFromApId(summary.url);
@@ -467,6 +530,10 @@ export class UrlPreviewService {
 		if (matchByUrl) {
 			summary.activityPub = matchByUrl.uri;
 			summary.haveNoteLocally = true;
+			return;
+		}
+
+		if (!allowRemoteProbe) {
 			return;
 		}
 

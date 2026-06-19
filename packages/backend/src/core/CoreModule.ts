@@ -94,6 +94,7 @@ import { NoteControlService } from './NoteControlService.js';
 import { NoteArchiveService } from './NoteArchiveService.js';
 import { RegistryApiService } from './RegistryApiService.js';
 import { ReversiService } from './ReversiService.js';
+import { UrlPreviewProxyService } from './UrlPreviewProxyService.js';
 
 import { ChartLoggerService } from './chart/ChartLoggerService.js';
 import FederationChart from './chart/charts/federation.js';
@@ -205,6 +206,7 @@ const $NotePiningService: Provider = { provide: 'NotePiningService', useExisting
 const $NotificationService: Provider = { provide: 'NotificationService', useExisting: NotificationService };
 const $PollService: Provider = { provide: 'PollService', useExisting: PollService };
 const $SystemAccountService: Provider = { provide: 'SystemAccountService', useExisting: SystemAccountService };
+const $UrlPreviewProxyService: Provider = { provide: 'UrlPreviewProxyService', useExisting: UrlPreviewProxyService };
 const $PushNotificationService: Provider = { provide: 'PushNotificationService', useExisting: PushNotificationService };
 const $QueryService: Provider = { provide: 'QueryService', useExisting: QueryService };
 const $QueueService: Provider = { provide: 'QueueService', useExisting: QueueService };
@@ -420,6 +422,7 @@ const $Imports = [
 		NoteArchiveService,
 		RegistryApiService,
 		ReversiService,
+		UrlPreviewProxyService,
 		InstanceStatsService,
 		NoteVisibilityService,
 
@@ -538,6 +541,7 @@ const $Imports = [
 		$NotificationService,
 		$PollService,
 		$SystemAccountService,
+		$UrlPreviewProxyService,
 		$PushNotificationService,
 		$QueryService,
 		$QueueService,
@@ -749,6 +753,7 @@ const $Imports = [
 		NoteArchiveService,
 		RegistryApiService,
 		ReversiService,
+		UrlPreviewProxyService,
 		InstanceStatsService,
 		NoteVisibilityService,
 
@@ -866,6 +871,7 @@ const $Imports = [
 		$NotificationService,
 		$PollService,
 		$SystemAccountService,
+		$UrlPreviewProxyService,
 		$PushNotificationService,
 		$QueryService,
 		$QueueService,

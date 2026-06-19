@@ -37,7 +37,7 @@ export class DownloadService {
 	}
 
 	@bindThis
-	public async downloadUrl(url: string, path: string, options: { timeout?: number, operationTimeout?: number, maxSize?: number } = {} ): Promise<{
+	public async downloadUrl(url: string, path: string, options: { timeout?: number, operationTimeout?: number, maxSize?: number, agent?: Got.Agents } = {} ): Promise<{
 		filename: string;
 	}> {
 		// Allow fragments for backwards compatibility
@@ -65,7 +65,7 @@ export class DownloadService {
 				send: timeout,
 				request: operationTimeout,	// whole operation timeout
 			},
-			agent: {
+			agent: options.agent ?? {
 				http: this.httpRequestService.getAgentForHttp(urlObj, true),
 				https: this.httpRequestService.getAgentForHttps(urlObj, true),
 			},

@@ -222,7 +222,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<template #caption>{{ i18n.ts._urlPreviewSetting.userAgentDescription }}</template>
 						</MkInput>
 
-						<div>
+						<MkRadios v-model="urlPreviewForm.state.urlPreviewProxyMode">
+							<template #label>{{ i18n.ts._urlPreviewSetting.proxyMode }}<span v-if="urlPreviewForm.modifiedStates.urlPreviewProxyMode" class="_modified">{{ i18n.ts.modified }}</span></template>
+							<option value="outbound">{{ i18n.ts._urlPreviewSetting.proxyModeOutbound }}</option>
+							<option value="summaly">{{ i18n.ts._urlPreviewSetting.proxyModeSummaly }}</option>
+							<option value="direct">{{ i18n.ts._urlPreviewSetting.proxyModeDirect }}</option>
+						</MkRadios>
+
+						<MkInfo v-if="urlPreviewProxyHighRisk" warn>
+							{{ i18n.ts._urlPreviewSetting.outboundProxyRequired }}
+						</MkInfo>
+
+						<div v-if="urlPreviewForm.state.urlPreviewProxyMode === 'summaly'">
 							<MkInput v-model="urlPreviewForm.state.urlPreviewSummaryProxyUrl" type="text">
 								<template #label>{{ i18n.ts._urlPreviewSetting.summaryProxy }}<span v-if="urlPreviewForm.modifiedStates.urlPreviewSummaryProxyUrl" class="_modified">{{ i18n.ts.modified }}</span></template>
 								<template #caption>[{{ i18n.ts.notUsePleaseLeaveBlank }}] {{ i18n.ts._urlPreviewSetting.summaryProxyDescription }}</template>
@@ -238,6 +249,84 @@ SPDX-License-Identifier: AGPL-3.0-only
 								</ul>
 							</div>
 						</div>
+
+						<MkFolder v-if="urlPreviewForm.state.urlPreviewProxyMode === 'outbound'" :defaultOpen="true">
+							<template #icon><i class="ti ti-route"></i></template>
+							<template #label>{{ i18n.ts._urlPreviewSetting.outboundProxies }}</template>
+							<template #suffix>{{ urlPreviewEnabledProxyCount }}</template>
+							<template #footer>
+								<div class="_buttons">
+									<MkButton rounded @click="addUrlPreviewProxy"><i class="ti ti-plus"></i> {{ i18n.ts.add }}</MkButton>
+									<MkButton rounded :wait="urlPreviewProxyTestingAll" :disabled="urlPreviewForm.state.urlPreviewOutboundProxies.length === 0" @click="testAllUrlPreviewProxies"><i class="ti ti-plug-connected"></i> {{ i18n.ts._urlPreviewSetting.testAllProxies }}</MkButton>
+								</div>
+							</template>
+
+							<div class="_gaps">
+								<FormSplit :minWidth="220">
+									<MkInput v-model="urlPreviewProxyRawInput" type="text">
+										<template #label>{{ i18n.ts._urlPreviewSetting.quickAddProxy }}</template>
+										<template #caption>{{ i18n.ts._urlPreviewSetting.quickAddProxyCaption }}</template>
+									</MkInput>
+									<div :class="$style.proxyQuickAddAction">
+										<MkButton rounded :disabled="urlPreviewProxyRawInput.trim() === ''" @click="addUrlPreviewProxyFromInput"><i class="ti ti-plus"></i> {{ i18n.ts.add }}</MkButton>
+									</div>
+								</FormSplit>
+
+								<div v-for="(proxy, index) in urlPreviewForm.state.urlPreviewOutboundProxies" :key="proxy.id" v-panel :class="$style.proxyCard">
+									<div :class="$style.proxyCardHeader">
+										<MkSwitch v-model="proxy.isEnabled">
+											<template #label>{{ proxy.name || `${proxy.host}:${proxy.port}` }}</template>
+										</MkSwitch>
+										<div :class="$style.proxyActions">
+											<MkButton rounded :disabled="index === 0" @click="moveUrlPreviewProxy(index, -1)"><i class="ti ti-arrow-up"></i></MkButton>
+											<MkButton rounded :disabled="index === urlPreviewForm.state.urlPreviewOutboundProxies.length - 1" @click="moveUrlPreviewProxy(index, 1)"><i class="ti ti-arrow-down"></i></MkButton>
+											<MkButton rounded :wait="proxy.testing" @click="testUrlPreviewProxy(proxy)"><i class="ti ti-plug-connected"></i> {{ i18n.ts._urlPreviewSetting.testProxy }}</MkButton>
+											<MkButton danger rounded @click="removeUrlPreviewProxy(index)"><i class="ti ti-trash"></i></MkButton>
+										</div>
+									</div>
+
+									<div class="_gaps_s">
+										<FormSplit :minWidth="220">
+											<MkInput v-model="proxy.name" small>
+												<template #label>{{ i18n.ts.name }}</template>
+											</MkInput>
+											<MkSelect v-model="proxy.type" :items="urlPreviewProxyTypeItems" small>
+												<template #label>{{ i18n.ts.type }}</template>
+											</MkSelect>
+										</FormSplit>
+
+										<FormSplit :minWidth="180">
+											<MkInput v-model="proxy.host" small>
+												<template #label>{{ i18n.ts.host }}</template>
+											</MkInput>
+											<MkInput v-model="proxy.port" small type="number" :min="1" :max="65535">
+												<template #label>{{ i18n.ts._urlPreviewSetting.proxyPort }}</template>
+											</MkInput>
+										</FormSplit>
+
+										<FormSplit :minWidth="220">
+											<MkInput v-model="proxy.username" small>
+												<template #label>{{ i18n.ts.username }}</template>
+											</MkInput>
+											<MkInput v-model="proxy.password" small type="password">
+												<template #label>{{ i18n.ts.password }}<span v-if="proxy.passwordSet && !proxy.clearPassword"> ({{ i18n.ts._urlPreviewSetting.passwordSet }})</span></template>
+												<template #caption>{{ proxy.passwordSet && !proxy.clearPassword ? i18n.ts._urlPreviewSetting.passwordKeep : i18n.ts._urlPreviewSetting.passwordCaption }}</template>
+											</MkInput>
+										</FormSplit>
+
+										<div v-if="proxy.passwordSet" class="_buttons">
+											<MkButton v-if="!proxy.clearPassword" rounded @click="proxy.clearPassword = true; proxy.password = ''"><i class="ti ti-key-off"></i> {{ i18n.ts._urlPreviewSetting.clearPassword }}</MkButton>
+											<MkButton v-else rounded @click="proxy.clearPassword = false"><i class="ti ti-key"></i> {{ i18n.ts._urlPreviewSetting.keepPassword }}</MkButton>
+										</div>
+
+										<MkInfo v-if="proxy.testResult != null" :warn="!proxy.testResult.ok">
+											<span v-if="proxy.testResult.ok">{{ i18n.ts._urlPreviewSetting.proxyTestOk }}: {{ proxy.testResult.outboundIp ?? '-' }} / {{ proxy.testResult.elapsedMs }}ms</span>
+											<span v-else>{{ i18n.ts._urlPreviewSetting.proxyTestFailed }}: {{ proxy.testResult.error ?? '-' }}</span>
+										</MkInfo>
+									</div>
+								</div>
+							</div>
+						</MkFolder>
 					</template>
 				</div>
 			</MkFolder>
@@ -319,7 +408,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, reactive } from 'vue';
+import { ref, computed } from 'vue';
 import MkSwitch from '@/components/MkSwitch.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkTextarea from '@/components/MkTextarea.vue';
@@ -332,12 +421,44 @@ import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
 import MkButton from '@/components/MkButton.vue';
 import MkFolder from '@/components/MkFolder.vue';
-import MkKeyValue from '@/components/MkKeyValue.vue';
 import { useForm } from '@/use/use-form.js';
 import MkFormFooter from '@/components/MkFormFooter.vue';
 import MkRadios from '@/components/MkRadios.vue';
+import MkSelect from '@/components/MkSelect.vue';
+
+type UrlPreviewProxyMode = 'direct' | 'summaly' | 'outbound';
+type UrlPreviewOutboundProxyType = 'socks5' | 'http' | 'https';
+
+type UrlPreviewProxyTestResult = {
+	ok: boolean;
+	elapsedMs: number;
+	outboundIp: string | null;
+	proxyId: string;
+	error: string | null;
+};
+
+type UrlPreviewOutboundProxyForm = {
+	id: string;
+	name: string;
+	type: UrlPreviewOutboundProxyType;
+	host: string;
+	port: number;
+	username: string;
+	password: string;
+	passwordSet: boolean;
+	clearPassword: boolean;
+	isEnabled: boolean;
+	priority: number;
+	testing: boolean;
+	testResult: UrlPreviewProxyTestResult | null;
+};
 
 const meta = await misskeyApi('admin/meta');
+const adminMeta = meta as typeof meta & {
+	urlPreviewProxyMode?: UrlPreviewProxyMode;
+	urlPreviewOutboundProxies?: Array<Partial<UrlPreviewOutboundProxyForm>>;
+	urlPreviewProxyStrategy?: 'failover';
+};
 
 const proxyAccount = await misskeyApi('users/show', { userId: meta.proxyAccountId });
 
@@ -432,7 +553,18 @@ const urlPreviewForm = useForm({
 	urlPreviewRequireContentLength: meta.urlPreviewRequireContentLength,
 	urlPreviewUserAgent: meta.urlPreviewUserAgent ?? '',
 	urlPreviewSummaryProxyUrl: meta.urlPreviewSummaryProxyUrl ?? '',
+	urlPreviewProxyMode: (adminMeta.urlPreviewProxyMode ?? (meta.urlPreviewSummaryProxyUrl ? 'summaly' : 'outbound')) as UrlPreviewProxyMode,
+	urlPreviewOutboundProxies: (adminMeta.urlPreviewOutboundProxies ?? []).map(hydrateUrlPreviewProxy),
+	urlPreviewProxyStrategy: adminMeta.urlPreviewProxyStrategy ?? 'failover',
 }, async (state) => {
+	if (state.urlPreviewEnabled && state.urlPreviewProxyMode === 'outbound' && enabledUrlPreviewProxyCount(state.urlPreviewOutboundProxies) === 0) {
+		await os.alert({
+			type: 'warning',
+			text: i18n.ts._urlPreviewSetting.outboundProxyRequired,
+		});
+		throw new Error('URL preview outbound proxy is required');
+	}
+
 	await os.apiWithDialog('admin/update-meta', {
 		urlPreviewEnabled: state.urlPreviewEnabled,
 		urlPreviewTimeout: state.urlPreviewTimeout,
@@ -440,9 +572,140 @@ const urlPreviewForm = useForm({
 		urlPreviewRequireContentLength: state.urlPreviewRequireContentLength,
 		urlPreviewUserAgent: state.urlPreviewUserAgent,
 		urlPreviewSummaryProxyUrl: state.urlPreviewSummaryProxyUrl,
+		urlPreviewProxyMode: state.urlPreviewProxyMode,
+		urlPreviewOutboundProxies: serializeUrlPreviewProxies(state.urlPreviewOutboundProxies),
+		urlPreviewProxyStrategy: 'failover',
 	});
 	fetchInstance(true);
 });
+
+const urlPreviewProxyRawInput = ref('');
+const urlPreviewProxyTestingAll = ref(false);
+const urlPreviewProxyTypeItems = [
+	{ value: 'socks5', label: i18n.ts._urlPreviewSetting.proxyTypeSocks5 },
+	{ value: 'http', label: i18n.ts._urlPreviewSetting.proxyTypeHttp },
+	{ value: 'https', label: i18n.ts._urlPreviewSetting.proxyTypeHttps },
+];
+const urlPreviewEnabledProxyCount = computed(() => enabledUrlPreviewProxyCount(urlPreviewForm.state.urlPreviewOutboundProxies));
+const urlPreviewProxyHighRisk = computed(() => (
+	urlPreviewForm.state.urlPreviewEnabled &&
+	urlPreviewForm.state.urlPreviewProxyMode === 'outbound' &&
+	urlPreviewEnabledProxyCount.value === 0
+));
+
+function hydrateUrlPreviewProxy(proxy: Partial<UrlPreviewOutboundProxyForm>, index: number): UrlPreviewOutboundProxyForm {
+	return {
+		id: proxy.id ?? crypto.randomUUID?.() ?? `proxy-${Date.now()}-${index}`,
+		name: proxy.name ?? '',
+		type: proxy.type ?? 'socks5',
+		host: proxy.host ?? '',
+		port: Number(proxy.port ?? 7325),
+		username: proxy.username ?? '',
+		password: '',
+		passwordSet: proxy.passwordSet ?? false,
+		clearPassword: false,
+		isEnabled: proxy.isEnabled ?? true,
+		priority: Number(proxy.priority ?? index),
+		testing: false,
+		testResult: null,
+	};
+}
+
+function serializeUrlPreviewProxies(proxies: UrlPreviewOutboundProxyForm[]) {
+	return proxies.map((proxy, index) => ({
+		id: proxy.id,
+		name: proxy.name,
+		type: proxy.type,
+		host: proxy.host.trim(),
+		port: Number(proxy.port),
+		username: proxy.username.trim() === '' ? null : proxy.username.trim(),
+		password: proxy.password,
+		passwordSet: proxy.passwordSet,
+		clearPassword: proxy.clearPassword,
+		isEnabled: proxy.isEnabled,
+		priority: index,
+	}));
+}
+
+function enabledUrlPreviewProxyCount(proxies: UrlPreviewOutboundProxyForm[]): number {
+	return proxies.filter(proxy => proxy.isEnabled && proxy.host.trim() !== '' && Number(proxy.port) > 0).length;
+}
+
+function addUrlPreviewProxy() {
+	urlPreviewForm.state.urlPreviewOutboundProxies.push(hydrateUrlPreviewProxy({
+		name: i18n.ts._urlPreviewSetting.defaultProxyName,
+		type: 'socks5',
+		isEnabled: true,
+	}, urlPreviewForm.state.urlPreviewOutboundProxies.length));
+}
+
+function addUrlPreviewProxyFromInput() {
+	const parsed = parseUrlPreviewProxyLine(urlPreviewProxyRawInput.value);
+	urlPreviewForm.state.urlPreviewOutboundProxies.push(hydrateUrlPreviewProxy({
+		...parsed,
+		name: `${parsed.type} ${parsed.host}:${parsed.port}`,
+		isEnabled: true,
+	}, urlPreviewForm.state.urlPreviewOutboundProxies.length));
+	urlPreviewProxyRawInput.value = '';
+}
+
+function removeUrlPreviewProxy(index: number) {
+	urlPreviewForm.state.urlPreviewOutboundProxies.splice(index, 1);
+}
+
+function moveUrlPreviewProxy(index: number, delta: -1 | 1) {
+	const target = index + delta;
+	if (target < 0 || target >= urlPreviewForm.state.urlPreviewOutboundProxies.length) return;
+	const [proxy] = urlPreviewForm.state.urlPreviewOutboundProxies.splice(index, 1);
+	urlPreviewForm.state.urlPreviewOutboundProxies.splice(target, 0, proxy);
+}
+
+function parseUrlPreviewProxyLine(value: string): Pick<UrlPreviewOutboundProxyForm, 'type' | 'host' | 'port' | 'username' | 'password'> {
+	const trimmed = value.trim();
+	if (trimmed.includes('://') && URL.canParse(trimmed)) {
+		const url = new URL(trimmed);
+		const type = url.protocol === 'http:' ? 'http' : url.protocol === 'https:' ? 'https' : 'socks5';
+		return {
+			type,
+			host: url.hostname,
+			port: Number(url.port),
+			username: decodeURIComponent(url.username),
+			password: decodeURIComponent(url.password),
+		};
+	}
+
+	const [host, port, username, ...passwordParts] = trimmed.split(':');
+	return {
+		type: 'socks5',
+		host,
+		port: Number(port),
+		username: username ?? '',
+		password: passwordParts.join(':'),
+	};
+}
+
+async function testUrlPreviewProxy(proxy: UrlPreviewOutboundProxyForm) {
+	proxy.testing = true;
+	proxy.testResult = null;
+	try {
+		proxy.testResult = await misskeyApi('admin/url-preview/proxy/test', {
+			proxy: serializeUrlPreviewProxies([proxy])[0],
+		});
+	} finally {
+		proxy.testing = false;
+	}
+}
+
+async function testAllUrlPreviewProxies() {
+	urlPreviewProxyTestingAll.value = true;
+	try {
+		for (const proxy of urlPreviewForm.state.urlPreviewOutboundProxies) {
+			await testUrlPreviewProxy(proxy);
+		}
+	} finally {
+		urlPreviewProxyTestingAll.value = false;
+	}
+}
 
 const federationForm = useForm({
 	federation: meta.federation,
@@ -547,5 +810,42 @@ definePage(() => ({
 
 .dragItemForm {
 	flex-grow: 1;
+}
+
+.proxyQuickAddAction {
+	display: flex;
+	align-items: end;
+	min-height: 60px;
+}
+
+.proxyCard {
+	padding: 12px;
+	border-radius: 6px;
+}
+
+.proxyCardHeader {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 12px;
+}
+
+.proxyActions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+}
+
+@media (max-width: 520px) {
+	.proxyCardHeader {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.proxyActions {
+		justify-content: flex-start;
+	}
 }
 </style>
