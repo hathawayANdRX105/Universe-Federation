@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div :class="[$style.root, { '_forceShrinkSpacer': deviceKind === 'smartphone' }]">
 	<XTitlebar v-if="prefer.r.showTitlebar.value" style="flex-shrink: 0;"/>
 
-	<div :class="[$style.nonTitlebarArea, pageMetadata?.needWideArea && pageMetadata?.keepWidgets ? $style.wideWithWidgets : null]">
+	<div :class="[$style.nonTitlebarArea, pageMetadata?.needWideArea && pageMetadata?.keepWidgets ? $style.wideWithWidgets : null, pageMetadata?.needWideArea && (pageMetadata?.bustLayoutCap || !pageMetadata?.keepWidgets) ? $style.bustCap : null]">
 		<XSidebar v-if="!isMobile" :class="$style.sidebar" :showWidgetButton="!isDesktop" @widgetButtonClick="widgetsShowing = true"/>
 
 		<div :class="[
@@ -129,7 +129,7 @@ const onContextmenu = (ev) => {
 
 <style lang="scss" module>
 $ui-font-size: 1em; // TODO: どこかに集約したい
-$widgets-hide-threshold: 1090px;
+$widgets-hide-threshold: 1600px;
 
 .root {
 	height: 100dvh;
@@ -149,18 +149,27 @@ $widgets-hide-threshold: 1090px;
 	display: flex;
 	flex: 1;
 	min-height: 0;
-	width: min(100%, var(--layout-page-max-width));
-	max-width: var(--layout-page-max-width);
+	width: 82vw;
+	max-width: 82vw;
 	margin-inline: auto;
 	align-self: center;
 }
 
-// チャットなどの全幅レイアウト + ウィジェット併用ページ。
-// 通常ページの最大幅(1540px)の制限を外し、ビューポート全体を使う。
-// これにより画面が広いほど本文カラムが広がり、ウィジェット出現によるレイアウト破綻を防ぐ。
+// timeline.vue 等、ページ自身で2カラムを描画するページ用。
+// 通常ページと同じ 82vw 外枠(左右に 9vw の余白)を明示し、
+// .wideWithWidgets と違って widgets カラムは生やさない(timeline は自前の右レール持ち)。
+.bustCap {
+	width: 82vw;
+	max-width: 82vw;
+	margin-inline: auto;
+}
+
+// ウィジェット併用のワイドページ用。
+// 通常ページと同じ 82vw 外枠を維持し、メニュー遷移時の横幅差をなくす。
 .wideWithWidgets {
-	width: 100%;
-	max-width: none;
+	width: 82vw;
+	max-width: 82vw;
+	margin-inline: auto;
 
 	// 会話サイドバー + 本文の幅を優先し、超ワイド画面でのみウィジェットを表示する
 	.widgets {
@@ -192,6 +201,7 @@ $widgets-hide-threshold: 1090px;
 	flex: 0 1 var(--layout-main-column-width);
 	width: var(--layout-main-column-width);
 	max-width: min(100%, var(--layout-main-column-width));
+	min-width: 0;
 }
 
 .content {

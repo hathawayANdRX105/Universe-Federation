@@ -64,7 +64,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<i class="ti ti-refresh"></i>
 							<span>{{ i18n.ts.retry }}</span>
 						</button>
-						<button class="_button" :class="$style.panelAction" @click="clearSearch">
+						<button class="_button" :class="$style.panelAction" @click="clearSearch()">
 							<i class="ti ti-x"></i>
 							<span>{{ i18n.ts.clear }}</span>
 						</button>
@@ -77,7 +77,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div :class="$style.searchEmptyText">{{ i18n.ts.searchEmptySuggestion }}</div>
 					<div :class="$style.searchEmptyActions">
 						<button class="_buttonPrimary" :class="$style.searchEmptyButton" @click="focusSearchInput">{{ i18n.ts.changeSearchQuery }}</button>
-						<button class="_button" :class="$style.searchEmptyButton" @click="clearSearch">{{ i18n.ts.returnToRecommended }}</button>
+						<button class="_button" :class="$style.searchEmptyButton" @click="clearSearch()">{{ i18n.ts.returnToRecommended }}</button>
 					</div>
 				</div>
 				<div v-else :class="$style.searchResults">
@@ -212,7 +212,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</section>
 
-				<section v-if="discoverySections.channels.length > 0" :class="$style.discoverySection">
+				<section v-if="visibleChannels.length > 0" :class="$style.discoverySection">
 					<div :class="$style.sectionHeader">
 						<div>
 							<div :class="$style.sectionEyebrow">{{ i18n.ts.explore }}</div>
@@ -220,7 +220,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 					</div>
 					<div :class="$style.channelGrid">
-						<MkA v-for="channel in discoverySections.channels" :key="channel.id" :to="`/channels/${channel.id}`" :class="$style.channelCard">
+						<MkA v-for="channel in visibleChannels" :key="channel.id" :to="`/channels/${channel.id}`" :class="$style.channelCard">
 							<span :class="$style.channelBanner" :style="{ background: channel.color }">
 								<i class="ti ti-device-tv"></i>
 							</span>
@@ -268,9 +268,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</button>
 			</section>
 
-			<section v-if="!showExploreLoading && discoverySections.channels.length > 0" :class="$style.sideCard">
+			<section v-if="!showExploreLoading && sideChannels.length > 0" :class="$style.sideCard">
 				<div :class="$style.sideCardTitle">{{ i18n.ts.recommendedChannels }}</div>
-				<MkA v-for="channel in discoverySections.channels.slice(0, 3)" :key="channel.id" :to="`/channels/${channel.id}`" :class="$style.sideChannel">
+				<MkA v-for="channel in sideChannels" :key="channel.id" :to="`/channels/${channel.id}`" :class="$style.sideChannel">
 					<span :class="$style.sideChannelIcon" :style="{ background: channel.color }"><i class="ti ti-device-tv"></i></span>
 					<span :class="$style.sideChannelBody">
 						<span :class="$style.sideChannelName">{{ channel.name }}</span>
@@ -328,6 +328,9 @@ const router = useRouter();
 const searchInputEl = useTemplateRef('searchInputEl');
 const rightRailEl = useTemplateRef('rightRailEl');
 const searchHistoryStorageKey = 'exploreSearchHistory';
+const discoverySectionLimit = 10;
+const categoryNoteLimit = 14;
+const sideChannelLimit = 4;
 let rightRailResizeObserver: ResizeObserver | undefined;
 let rightRailOffset = 0;
 let rightRailMaxOffset = 0;
@@ -412,7 +415,9 @@ const activeNotes = computed(() => {
 	return discoverySections.value.tutorialNotes.length > 0 ? discoverySections.value.tutorialNotes : discoverySections.value.hotNotes;
 });
 const categoryEmpty = computed(() => !exploreLoading.value && submittedQuery.value.length === 0 && tab.value !== 'forYou' && categoryNotes.value.length === 0);
-const hasExploreContent = computed(() => filteredTrendRows.value.length > 0 || activeNotes.value.length > 0 || discoverySections.value.channels.length > 0 || recommendedUsers.value.length > 0);
+const visibleChannels = computed(() => discoverySections.value.channels.slice(0, discoverySectionLimit));
+const sideChannels = computed(() => visibleChannels.value.slice(0, sideChannelLimit));
+const hasExploreContent = computed(() => filteredTrendRows.value.length > 0 || activeNotes.value.length > 0 || visibleChannels.value.length > 0 || recommendedUsers.value.length > 0);
 const showExploreLoading = computed(() => exploreLoading.value && !hasExploreContent.value);
 const exploreEmpty = computed(() => !exploreLoading.value && submittedQuery.value.length === 0 && !categoryEmpty.value && !hasExploreContent.value);
 
@@ -625,12 +630,12 @@ async function loadExploreData(): Promise<void> {
 	exploreLoading.value = true;
 	try {
 		const [sections, notes] = await Promise.all([
-			misskeyApi<DiscoverySections>('notes/discovery-sections', { limit: 10 }).catch(() => null),
+			misskeyApi<DiscoverySections>('notes/discovery-sections', { limit: discoverySectionLimit }).catch(() => null),
 			misskeyApi<Misskey.entities.Note[]>('notes/recommended-timeline', {
 				scope: 'mixed',
 				surface: 'explore',
 				category: currentTab,
-				limit: 8,
+				limit: categoryNoteLimit,
 				withRenotes: false,
 				offset: Math.floor(Date.now() / (1000 * 60 * 5)) % 5,
 			}).catch(() => []),
@@ -793,16 +798,14 @@ definePage(() => ({
 
 <style lang="scss" module>
 .exploreShell {
-	--explore-main-width: var(--layout-main-column-width, 600px);
-	--explore-rail-width: var(--layout-side-rail-width, 350px);
-	--explore-column-gap: var(--layout-column-gap, 30px);
+	--explore-rail-width: clamp(240px, 18%, 340px);
+	--explore-column-gap: clamp(14px, 1vw, 24px);
 
 	box-sizing: border-box;
-	width: min(100%, calc(var(--explore-main-width) + var(--explore-rail-width) + var(--explore-column-gap)));
-	margin-left: 0;
-	margin-right: auto;
+	width: 100%;
+	margin-inline: auto;
 	display: grid;
-	grid-template-columns: minmax(0, var(--explore-main-width)) minmax(300px, var(--explore-rail-width));
+	grid-template-columns: minmax(0, 1fr) var(--explore-rail-width);
 	column-gap: var(--explore-column-gap);
 	align-items: start;
 	min-height: 100%;
@@ -1227,50 +1230,71 @@ definePage(() => ({
 
 .channelGrid {
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 10px;
-	padding: 0 12px 12px;
+	grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+	align-items: stretch;
+	gap: 12px;
+	padding: 0 16px 16px;
 }
 
 .channelCard {
 	display: grid;
-	grid-template-columns: 42px minmax(0, 1fr);
-	gap: 8px 10px;
-	align-items: center;
+	grid-template-columns: minmax(0, 1fr);
+	align-items: start;
 	min-width: 0;
-	padding: 12px;
+	min-height: 142px;
+	grid-template-rows: 56px minmax(0, auto) auto;
+	padding: 0;
 	border: solid 1px var(--MI_THEME-divider);
-	border-radius: 10px;
+	border-radius: 12px;
 	color: inherit;
 	background: var(--MI_THEME-bg);
-	transition: background .1s, border-color .1s;
+	overflow: clip;
+	transition: background .1s, border-color .1s, transform .1s;
 }
 
 .channelCard:hover {
 	background: var(--MI_THEME-panelHighlight);
 	border-color: color-mix(in srgb, var(--MI_THEME-divider) 70%, var(--MI_THEME-fg));
+	transform: translateY(-1px);
 }
 
 .channelBanner {
-	grid-row: 1 / span 2;
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	box-sizing: border-box;
+	width: calc(100% + 2px);
+	height: 56px;
+	margin: -1px -1px 0;
+	padding: 0 16px;
+	border-radius: 12px 12px 0 0;
+	color: #fff;
+}
+
+.channelBanner > i {
 	display: grid;
 	place-items: center;
-	width: 40px;
-	height: 40px;
-	border-radius: 12px;
-	color: #fff;
+	width: 34px;
+	height: 34px;
+	border-radius: 10px;
+	background: rgba(0, 0, 0, .14);
 }
 
 .channelName {
 	min-width: 0;
+	padding: 14px 14px 0;
 	font-weight: 800;
 	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow-wrap: anywhere;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	-webkit-box-orient: vertical;
 }
 
 .channelMeta {
 	min-width: 0;
+	padding: 4px 14px 14px;
 	color: var(--MI_THEME-fgTransparentWeak);
 	font-size: .86em;
 	overflow: hidden;
@@ -1515,10 +1539,10 @@ definePage(() => ({
 	font-weight: 700;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1450px) {
 	.exploreShell {
 		display: block;
-		width: min(100%, 600px);
+		width: 100%;
 	}
 
 	.exploreMain {

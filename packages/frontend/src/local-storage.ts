@@ -29,6 +29,8 @@ export type Keys = (
 	'customCss' |
 	'chatMessageDrafts' |
 	'exploreSearchHistory' |
+	'home:tab' |
+	'home:sub' |
 	'scratchpad' |
 	'debug' |
 	'preferences' |

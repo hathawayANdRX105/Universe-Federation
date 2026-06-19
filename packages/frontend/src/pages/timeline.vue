@@ -458,6 +458,7 @@ definePage(() => ({
 	title: i18n.ts.home,
 	icon: 'ti ti-home',
 	needWideArea: true,
+	bustLayoutCap: true,
 }));
 </script>
 
@@ -467,17 +468,16 @@ definePage(() => ({
 	// rest of the instance keeps its own theme accent.
 	--x-blue: #1d9bf0;
 	--x-blue-hover: #1a8cd8;
-	// 中间正文 / 右栏宽度随视口缩放(小屏维持原值,大屏放大,4K 用得起来),
-	// 总宽度有 clamp 上限 → 整体 margin-inline:auto 居中,不会撑爆,也不会留太大空白。
-	--timeline-main-width: clamp(620px, 52vw, 1280px);
-	--timeline-rail-width: clamp(320px, 24vw, 520px);
-	--timeline-column-gap: clamp(20px, 1.6vw, 44px);
+	// 右栏保持保守宽度,中间正文用 1fr 自动吃掉剩余空间。
+	// 外层 bustLayoutCap 已限制整体 82vw(左右各 9vw 留白),这里吃满外层容器即可。
+	--timeline-rail-width: clamp(280px, 22%, 420px);
+	--timeline-column-gap: clamp(16px, 1.25vw, 32px);
 
 	box-sizing: border-box;
-	width: min(100%, calc(var(--timeline-main-width) + var(--timeline-rail-width) + var(--timeline-column-gap)));
+	width: 100%;
 	margin-inline: auto;
 	display: grid;
-	grid-template-columns: minmax(0, var(--timeline-main-width)) minmax(300px, var(--timeline-rail-width));
+	grid-template-columns: minmax(0, 1fr) var(--timeline-rail-width);
 	column-gap: var(--timeline-column-gap);
 	align-items: start;
 	min-height: 100%;
@@ -873,17 +873,17 @@ definePage(() => ({
 /* ---------- responsive ---------- */
 @media (max-width: 1250px) {
 	.shell {
-		--timeline-rail-width: 300px;
-		--timeline-column-gap: 20px;
-		width: calc(100% - var(--timeline-outer-gap));
-		grid-template-columns: minmax(0, var(--timeline-main-width)) minmax(280px, var(--timeline-rail-width));
+		--timeline-rail-width: 280px;
+		--timeline-column-gap: 16px;
+		width: 100%;
+		grid-template-columns: minmax(0, 1fr) var(--timeline-rail-width);
 	}
 }
 
 @media (max-width: 1100px) {
 	.shell {
 		display: block;
-		width: min(100%, 600px);
+		width: 100%;
 		margin: 0 auto;
 	}
 

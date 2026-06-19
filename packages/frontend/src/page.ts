@@ -17,6 +17,10 @@ export type PageMetadata = {
 	needWideArea?: boolean;
 	// needWideArea と併用すると、全幅レイアウトでもウィジェットカラムを表示する
 	keepWidgets?: boolean;
+	// needWideArea と併用。標準の 82vw 外枠の中でページ自身がワイドレイアウトを制御し、
+	// universal.vue 側の widgets カラムは表示しない場合に使用する。
+	// timeline.vue のように独自の 2 カラムを持つページ向け。
+	bustLayoutCap?: boolean;
 };
 
 type PageMetadataGetter = () => PageMetadata;
