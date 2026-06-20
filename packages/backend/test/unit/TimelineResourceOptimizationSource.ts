@@ -36,7 +36,12 @@ describe('timeline resource optimization source', () => {
 		assert.match(translateCommonSource, /normalizeLibreTranslateTargetLang/);
 		assert.match(translateCommonSource, /fetchLibreTranslation/);
 		assert.match(translateCommonSource, /throwErrorWhenResponseNotOk:\s*false/);
-		assert.match(translateCommonSource, /LIBRE_TRANSLATE_ATTEMPTS/);
+		assert.match(translateCommonSource, /const LIBRE_TRANSLATE_ATTEMPTS = 1;/);
+		assert.match(translateCommonSource, /const LIBRE_TRANSLATE_MIN_INTERVAL_MS = 900;/);
+		assert.match(translateCommonSource, /const LIBRE_TRANSLATE_RATE_LIMIT_COOLDOWN_MS = 1000 \* 12;/);
+		assert.match(translateCommonSource, /private async reserveLibreTranslateSlot/);
+		assert.match(translateCommonSource, /this\.redisClient\.eval/);
+		assert.match(translateCommonSource, /res\.status === 403 \|\| res\.status === 429/);
 		assert.doesNotMatch(translateBatchSource, /new NoteTranslation/);
 	});
 

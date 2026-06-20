@@ -32,9 +32,14 @@ describe('timeline preview optimization', () => {
 	test('masonry and forum previews use batched translation without URL preview rendering', () => {
 		assert.match(previewTranslationSource, /const BATCH_SIZE = 20;/);
 		assert.match(previewTranslationSource, /const FLUSH_DELAY_MS = 200;/);
+		assert.match(previewTranslationSource, /const FAILURE_RETRY_DELAY_MS = 12_000;/);
+		assert.match(previewTranslationSource, /const MAX_FAILURE_RETRIES = 2;/);
 		assert.match(previewTranslationSource, /misskeyApi\('notes\/translate-batch'/);
 		assert.match(previewTranslationSource, /getCachedTranslation\(note\.id,\s*targetLang\)/);
 		assert.match(previewTranslationSource, /setCachedTranslation\(noteId,\s*targetLang,\s*translation\)/);
+		assert.match(previewTranslationSource, /retryCount:\s*Ref<number>/);
+		assert.match(previewTranslationSource, /scheduleRetry\(state\)/);
+		assert.match(previewTranslationSource, /window\.setTimeout\(\(\) => \{[\s\S]*state\.translation\.value = null;[\s\S]*enqueue\(state\);/);
 		assert.match(previewTranslationSource, /prefer\.r\.autoTranslateNotes\.value/);
 		assert.match(previewTranslationSource, /prefer\.r\.autoTranslateReplaceOriginal\.value/);
 

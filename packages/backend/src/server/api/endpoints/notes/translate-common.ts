@@ -3,14 +3,17 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { setTimeout as sleep } from 'node:timers/promises';
 import { URLSearchParams } from 'node:url';
 import { Inject, Injectable } from '@nestjs/common';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { ApiLoggerService } from '@/server/api/ApiLoggerService.js';
 import type { MiMeta, MiNote } from '@/models/_.js';
 import { CacheManagementService, type ManagedRedisKVCache } from '@/global/CacheManagementService.js';
+import { TimeService } from '@/global/TimeService.js';
 import { DI } from '@/di-symbols.js';
 import { bindThis } from '@/decorators.js';
+import type * as Redis from 'ioredis';
 
 export interface CachedTranslation {
 	sourceLang: string | undefined;
@@ -23,7 +26,11 @@ interface CachedTranslationEntity {
 	u?: number;
 }
 
-const LIBRE_TRANSLATE_ATTEMPTS = 2;
+const LIBRE_TRANSLATE_ATTEMPTS = 1;
+const LIBRE_TRANSLATE_MIN_INTERVAL_MS = 900;
+const LIBRE_TRANSLATE_RATE_LIMIT_COOLDOWN_MS = 1000 * 12;
+const LIBRE_TRANSLATE_SLOT_KEY = 'translation:libreTranslate:nextSlot';
+const LIBRE_TRANSLATE_SLOT_TTL_MS = 1000 * 60;
 
 @Injectable()
 export class NoteTranslationService {
@@ -33,8 +40,12 @@ export class NoteTranslationService {
 		@Inject(DI.meta)
 		private readonly serverSettings: MiMeta,
 
+		@Inject(DI.redis)
+		private readonly redisClient: Redis.Redis,
+
 		private readonly httpRequestService: HttpRequestService,
 		private readonly loggerService: ApiLoggerService,
+		private readonly timeService: TimeService,
 		cacheManagementService: CacheManagementService,
 	) {
 		this.translationsCache = cacheManagementService.createRedisKVCache<CachedTranslationEntity>('translations', {
@@ -158,6 +169,7 @@ export class NoteTranslationService {
 		for (const libreTargetLang of this.getLibreTranslateTargetLangCandidates(targetLang)) {
 			for (let attempt = 1; attempt <= LIBRE_TRANSLATE_ATTEMPTS; attempt++) {
 				try {
+					await this.reserveLibreTranslateSlot();
 					const res = await this.httpRequestService.send(this.serverSettings.libreTranslateURL!, {
 						method: 'POST',
 						headers: {
@@ -179,6 +191,10 @@ export class NoteTranslationService {
 					const body = await res.text();
 					if (!res.ok) {
 						this.loggerService.logger.warn(`LibreTranslate returned ${res.status} ${res.statusText} for target=${libreTargetLang}: ${body.slice(0, 300)}`);
+						if (res.status === 403 || res.status === 429) {
+							await this.cooldownLibreTranslate(res.status);
+							return null;
+						}
 						continue;
 					}
 
@@ -203,6 +219,35 @@ export class NoteTranslationService {
 		}
 
 		return null;
+	}
+
+	private async reserveLibreTranslateSlot(): Promise<void> {
+		const waitMs = await this.reserveLibreTranslateDelay(LIBRE_TRANSLATE_MIN_INTERVAL_MS);
+		if (waitMs > 0) await sleep(waitMs);
+	}
+
+	private async cooldownLibreTranslate(status: number): Promise<void> {
+		await this.reserveLibreTranslateDelay(LIBRE_TRANSLATE_RATE_LIMIT_COOLDOWN_MS);
+		this.loggerService.logger.warn(`LibreTranslate rate-limit cooldown scheduled after HTTP ${status}`);
+	}
+
+	private async reserveLibreTranslateDelay(intervalMs: number): Promise<number> {
+		const now = this.timeService.now;
+		const ttlMs = Math.max(LIBRE_TRANSLATE_SLOT_TTL_MS, intervalMs * 4);
+		const result = await this.redisClient.eval(`
+			local key = KEYS[1]
+			local now = tonumber(ARGV[1])
+			local interval = tonumber(ARGV[2])
+			local ttl = tonumber(ARGV[3])
+			local nextSlot = tonumber(redis.call('GET', key) or '0')
+			local scheduled = now
+			if nextSlot > now then
+				scheduled = nextSlot
+			end
+			redis.call('SET', key, scheduled + interval, 'PX', ttl)
+			return scheduled - now
+		`, 1, LIBRE_TRANSLATE_SLOT_KEY, now, intervalMs, ttlMs);
+		return Math.max(0, Number(result) || 0);
 	}
 
 	private getLibreTranslateTargetLangCandidates(targetLang: string): string[] {

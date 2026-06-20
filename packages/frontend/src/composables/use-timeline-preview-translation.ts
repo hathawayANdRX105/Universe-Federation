@@ -14,6 +14,8 @@ import { getCachedTranslation, setCachedTranslation } from '@/utility/note-trans
 const MIN_LEN = 2;
 const BATCH_SIZE = 20;
 const FLUSH_DELAY_MS = 200;
+const FAILURE_RETRY_DELAY_MS = 12_000;
+const MAX_FAILURE_RETRIES = 2;
 
 type BatchTranslationResponse = {
 	translations: Record<string, Misskey.entities.NotesTranslateResponse | false>;
@@ -23,6 +25,8 @@ type PreviewTranslationState = {
 	note: Ref<Misskey.entities.Note>;
 	translation: Ref<Misskey.entities.NotesTranslateResponse | false | null>;
 	translating: Ref<boolean>;
+	retryCount: Ref<number>;
+	retryTimer: number | null;
 };
 
 const pending = new Map<string, Set<PreviewTranslationState>>();
@@ -51,6 +55,31 @@ function removeState(state: PreviewTranslationState): void {
 		states.delete(state);
 		if (states.size === 0) pending.delete(noteId);
 	}
+	clearRetryTimer(state);
+}
+
+function clearRetryTimer(state: PreviewTranslationState): void {
+	if (state.retryTimer === null) return;
+	window.clearTimeout(state.retryTimer);
+	state.retryTimer = null;
+}
+
+function scheduleRetry(state: PreviewTranslationState): void {
+	if (state.retryCount.value >= MAX_FAILURE_RETRIES) {
+		state.translation.value = false;
+		return;
+	}
+	if (state.retryTimer !== null) return;
+
+	state.translation.value = false;
+	state.retryCount.value += 1;
+	state.retryTimer = window.setTimeout(() => {
+		state.retryTimer = null;
+		if (!canTranslate(state.note.value)) return;
+		state.translation.value = null;
+		state.translating.value = false;
+		enqueue(state);
+	}, FAILURE_RETRY_DELAY_MS * state.retryCount.value);
 }
 
 function scheduleFlush(): void {
@@ -95,7 +124,12 @@ async function flushPending(): Promise<void> {
 
 			for (const state of states) {
 				if (state.note.value.id !== noteId) continue;
-				state.translation.value = translation;
+				if (translation === false) {
+					scheduleRetry(state);
+				} else {
+					state.retryCount.value = 0;
+					state.translation.value = translation;
+				}
 			}
 		}
 	} catch (err) {
@@ -103,7 +137,7 @@ async function flushPending(): Promise<void> {
 		for (const [noteId, states] of statesByNoteId) {
 			for (const state of states) {
 				if (state.note.value.id !== noteId) continue;
-				state.translation.value = false;
+				scheduleRetry(state);
 			}
 		}
 	} finally {
@@ -147,10 +181,13 @@ export function useTimelinePreviewTranslation(note: Ref<Misskey.entities.Note>):
 } {
 	const translation = ref<Misskey.entities.NotesTranslateResponse | false | null>(null);
 	const translating = ref(false);
+	const retryCount = ref(0);
 	const state: PreviewTranslationState = {
 		note,
 		translation,
 		translating,
+		retryCount,
+		retryTimer: null,
 	};
 
 	const previewTranslationText = computed(() => {
@@ -170,6 +207,8 @@ export function useTimelinePreviewTranslation(note: Ref<Misskey.entities.Note>):
 			() => note.value.text,
 		],
 		() => {
+			clearRetryTimer(state);
+			retryCount.value = 0;
 			translation.value = null;
 			translating.value = false;
 			enqueue(state);
