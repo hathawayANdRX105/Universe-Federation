@@ -26,9 +26,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<!-- 底部信息 -->
 	<div :class="$style.foot">
 		<div :class="$style.caption">{{ captionShort }}</div>
-		<div v-if="previewTranslationLine" :class="$style.translationCaption">
+		<div v-if="previewTranslationLine || previewTranslationStatus" :class="$style.translationCaption">
 			<span :class="$style.translationBadge">🌐</span>
-			<span>{{ previewTranslationLine }}</span>
+			<span>{{ previewTranslationLine || previewTranslationStatus }}</span>
 		</div>
 		<div :class="$style.bottomLine">
 			<div :class="$style.author">
@@ -64,6 +64,7 @@ const appearNote = computed(() => getAppearNote(props.note));
 const translationNoteRef = computed(() => appearNote.value);
 const {
 	previewTranslationText,
+	previewTranslationStatus,
 	translatedPreview,
 	shouldReplacePreviewText,
 } = useTimelinePreviewTranslation(translationNoteRef);

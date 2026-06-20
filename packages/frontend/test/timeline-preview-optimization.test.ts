@@ -32,14 +32,18 @@ describe('timeline preview optimization', () => {
 	test('masonry and forum previews use batched translation without URL preview rendering', () => {
 		assert.match(previewTranslationSource, /const BATCH_SIZE = 4;/);
 		assert.match(previewTranslationSource, /const FLUSH_DELAY_MS = 200;/);
-		assert.match(previewTranslationSource, /const FAILURE_RETRY_DELAY_MS = 70_000;/);
+		assert.match(previewTranslationSource, /const FAILURE_RETRY_DELAY_MS = 15_000;/);
 		assert.match(previewTranslationSource, /const MAX_FAILURE_RETRIES = 2;/);
 		assert.match(previewTranslationSource, /misskeyApi\('notes\/translate-batch'/);
 		assert.match(previewTranslationSource, /getCachedTranslation\(note\.id,\s*targetLang\)/);
 		assert.match(previewTranslationSource, /setCachedTranslation\(noteId,\s*targetLang,\s*translation\)/);
 		assert.match(previewTranslationSource, /retryCount:\s*Ref<number>/);
+		assert.match(previewTranslationSource, /retrying:\s*Ref<boolean>/);
 		assert.match(previewTranslationSource, /scheduleRetry\(state\)/);
 		assert.match(previewTranslationSource, /window\.setTimeout\(\(\) => \{[\s\S]*state\.translation\.value = null;[\s\S]*enqueue\(state\);/);
+		assert.match(previewTranslationSource, /previewTranslationStatus/);
+		assert.match(previewTranslationSource, /'翻译中\.\.\.'/);
+		assert.match(previewTranslationSource, /'稍后自动重试'/);
 		assert.match(previewTranslationSource, /prefer\.r\.autoTranslateNotes\.value/);
 		assert.match(previewTranslationSource, /prefer\.r\.autoTranslateReplaceOriginal\.value/);
 
@@ -49,6 +53,7 @@ describe('timeline preview optimization', () => {
 			assert.match(source, /translationNoteRef/);
 			assert.match(source, /translatedPreview/);
 			assert.match(source, /previewTranslationText/);
+			assert.match(source, /previewTranslationStatus/);
 			assert.notMatch(source, /SkUrlPreviewGroup|MkUrlPreview/);
 			assert.match(source, /:preview="false"/);
 		}

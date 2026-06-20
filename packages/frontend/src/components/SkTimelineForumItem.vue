@@ -24,9 +24,9 @@ Discourse 风的论坛模式 timeline 单条。
 				<span v-else>{{ textPreview }}</span>
 				<span v-for="tag in topTags" :key="tag" :class="$style.tag">#{{ tag }}</span>
 			</div>
-			<div v-if="previewTranslationLine" :class="$style.translationLine">
+			<div v-if="previewTranslationLine || previewTranslationStatus" :class="$style.translationLine">
 				<span :class="$style.translationBadge">🌐</span>
-				<span>{{ previewTranslationLine }}</span>
+				<span>{{ previewTranslationLine || previewTranslationStatus }}</span>
 			</div>
 		</div>
 	</div>
@@ -58,6 +58,7 @@ const appearNote = computed(() => getAppearNote(props.note));
 const translationNoteRef = computed(() => appearNote.value);
 const {
 	previewTranslationText,
+	previewTranslationStatus,
 	translatedPreview,
 	shouldReplacePreviewText,
 } = useTimelinePreviewTranslation(translationNoteRef);

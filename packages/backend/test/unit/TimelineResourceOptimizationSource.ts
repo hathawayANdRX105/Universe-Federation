@@ -38,8 +38,13 @@ describe('timeline resource optimization source', () => {
 		assert.match(translateCommonSource, /fetchLibreTranslation/);
 		assert.match(translateCommonSource, /throwErrorWhenResponseNotOk:\s*false/);
 		assert.match(translateCommonSource, /const LIBRE_TRANSLATE_ATTEMPTS = 1;/);
-		assert.match(translateCommonSource, /const LIBRE_TRANSLATE_MIN_INTERVAL_MS = 5_500;/);
-		assert.match(translateCommonSource, /const LIBRE_TRANSLATE_RATE_LIMIT_COOLDOWN_MS = 1000 \* 65;/);
+		assert.match(translateCommonSource, /const LIBRE_TRANSLATE_REMOTE_MIN_INTERVAL_MS = 5_500;/);
+		assert.match(translateCommonSource, /const LIBRE_TRANSLATE_LOCAL_MIN_INTERVAL_MS = 750;/);
+		assert.match(translateCommonSource, /const LIBRE_TRANSLATE_REMOTE_RATE_LIMIT_COOLDOWN_MS = 1000 \* 65;/);
+		assert.match(translateCommonSource, /const LIBRE_TRANSLATE_LOCAL_RATE_LIMIT_COOLDOWN_MS = 1000 \* 8;/);
+		assert.match(translateCommonSource, /private isLocalLibreTranslateEndpoint/);
+		assert.match(translateCommonSource, /hostname === 'localhost' \|\| hostname === '127\.0\.0\.1' \|\| hostname === '\[::1\]'/);
+		assert.match(translateCommonSource, /getLibreTranslateMinIntervalMs/);
 		assert.match(translateCommonSource, /private async reserveLibreTranslateSlot/);
 		assert.match(translateCommonSource, /this\.redisClient\.eval/);
 		assert.match(translateCommonSource, /res\.status === 403 \|\| res\.status === 429/);

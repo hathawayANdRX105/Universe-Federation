@@ -4,7 +4,7 @@
  */
 
 import { setTimeout as sleep } from 'node:timers/promises';
-import { URLSearchParams } from 'node:url';
+import { URL, URLSearchParams } from 'node:url';
 import { Inject, Injectable } from '@nestjs/common';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { ApiLoggerService } from '@/server/api/ApiLoggerService.js';
@@ -27,8 +27,10 @@ interface CachedTranslationEntity {
 }
 
 const LIBRE_TRANSLATE_ATTEMPTS = 1;
-const LIBRE_TRANSLATE_MIN_INTERVAL_MS = 5_500;
-const LIBRE_TRANSLATE_RATE_LIMIT_COOLDOWN_MS = 1000 * 65;
+const LIBRE_TRANSLATE_REMOTE_MIN_INTERVAL_MS = 5_500;
+const LIBRE_TRANSLATE_LOCAL_MIN_INTERVAL_MS = 750;
+const LIBRE_TRANSLATE_REMOTE_RATE_LIMIT_COOLDOWN_MS = 1000 * 65;
+const LIBRE_TRANSLATE_LOCAL_RATE_LIMIT_COOLDOWN_MS = 1000 * 8;
 const LIBRE_TRANSLATE_SLOT_KEY = 'translation:libreTranslate:nextSlot';
 const LIBRE_TRANSLATE_SLOT_TTL_MS = 1000 * 60;
 
@@ -223,13 +225,32 @@ export class NoteTranslationService {
 	}
 
 	private async reserveLibreTranslateSlot(): Promise<void> {
-		const waitMs = await this.reserveLibreTranslateDelay(LIBRE_TRANSLATE_MIN_INTERVAL_MS);
+		const waitMs = await this.reserveLibreTranslateDelay(this.getLibreTranslateMinIntervalMs());
 		if (waitMs > 0) await sleep(waitMs);
 	}
 
 	private async cooldownLibreTranslate(status: number): Promise<void> {
-		await this.reserveLibreTranslateDelay(LIBRE_TRANSLATE_RATE_LIMIT_COOLDOWN_MS);
+		await this.reserveLibreTranslateDelay(this.getLibreTranslateRateLimitCooldownMs());
 		this.loggerService.logger.warn(`LibreTranslate rate-limit cooldown scheduled after HTTP ${status}`);
+	}
+
+	private getLibreTranslateMinIntervalMs(): number {
+		return this.isLocalLibreTranslateEndpoint() ? LIBRE_TRANSLATE_LOCAL_MIN_INTERVAL_MS : LIBRE_TRANSLATE_REMOTE_MIN_INTERVAL_MS;
+	}
+
+	private getLibreTranslateRateLimitCooldownMs(): number {
+		return this.isLocalLibreTranslateEndpoint() ? LIBRE_TRANSLATE_LOCAL_RATE_LIMIT_COOLDOWN_MS : LIBRE_TRANSLATE_REMOTE_RATE_LIMIT_COOLDOWN_MS;
+	}
+
+	private isLocalLibreTranslateEndpoint(): boolean {
+		const endpoint = this.serverSettings.libreTranslateURL;
+		if (!endpoint) return false;
+		try {
+			const hostname = new URL(endpoint).hostname.toLowerCase();
+			return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+		} catch {
+			return false;
+		}
 	}
 
 	private async reserveLibreTranslateDelay(intervalMs: number): Promise<number> {

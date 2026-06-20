@@ -14,7 +14,7 @@ import { getCachedTranslation, setCachedTranslation } from '@/utility/note-trans
 const MIN_LEN = 2;
 const BATCH_SIZE = 4;
 const FLUSH_DELAY_MS = 200;
-const FAILURE_RETRY_DELAY_MS = 70_000;
+const FAILURE_RETRY_DELAY_MS = 15_000;
 const MAX_FAILURE_RETRIES = 2;
 
 type BatchTranslationResponse = {
@@ -24,7 +24,9 @@ type BatchTranslationResponse = {
 type PreviewTranslationState = {
 	note: Ref<Misskey.entities.Note>;
 	translation: Ref<Misskey.entities.NotesTranslateResponse | false | null>;
+	queued: Ref<boolean>;
 	translating: Ref<boolean>;
+	retrying: Ref<boolean>;
 	retryCount: Ref<number>;
 	retryTimer: number | null;
 };
@@ -55,6 +57,7 @@ function removeState(state: PreviewTranslationState): void {
 		states.delete(state);
 		if (states.size === 0) pending.delete(noteId);
 	}
+	state.queued.value = false;
 	clearRetryTimer(state);
 }
 
@@ -62,19 +65,23 @@ function clearRetryTimer(state: PreviewTranslationState): void {
 	if (state.retryTimer === null) return;
 	window.clearTimeout(state.retryTimer);
 	state.retryTimer = null;
+	state.retrying.value = false;
 }
 
 function scheduleRetry(state: PreviewTranslationState): void {
 	if (state.retryCount.value >= MAX_FAILURE_RETRIES) {
 		state.translation.value = false;
+		state.retrying.value = false;
 		return;
 	}
 	if (state.retryTimer !== null) return;
 
 	state.translation.value = false;
 	state.retryCount.value += 1;
+	state.retrying.value = true;
 	state.retryTimer = window.setTimeout(() => {
 		state.retryTimer = null;
+		state.retrying.value = false;
 		if (!canTranslate(state.note.value)) return;
 		state.translation.value = null;
 		state.translating.value = false;
@@ -103,6 +110,7 @@ async function flushPending(): Promise<void> {
 		pending.delete(noteId);
 		statesByNoteId.set(noteId, states);
 		for (const state of states) {
+			state.queued.value = false;
 			state.translating.value = true;
 		}
 	}
@@ -128,6 +136,7 @@ async function flushPending(): Promise<void> {
 					scheduleRetry(state);
 				} else {
 					state.retryCount.value = 0;
+					state.retrying.value = false;
 					state.translation.value = translation;
 				}
 			}
@@ -156,6 +165,7 @@ function enqueue(state: PreviewTranslationState): void {
 	const note = state.note.value;
 	removeState(state);
 
+	state.queued.value = false;
 	if (!canTranslate(note)) return;
 	if (state.translating.value || state.translation.value !== null) return;
 
@@ -169,6 +179,7 @@ function enqueue(state: PreviewTranslationState): void {
 	const states = pending.get(note.id) ?? new Set<PreviewTranslationState>();
 	states.add(state);
 	pending.set(note.id, states);
+	state.queued.value = true;
 	scheduleFlush();
 }
 
@@ -176,16 +187,21 @@ export function useTimelinePreviewTranslation(note: Ref<Misskey.entities.Note>):
 	translation: Ref<Misskey.entities.NotesTranslateResponse | false | null>;
 	translating: Ref<boolean>;
 	previewTranslationText: ComputedRef<string>;
+	previewTranslationStatus: ComputedRef<string>;
 	translatedPreview: ComputedRef<string>;
 	shouldReplacePreviewText: ComputedRef<boolean>;
 } {
 	const translation = ref<Misskey.entities.NotesTranslateResponse | false | null>(null);
+	const queued = ref(false);
 	const translating = ref(false);
+	const retrying = ref(false);
 	const retryCount = ref(0);
 	const state: PreviewTranslationState = {
 		note,
 		translation,
+		queued,
 		translating,
+		retrying,
 		retryCount,
 		retryTimer: null,
 	};
@@ -197,6 +213,12 @@ export function useTimelinePreviewTranslation(note: Ref<Misskey.entities.Note>):
 	});
 	const shouldReplacePreviewText = computed(() => prefer.r.autoTranslateReplaceOriginal.value && previewTranslationText.value.length > 0);
 	const translatedPreview = computed(() => shouldReplacePreviewText.value ? previewTranslationText.value : normalizedNoteText(note.value));
+	const previewTranslationStatus = computed(() => {
+		if (!canTranslate(note.value) || previewTranslationText.value) return '';
+		if (queued.value || translating.value) return '翻译中...';
+		if (retrying.value) return '稍后自动重试';
+		return '';
+	});
 
 	watch(
 		[
@@ -210,7 +232,9 @@ export function useTimelinePreviewTranslation(note: Ref<Misskey.entities.Note>):
 			clearRetryTimer(state);
 			retryCount.value = 0;
 			translation.value = null;
+			queued.value = false;
 			translating.value = false;
+			retrying.value = false;
 			enqueue(state);
 		},
 		{ immediate: true },
@@ -224,6 +248,7 @@ export function useTimelinePreviewTranslation(note: Ref<Misskey.entities.Note>):
 		translation,
 		translating,
 		previewTranslationText,
+		previewTranslationStatus,
 		translatedPreview,
 		shouldReplacePreviewText,
 	};
