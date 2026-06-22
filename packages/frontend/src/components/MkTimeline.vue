@@ -72,6 +72,19 @@ import SkTimelineMasonryCard from '@/components/SkTimelineMasonryCard.vue';
 
 // Global timeline style: twitter (default), forum, or masonry.
 const viewMode = computed(() => prefer.r.timelineViewMode.value ?? 'twitter');
+// 不同视图模式一屏装的卡片数差异巨大,limit 跟着 viewMode 走:
+// - twitter:大卡,一屏 4~5 条 → 初次 12 就够
+// - forum(Discourse):窄列表,一屏 12~16 条 → 初次 30
+// - masonry(网格):多列瓷砖,一屏 12~18 → 初次 24
+// 这个值同时是 fetchMore 每页的拉取量;用户滑到底"只加载几条"就是 limit 太小导致的。
+function viewModeLimit(): number {
+	switch (viewMode.value) {
+		case 'forum': return 30;
+		case 'masonry': return 24;
+		case 'twitter':
+		default: return 12;
+	}
+}
 
 const props = withDefaults(defineProps<{
 	src: BasicTimelineType | 'mentions' | 'directs' | 'list' | 'antenna' | 'channel' | 'role';
@@ -268,7 +281,7 @@ function updatePaginationQuery() {
 	if (props.tag) {
 		paginationQuery = {
 			endpoint: 'notes/search-by-tag',
-			limit: 12,
+			limit: viewModeLimit(),
 			params: {
 				tag: props.tag,
 				scope: props.tagScope ?? undefined,
@@ -372,8 +385,8 @@ function updatePaginationQuery() {
 	if (endpoint && query) {
 		paginationQuery = {
 			endpoint: endpoint,
-			// channel 时间线初次给 30(默认 10 太少,频道页第一屏体感太空);其它源沿用 10
-			limit: props.src === 'channel' ? 30 : 10,
+			// channel 至少 30 条;其它源跟 viewMode 走:forum/masonry 一屏装得下更多,默认 limit 也大
+			limit: props.src === 'channel' ? Math.max(30, viewModeLimit()) : viewModeLimit(),
 			params: query,
 			offsetMode: recommendationScope != null || (props.src === 'local' && props.localTimelineMode !== 'chronological'),
 		};

@@ -218,8 +218,9 @@ export const PREF_DEF = {
 		default: false,
 	},
 	// 全局帖子流浏览样式:twitter=X 风格(SkNote大卡)/ forum=Discourse 风格窄列表 / masonry=网格瀑布流
+	// 默认 forum,列表密度高、首屏信息量更大
 	timelineViewMode: {
-		default: 'twitter' as 'twitter' | 'forum' | 'masonry',
+		default: 'forum' as 'twitter' | 'forum' | 'masonry',
 	},
 	// 全局自动翻译:开启后,所有展示的帖子会自动翻译成 UI 语言。结果走本地缓存避免重复请求。
 	autoTranslateNotes: {

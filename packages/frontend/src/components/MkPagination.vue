@@ -50,7 +50,9 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
 
-const SECOND_FETCH_LIMIT = 30;
+// 第二屏起每页拉的条数:30 太少导致"滑一下又到头"——尤其是 Discourse/masonry 这种压缩视图,
+// 一屏能放 20+ 条,30 条几乎刚滑两下就用完。给 50 做基线,体感更连续。
+const SECOND_FETCH_LIMIT = 50;
 const TOLERANCE = 16;
 const APPEAR_MINIMUM_INTERVAL = 600;
 
