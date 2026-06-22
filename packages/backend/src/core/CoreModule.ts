@@ -40,6 +40,7 @@ import { DriveService } from './DriveService.js';
 import { EmailService } from './EmailService.js';
 import { FederatedInstanceService } from './FederatedInstanceService.js';
 import { FetchInstanceMetadataService } from './FetchInstanceMetadataService.js';
+import { ChatRoomEventBatcher } from './ChatRoomEventBatcher.js';
 import { GlobalEventService } from './GlobalEventService.js';
 import { HashtagService } from './HashtagService.js';
 import { HttpRequestService } from './HttpRequestService.js';
@@ -362,6 +363,7 @@ const $Imports = [
 		EmailService,
 		FederatedInstanceService,
 		FetchInstanceMetadataService,
+		ChatRoomEventBatcher,
 		GlobalEventService,
 		HashtagService,
 		HttpRequestService,
@@ -693,6 +695,7 @@ const $Imports = [
 		EmailService,
 		FederatedInstanceService,
 		FetchInstanceMetadataService,
+		ChatRoomEventBatcher,
 		GlobalEventService,
 		HashtagService,
 		HttpRequestService,

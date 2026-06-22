@@ -997,7 +997,8 @@ export class ChatService {
 
 			const packedMessage = await this.chatEntityService.packMessageLiteForRoom(inserted, { mentionedUserIds });
 			await this.appendPackedRoomTimelineCache(toRoom.id, packedMessage);
-			await this.globalEventService.publishChatRoomStream(toRoom.id, 'message', packedMessage);
+			// B-light:走 batcher,同房间 60ms 内合并 fanout
+			this.globalEventService.publishChatRoomStreamBatched(toRoom.id, { type: 'message', body: packedMessage });
 
 			if (mentionedUserIds.length > 0) {
 				this.timeService.startTimer(async () => {
@@ -1057,7 +1058,8 @@ export class ChatService {
 
 		const packedMessage = await this.chatEntityService.packMessageLiteForRoom(inserted, { mentionedUserIds });
 		await this.appendPackedRoomTimelineCache(toRoom.id, packedMessage);
-		await this.globalEventService.publishChatRoomStream(toRoom.id, 'message', packedMessage);
+		// B-light:走 batcher,同房间 60ms 内合并 fanout
+		this.globalEventService.publishChatRoomStreamBatched(toRoom.id, { type: 'message', body: packedMessage });
 
 		// 3秒経っても既読にならなかったらイベント発行
 		this.timeService.startTimer(async () => {
@@ -2414,10 +2416,14 @@ export class ChatService {
 				user: packedUser,
 				reaction,
 			}, 'add');
-			this.globalEventService.publishChatRoomStream(room.id, 'react', {
-				messageId: message.id,
-				user: packedUser,
-				reaction,
+			// B-light:走 batcher
+			this.globalEventService.publishChatRoomStreamBatched(room.id, {
+				type: 'react',
+				body: {
+					messageId: message.id,
+					user: packedUser,
+					reaction,
+				},
 			});
 		} else {
 			this.globalEventService.publishChatUserStream(message.fromUserId, message.toUserId!, 'react', {
@@ -2474,10 +2480,14 @@ export class ChatService {
 				user: packedUser,
 				reaction,
 			}, 'remove');
-			this.globalEventService.publishChatRoomStream(room.id, 'unreact', {
-				messageId: message.id,
-				user: packedUser,
-				reaction,
+			// B-light:走 batcher
+			this.globalEventService.publishChatRoomStreamBatched(room.id, {
+				type: 'unreact',
+				body: {
+					messageId: message.id,
+					user: packedUser,
+					reaction,
+				},
 			});
 		} else {
 			this.globalEventService.publishChatUserStream(message.fromUserId, message.toUserId!, 'unreact', {

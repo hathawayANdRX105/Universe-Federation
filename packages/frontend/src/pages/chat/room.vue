@@ -86,34 +86,48 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</div>
 
-				<div v-if="messages.length > 0" ref="timelineEl" :class="$style.timeline">
-					<div v-if="canFetchMore || moreFetching" :class="$style.more">
-						<MkLoading v-if="moreFetching" :mini="true"/>
-					</div>
-
-					<SkTransitionGroup
-					:enterActiveClass="$style.transition_x_enterActive"
-					:leaveActiveClass="$style.transition_x_leaveActive"
-					:enterFromClass="$style.transition_x_enterFrom"
-					:leaveToClass="$style.transition_x_leaveTo"
-					:moveClass="$style.transition_x_move"
-					:animate="!isRestoringHistoryScroll && !isRoomChat"
-					tag="div" :class="$style.messageList"
+				<DynamicScroller
+					v-if="messages.length > 0"
+					ref="scrollerEl"
+					:items="visibleTimeline"
+					:min-item-size="60"
+					key-field="id"
+					:buffer="600"
+					:class="$style.timeline"
 				>
-					<div v-for="item in visibleTimeline" :key="item.id" v-memo="[item.type, item.type === 'item' && item.id === contextTargetMessageId, item.type === 'item' ? item.data.reactions.length : 0, item.type === 'item' ? item.data.sendStatus : 0, item.type === 'item' ? item.data.replyUnavailable === true : false, item.type === 'item' ? item.data.quoteUnavailable === true : false, canManageRoomUsers, canDeleteAnyMessage, room?.ownerId]" :class="[$style.messageItem, { [$style.contextTarget]: item.type === 'item' && item.id === contextTargetMessageId }]" :data-scroll-anchor="item.type === 'item' ? item.id : undefined">
-						<XMessage v-if="item.type === 'item'" :message="item.data" :enableReferenceActions="true" :enableRoomUserMute="true" :canDeleteAnyMessage="canDeleteAnyMessage" :canManageRoomUsers="canManageRoomUsers" :roomOwnerId="room?.ownerId" @reply="setReplyTarget(item.data)" @quote="setQuoteTarget(item.data)" @mention="mentionUser" @muteUser="muteUserInRoom" @openReference="openReferenceMessage" @deletedMany="onDeletedMany"/>
-						<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
-							<span><i class="ti ti-chevron-up"></i> {{ item.nextText }}</span>
-							<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
-							<span>{{ item.prevText }} <i class="ti ti-chevron-down"></i></span>
+					<template #before>
+						<div v-if="canFetchMore || moreFetching" :class="$style.more">
+							<MkLoading v-if="moreFetching" :mini="true"/>
 						</div>
-					</div>
-				</SkTransitionGroup>
-
-				<div v-if="canFetchNewer || newerFetching" :class="$style.more">
-					<MkLoading v-if="newerFetching" :mini="true"/>
-				</div>
-			</div>
+					</template>
+					<template #default="{ item, active }">
+						<DynamicScrollerItem
+							:item="item"
+							:active="active"
+							:size-dependencies="getItemSizeDependencies(item)"
+							:data-active="active ? 'true' : undefined"
+							:data-id="item.id"
+						>
+							<div
+								:class="[$style.messageItem, { [$style.contextTarget]: item.type === 'item' && item.id === contextTargetMessageId }]"
+								:data-scroll-anchor="item.type === 'item' ? item.id : undefined"
+								:data-fresh="item.type === 'item' && isFreshlyArrivedItem(item.id) ? 'true' : undefined"
+							>
+								<XMessage v-if="item.type === 'item'" :message="item.data" :enableReferenceActions="true" :enableRoomUserMute="true" :canDeleteAnyMessage="canDeleteAnyMessage" :canManageRoomUsers="canManageRoomUsers" :roomOwnerId="room?.ownerId" @reply="setReplyTarget(item.data)" @quote="setQuoteTarget(item.data)" @mention="mentionUser" @muteUser="muteUserInRoom" @openReference="openReferenceMessage" @deletedMany="onDeletedMany"/>
+								<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
+									<span><i class="ti ti-chevron-up"></i> {{ item.nextText }}</span>
+									<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
+									<span>{{ item.prevText }} <i class="ti ti-chevron-down"></i></span>
+								</div>
+							</div>
+						</DynamicScrollerItem>
+					</template>
+					<template #after>
+						<div v-if="canFetchNewer || newerFetching" :class="$style.more">
+							<MkLoading v-if="newerFetching" :mini="true"/>
+						</div>
+					</template>
+				</DynamicScroller>
 
 			<div v-if="user && (!user.canChat || user.host !== null)">
 				<MkInfo warn>{{ i18n.ts._chat.chatNotAvailableInOtherAccount }}</MkInfo>
@@ -200,7 +214,8 @@ import { useMutationObserver } from '@/use/use-mutation-observer.js';
 import MkInfo from '@/components/MkInfo.vue';
 import MkAcct from '@/components/global/MkAcct.vue';
 import { makeDateSeparatedTimelineComputedRef } from '@/utility/timeline-date-separate.js';
-import SkTransitionGroup from '@/components/SkTransitionGroup.vue';
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller';
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 import { appendDetachedChatMessages, ChatAutoScrollState, ChatReadReceiptBatcher, findMissingChatMessageIdsInLatestWindow, getChatScrollMetrics, mergeChatMessagesForTimeline, prependChatMessageForTimeline } from './room-scroll.js';
 import { hasChatUserResolvedAvatar, mergeChatUserForCache } from './room-user-cache.js';
 
@@ -248,7 +263,32 @@ const rootEl = ref<HTMLElement | null>(null);
 const chatPaneEl = ref<HTMLElement | null>(null);
 const localTabsEl = ref<HTMLElement | null>(null);
 const timelineEl = ref<HTMLElement | null>(null);
+const scrollerEl = ref<any>(null);
 const formEl = ref<InstanceType<typeof XForm> | null>(null);
+// C: 新到消息出场动画用 data-fresh CSS,避免虚拟滚动里 SkTransitionGroup 失效
+const freshlyArrivedIds = new Set<string>();
+function isFreshlyArrivedItem(id: string): boolean {
+	return freshlyArrivedIds.has(id);
+}
+function markFreshlyArrived(ids: string[]) {
+	for (const id of ids) {
+		freshlyArrivedIds.add(id);
+		window.setTimeout(() => freshlyArrivedIds.delete(id), 2200);
+	}
+}
+// DynamicScrollerItem 高度依赖:这些值变化会触发本项重测量
+function getItemSizeDependencies(item: ReturnType<typeof timeline.value[number]>): unknown[] {
+	if (item.type === 'item') {
+		return [
+			item.data.reactions.length,
+			item.data.sendStatus,
+			item.data.replyUnavailable === true,
+			item.data.quoteUnavailable === true,
+			item.id === contextTargetMessageId.value,
+		];
+	}
+	return [item.type];
+}
 const timeline = makeDateSeparatedTimelineComputedRef(messages);
 const visibleTimeline = computed(() => timeline.value.toReversed());
 const contextTargetMessageId = ref<string | null>(null);
@@ -743,7 +783,15 @@ function scrollMessageIntoView(messageId: string, block: ScrollLogicalPosition =
 	if (timelineEl.value == null) return false;
 
 	const element = timelineEl.value.querySelector<HTMLElement>(`[data-scroll-anchor="${CSS.escape(messageId)}"]`);
-	if (element == null) return false;
+	if (element == null) {
+		// 虚拟滚动:目标消息可能没在当前 viewport 里,先用 scrollToItem 把它带进 DOM
+		const idx = visibleTimeline.value.findIndex(x => x.id === messageId);
+		if (idx >= 0 && scrollerEl.value != null && typeof (scrollerEl.value as any).scrollToItem === 'function') {
+			(scrollerEl.value as any).scrollToItem(idx);
+			// 不在本帧立刻确认成功:返回 false,scrollContextTargetAfterRender 的 60 帧循环会再次尝试
+		}
+		return false;
+	}
 
 	const scrollContainer = getScrollContainer(timelineEl.value);
 	if (scrollContainer == null) {
@@ -859,6 +907,20 @@ watch(timelineEl, (to) => {
 	});
 	timelineResizeObserver.observe(to);
 }, { immediate: true });
+
+// 把 timelineEl 绑到 DynamicScroller 的内部滚动元素(.vue-recycle-scroller)。
+// 这样所有现存 `getScrollContainer(timelineEl.value)` 调用都能找到正确的 scroll container,
+// querySelector('[data-scroll-anchor]') 也能扫到当前 viewport 内的可见 item。
+watch(scrollerEl, (to) => {
+	if (to == null) {
+		timelineEl.value = null;
+		return;
+	}
+	const root = (to as any).$el as HTMLElement | undefined;
+	if (root == null) return;
+	const inner = (root.classList?.contains('vue-recycle-scroller') ? root : root.querySelector<HTMLElement>('.vue-recycle-scroller')) ?? root;
+	timelineEl.value = inner;
+}, { immediate: true, flush: 'post' });
 
 function refreshMessagesForUser(userId: string) {
 	let changed = false;
@@ -1314,6 +1376,8 @@ function connectStream() {
 		roomConnection.on('roomUpdated', onRoomUpdatedStream);
 		roomConnection.on('memberKicked', onMemberKicked);
 		roomConnection.on('memberMuted', onMemberMuted);
+		// B-light:后端把 60ms 窗口内同房间的 message/react/unreact 合并成一个 batch 事件
+		roomConnection.on('batch', onBatch);
 		connection.value = roomConnection;
 	} else {
 		connection.value = null;
@@ -2119,6 +2183,9 @@ function processIncomingMessageBatch(batch: Misskey.entities.ChatMessageLite[], 
 		? prependChatMessageForTimeline(current, firstNormalized, { limit: messageLimit() })
 		: mergeChatMessagesForTimeline(current, normalized, { limit: messageLimit() });
 
+	// 新到消息标 fresh,触发 data-fresh CSS 入场动画(替代 SkTransitionGroup 的 enter)
+	markFreshlyArrived(normalized.map(m => m.id));
+
 	// TODO: DOM的にバックグラウンドになっていないかどうかも考慮する
 	if (newestOtherMessage != null && !window.document.hidden && isActivated) {
 		readReceiptBatcher.queue(newestOtherMessage.id);
@@ -2190,6 +2257,17 @@ function onPruned(ctx: Parameters<Misskey.Channels['chatRoom']['events']['pruned
 	if (messages.value.length === 0) {
 		canFetchMore.value = false;
 		canFetchNewer.value = false;
+	}
+}
+
+// B-light:后端 batcher 合并的高频事件包,这里按顺序解包后复用既有 onMessage/onReact/onUnreact 分发逻辑。
+function onBatch(events: Parameters<Misskey.Channels['chatRoom']['events']['batch']>[0]) {
+	for (const ev of events) {
+		switch (ev.type) {
+			case 'message': onMessage(ev.body); break;
+			case 'react': onReact(ev.body); break;
+			case 'unreact': onUnreact(ev.body); break;
+		}
 	}
 }
 
@@ -2926,12 +3004,22 @@ definePage(computed(() => {
 	}
 }
 
+/* DynamicScroller 容器:占满 chatPane 内剩余空间,内部 .vue-recycle-scroller 走自己的滚动 */
 .timeline {
-	display: grid;
-	gap: 8px;
-	width: 100%;
+	flex: 1 1 0;
+	min-height: 240px;
 	max-width: 100%;
-	min-width: 0;
+	width: 100%;
+}
+
+/* vue-virtual-scroller 的内部容器:overflow 已由库本身设置;补一下移动端 momentum */
+.timeline :global(.vue-recycle-scroller) {
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
+}
+
+.timeline :global(.vue-recycle-scroller__item-wrapper) {
+	width: 100%;
 }
 
 .messageList {
@@ -2943,11 +3031,22 @@ definePage(computed(() => {
 	overflow: clip;
 }
 
+@keyframes chatItemEnter {
+	from { opacity: 0; transform: translateY(8px); }
+	to { opacity: 1; transform: none; }
+}
+
 .messageItem {
 	width: 100%;
 	max-width: 100%;
 	min-width: 0;
 	box-sizing: border-box;
+	padding: 3px 0;
+}
+
+/* 新到消息出场动画(替代 SkTransitionGroup 的 enter):标了 data-fresh=true 的 item 演 220ms */
+.messageItem[data-fresh="true"] {
+	animation: chatItemEnter 220ms ease-out;
 }
 
 .contextTarget {
@@ -2995,6 +3094,22 @@ definePage(computed(() => {
 
 .chatPane > :global(._gaps) > :first-child {
 	margin-top: auto;
+}
+
+/* C: 当 chatPane 内有 DynamicScroller (.timeline) 时,关掉 chatPane 自己的滚动,把空间让给虚拟滚动器 */
+.chatPane:has(.timeline) {
+	overflow-y: hidden;
+}
+
+.chatPane:has(.timeline) > :global(._gaps) {
+	flex: 1 1 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.chatPane:has(.timeline) > :global(._gaps) > :first-child {
+	margin-top: 0;
 }
 
 .searchPane {

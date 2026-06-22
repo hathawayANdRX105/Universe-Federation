@@ -20,6 +20,7 @@ import type { Config } from '@/config.js';
 import type { EmptyObject, Serialized } from '@/types.js';
 import { bindThis } from '@/decorators.js';
 import type { InternalEventTypes } from '@/global/InternalEventService.js';
+import { ChatRoomEventBatcher, type ChatBatchEventEntry } from '@/core/ChatRoomEventBatcher.js';
 import type * as Redis from 'ioredis';
 import type * as Reversi from 'misskey-reversi';
 
@@ -194,6 +195,12 @@ export interface ChatEventTypes {
 		userId: MiUser['id'];
 		mutedUntil: string | null;
 	};
+	// 同房间 60ms 窗口内合并的高频事件批量包(B-light)
+	batch: Array<
+		| { type: 'message'; body: Packed<'ChatMessageLite'> }
+		| { type: 'react'; body: { reaction: string; user?: Packed<'UserLite'>; messageId: MiChatMessage['id'] } }
+		| { type: 'unreact'; body: { reaction: string; user?: Packed<'UserLite'>; messageId: MiChatMessage['id'] } }
+	>;
 }
 
 export interface ReversiEventTypes {
@@ -338,6 +345,8 @@ export class GlobalEventService {
 
 		@Inject(DI.redisForPub)
 		private redisForPub: Redis.Redis,
+
+		private readonly chatRoomEventBatcher: ChatRoomEventBatcher,
 	) {
 	}
 
@@ -406,6 +415,16 @@ export class GlobalEventService {
 	@bindThis
 	public async publishChatRoomStream<Id extends MiChatRoom['id'], Type extends GlobalEventTypes<`chatRoomStream:${Id}`>>(chatRoomId: Id, type: Type, value: GlobalEventBody<`chatRoomStream:${Id}`, Type>): Promise<void> {
 		await this.publish(`chatRoomStream:${chatRoomId}`, type, value);
+	}
+
+	/**
+	 * B-light:把高频 chatRoom 事件交给 batcher,同房间 60ms 窗口内合并成一次 publish。
+	 * 仅接受 message / react / unreact —— 低频事件(deleted/cleared/roomUpdated/…)继续走
+	 * publishChatRoomStream 直发,保留即时语义。
+	 */
+	@bindThis
+	public publishChatRoomStreamBatched(chatRoomId: MiChatRoom['id'], entry: ChatBatchEventEntry): void {
+		this.chatRoomEventBatcher.enqueue(chatRoomId, entry);
 	}
 
 	@bindThis
