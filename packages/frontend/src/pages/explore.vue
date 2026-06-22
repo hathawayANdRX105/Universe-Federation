@@ -227,15 +227,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<h2>{{ activeSectionTitle }}</h2>
 						</div>
 					</div>
-					<!-- viewMode 跟首页 timeline 一致;切了视图浏览风格立刻生效 -->
+					<!-- viewMode 跟首页 timeline 一致;切了视图风格立刻生效。数据用原 activeNotes,不再客户端 scope 过滤 -->
 					<div v-if="viewMode === 'masonry'" :class="$style.masonryGrid">
-						<SkTimelineMasonryCard v-for="note in scopedActiveNotes" :key="note.id" :note="note"/>
+						<SkTimelineMasonryCard v-for="note in activeNotes" :key="note.id" :note="note"/>
 					</div>
 					<div v-else-if="viewMode === 'forum'" :class="$style.forumList">
-						<SkTimelineForumItem v-for="note in scopedActiveNotes" :key="note.id" :note="note"/>
+						<SkTimelineForumItem v-for="note in activeNotes" :key="note.id" :note="note"/>
 					</div>
 					<div v-else class="_gaps" :class="$style.noteList">
-						<DynamicNote v-for="note in scopedActiveNotes" :key="note.id" :note="note" :withHardMute="true"/>
+						<DynamicNote v-for="note in activeNotes" :key="note.id" :note="note" :withHardMute="true"/>
 					</div>
 				</section>
 
@@ -388,13 +388,10 @@ const exploreScopeTabs = [
 // 视图模式跟首页共用全局偏好(timelineViewMode);切了立即同步生效
 const viewMode = computed(() => prefer.r.timelineViewMode.value ?? 'twitter');
 
-// scope 客户端过滤(后端 notes/discovery-sections 当前不接 scope 参数,先在前端过滤):
-// local = userHost null;global = userHost != null;all = 不过滤
-function applyScopeFilter<T extends { userHost?: string | null; user?: { host?: string | null } }>(arr: T[]): T[] {
-	if (exploreScope.value === 'all') return arr;
-	if (exploreScope.value === 'local') return arr.filter(n => (n.userHost ?? n.user?.host ?? null) == null);
-	return arr.filter(n => (n.userHost ?? n.user?.host ?? null) != null);
-}
+// 注:之前在客户端按 user.host 强行过滤 scope,结果"本地服务器 + Discourse 风格"经常变空
+// (探索拿到的多是联邦内容,user.host 非空,被过滤掉一空二净)。回到原来设计 ——
+// chip 只是 UI 指示 + 偏好持久化,数据照原样展示,等后端 notes/discovery-sections
+// 支持 scope 参数后再接真的过滤。
 const searchQuery = ref(props.query ?? '');
 const submittedQuery = ref('');
 const searchLoading = ref(false);
@@ -475,7 +472,6 @@ const activeNotes = computed(() => {
 	if (tab.value === 'forYou') return discoverySections.value.tutorialNotes.length > 0 ? discoverySections.value.tutorialNotes : discoverySections.value.hotNotes;
 	return discoverySections.value.tutorialNotes.length > 0 ? discoverySections.value.tutorialNotes : discoverySections.value.hotNotes;
 });
-const scopedActiveNotes = computed(() => applyScopeFilter(activeNotes.value));
 const categoryEmpty = computed(() => !exploreLoading.value && submittedQuery.value.length === 0 && tab.value !== 'forYou' && categoryNotes.value.length === 0);
 const visibleChannels = computed(() => discoverySections.value.channels.slice(0, discoverySectionLimit));
 const sideChannels = computed(() => visibleChannels.value.slice(0, sideChannelLimit));
@@ -914,13 +910,47 @@ definePage(() => ({
 }
 
 .exploreTabs {
-	display: grid;
-	grid-template-columns: repeat(5, minmax(max-content, 1fr));
+	/* 之前是 5 列 grid,6 个 tab(推荐/热门话题/消息/运动/娱乐/游戏)被挤到第二行。
+	   换成 flex + 横向滚动:窄屏可滑,宽屏铺满,绝不换行。 */
+	display: flex;
+	flex-wrap: nowrap;
 	min-height: 50px;
 	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none;
+
+	&::-webkit-scrollbar { display: none; }
+
+	> .exploreTab {
+		flex: 1 1 auto;
+		min-width: max-content;
+	}
 }
 
 /* 与 timeline.vue 同款 scope 行;复用首页观感 */
+/* viewMode 容器 —— 跟 MkTimeline.vue 的 .masonryRoot / .forumRoot 同款 */
+.masonryGrid {
+	container-type: inline-size;
+	column-count: 2;
+	column-gap: 8px;
+	padding: 8px;
+
+	@container (min-width: 900px) { column-count: 3; column-gap: 12px; padding: 12px; }
+	@container (min-width: 1400px) { column-count: 4; column-gap: 14px; }
+	@container (min-width: 2000px) { column-count: 5; column-gap: 16px; }
+}
+
+.forumList {
+	container-type: inline-size;
+	background: var(--MI_THEME-panel);
+	border-radius: var(--MI-radius, 8px);
+	overflow: hidden;
+
+	@media (max-width: 700px) {
+		border-radius: 0;
+	}
+}
+
 .scopeRow {
 	display: flex;
 	align-items: center;
