@@ -120,7 +120,10 @@ function shrinkText(text: string, max: number): string {
 
 const isRenotePreview = computed(() => appearNote.value.id !== props.note.id);
 const sourcePreviewText = computed(() => {
-	const t = shouldReplacePreviewText.value ? translatedPreview.value : (appearNote.value.text ?? '').replace(/\s+/g, ' ').trim();
+	// 图文混排:从纯文本预览里剥掉 $[file N] 占位符,否则会出现字面 "$[file 0]"
+	const t = shouldReplacePreviewText.value
+		? translatedPreview.value
+		: (appearNote.value.text ?? '').replace(/\$\[file\s+\d+\]/g, '').replace(/\s+/g, ' ').trim();
 	if (!t) return '';
 	return isRenotePreview.value ? `RN: ${t}` : t;
 });

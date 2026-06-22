@@ -72,7 +72,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="channel" :class="$style.colorBar" :style="{ background: channel.color }"></div>
-		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text dir="auto" @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"/>
+		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text dir="auto" @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd" @dragover="onDragoverInline" @drop="onDropInline"/>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
@@ -101,12 +101,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<footer :class="$style.footer">
 		<div v-if="homeStyle" :class="$style.footerLeft">
 			<button v-tooltip="i18n.ts.attachFile" class="_button" :class="$style.footerButton" @click="chooseFileFrom"><i class="ti ti-photo"></i></button>
+			<button v-tooltip="i18n.ts._postForm?.inlineAttach ?? '插入内联媒体'" class="_button" :class="$style.footerButton" @click="chooseFileInline"><i class="ph-image-square ph-bold ph-lg"></i></button>
 			<button v-tooltip="i18n.ts.poll" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: poll }]" @click="togglePoll"><i class="ti ti-chart-arrows"></i></button>
 			<button v-tooltip="i18n.ts.emoji" :class="['_button', $style.footerButton]" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
 			<button v-if="$i.policies.scheduleNoteMax > 0" v-tooltip="i18n.ts.options" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: scheduleNote }]" @click="toggleScheduleNote"><i class="ti ti-calendar-event"></i></button>
 		</div>
 		<div v-else :class="$style.footerLeft">
 			<button v-tooltip="i18n.ts.attachFile" class="_button" :class="$style.footerButton" @click="chooseFileFrom"><i class="ti ti-photo-plus"></i></button>
+			<button v-tooltip="i18n.ts._postForm?.inlineAttach ?? '插入内联媒体'" class="_button" :class="$style.footerButton" @click="chooseFileInline"><i class="ph-image-square ph-bold ph-lg"></i></button>
 			<button v-tooltip="i18n.ts.poll" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: poll }]" @click="togglePoll"><i class="ti ti-chart-arrows"></i></button>
 			<button v-tooltip="i18n.ts.useCw" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: useCw }]" @click="useCw = !useCw"><i class="ti ti-eye-off"></i></button>
 			<button v-tooltip="i18n.ts.mention" class="_button" :class="$style.footerButton" @click="insertMention"><i class="ti ti-at"></i></button>
@@ -576,8 +578,40 @@ function chooseFileFrom(ev) {
 	});
 }
 
+// 图文混排:选完文件后,既附加到 files,又在光标处插 $[file N] 占位符
+function chooseFileInline(ev) {
+	if (props.mock) return;
+	selectFiles(ev.currentTarget ?? ev.target, i18n.ts.attachFile).then(files_ => {
+		for (const file of files_) {
+			const idx = files.value.length;
+			files.value.push(file);
+			if (textareaEl.value) {
+				insertTextAtCursor(textareaEl.value, `\n$[file ${idx}]\n`);
+			} else {
+				text.value = (text.value ?? '') + `\n$[file ${idx}]\n`;
+			}
+		}
+	});
+}
+
 function detachFile(id) {
+	// 1. 找到被删的索引
+	const removedIdx = files.value.findIndex(x => x.id === id);
+	// 2. 从数组中移除
 	files.value = files.value.filter(x => x.id !== id);
+	// 3. 图文混排:同步清理 text 里对应的 $[file N] 占位符,并把后续编号重新对齐
+	if (removedIdx >= 0 && text.value) {
+		text.value = (text.value as string)
+			// 把 $[file removedIdx] 整段连同前后多余空行去掉
+			.replace(new RegExp(`\\n?\\$\\[file\\s+${removedIdx}\\]\\n?`, 'g'), '\n')
+			// 把后面 $[file M] (M > removedIdx) 全部 -1
+			.replace(/\$\[file\s+(\d+)\]/g, (m, n) => {
+				const i = parseInt(n, 10);
+				return i > removedIdx ? `$[file ${i - 1}]` : m;
+			})
+			// 收掉连续多余空行
+			.replace(/\n{3,}/g, '\n\n');
+	}
 }
 
 function updateFileSensitive(file, sensitive) {
@@ -607,6 +641,69 @@ function upload(file: File, name?: string): void {
 	}).finally(() => {
 		uploadingIds.value = uploadingIds.value.filter(id => id !== uploading.id);
 	});
+}
+
+// 图文混排:上传后在光标处插 $[file N];编辑器还没失焦,光标记住
+function uploadInline(file: File, name?: string): void {
+	if (props.mock) return;
+	const cursorBeforeUpload = textareaEl.value?.selectionStart ?? text.value.length;
+	const uploading = uploadFile(file, prefer.s.uploadFolder, name);
+	uploadingIds.value.push(uploading.id);
+	uploading.then(res => {
+		const idx = files.value.length;
+		files.value.push(res);
+		const token = `\n$[file ${idx}]\n`;
+		if (textareaEl.value) {
+			// 把光标恢复到拖入位置(上传期间可能用户继续打字)再插入
+			try { textareaEl.value.focus(); textareaEl.value.setSelectionRange(cursorBeforeUpload, cursorBeforeUpload); } catch { /* ignore */ }
+			insertTextAtCursor(textareaEl.value, token);
+		} else {
+			text.value = (text.value ?? '') + token;
+		}
+	}).catch(() => {
+		// uploadFile already shows the error dialog.
+	}).finally(() => {
+		uploadingIds.value = uploadingIds.value.filter(id => id !== uploading.id);
+	});
+}
+
+// textarea dragover:接受文件类型,标 draghover 用于视觉反馈
+function onDragoverInline(ev: DragEvent): void {
+	if (!ev.dataTransfer) return;
+	const hasFile = ev.dataTransfer.items.length > 0 && ev.dataTransfer.items[0].kind === 'file';
+	const hasDriveFile = ev.dataTransfer.types.includes(_DATA_TRANSFER_DRIVE_FILE_);
+	if (hasFile || hasDriveFile) {
+		ev.preventDefault();
+		ev.stopPropagation();
+		draghover.value = true;
+		ev.dataTransfer.dropEffect = 'copy';
+	}
+}
+
+// textarea 上的拖拽 = 内联插入(优先于 form 根的 onDrop)
+function onDropInline(ev: DragEvent): void {
+	if (!ev.dataTransfer) return;
+	// 本地文件
+	if (ev.dataTransfer.files.length > 0) {
+		ev.preventDefault();
+		ev.stopPropagation();
+		for (const f of Array.from(ev.dataTransfer.files)) uploadInline(f);
+		draghover.value = false;
+		return;
+	}
+	// 已存在 drive 的文件
+	const driveFile = ev.dataTransfer.getData(_DATA_TRANSFER_DRIVE_FILE_);
+	if (driveFile != null && driveFile !== '') {
+		ev.preventDefault();
+		ev.stopPropagation();
+		const file = JSON.parse(driveFile);
+		const idx = files.value.length;
+		files.value.push(file);
+		const token = `\n$[file ${idx}]\n`;
+		if (textareaEl.value) insertTextAtCursor(textareaEl.value, token);
+		else text.value = (text.value ?? '') + token;
+		draghover.value = false;
+	}
 }
 
 function setVisibility() {

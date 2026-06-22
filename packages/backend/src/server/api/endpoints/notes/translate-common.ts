@@ -20,6 +20,11 @@ export interface CachedTranslation {
 	text: string | undefined;
 }
 
+// 翻译之前剥掉 Sharkey 图文混排占位符 $[file N],免得 LibreTranslate/DeepL 把它当字面文本返回
+function stripInlinePlaceholders(text: string): string {
+	return text.replace(/\$\[file\s+\d+\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 interface CachedTranslationEntity {
 	l?: string;
 	t?: string;
@@ -107,9 +112,11 @@ export class NoteTranslationService {
 		try {
 			const deeplFreeInstance = this.serverSettings.deeplFreeMode ? this.serverSettings.deeplFreeInstance : null;
 
+			const inputText = stripInlinePlaceholders(note.text);
+			if (!inputText) return null;
 			if (this.serverSettings.deeplAuthKey || deeplFreeInstance) {
 				const params = new URLSearchParams();
-				params.append('text', note.text);
+				params.append('text', inputText);
 				params.append('target_lang', targetLang);
 				const headers: Record<string, string> = {
 					'Content-Type': 'application/x-www-form-urlencoded',
@@ -168,6 +175,8 @@ export class NoteTranslationService {
 	}
 
 	private async fetchLibreTranslation(note: MiNote & { text: string }, targetLang: string): Promise<CachedTranslation | null> {
+		const inputText = stripInlinePlaceholders(note.text);
+		if (!inputText) return null;
 		for (const libreTargetLang of this.getLibreTranslateTargetLangCandidates(targetLang)) {
 			for (let attempt = 1; attempt <= LIBRE_TRANSLATE_ATTEMPTS; attempt++) {
 				try {
@@ -179,7 +188,7 @@ export class NoteTranslationService {
 							Accept: 'application/json, */*',
 						},
 						body: JSON.stringify({
-							q: note.text,
+							q: inputText,
 							source: 'auto',
 							target: libreTargetLang,
 							format: 'text',

@@ -91,6 +91,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								:enableEmojiMenu="true"
 								:enableEmojiMenuReaction="true"
 								:isAnim="allowAnim"
+								:files="appearNote.files"
 								class="_selectable"
 							/>
 						</div>
@@ -98,8 +99,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<MkButton v-if="!allowAnim && animated" :class="$style.playMFMButton" :small="true" @click="animatedMFM()" @click.stop><i class="ph-play ph-bold ph-lg "></i> {{ i18n.ts._animatedMFM.play }}</MkButton>
 						<MkButton v-else-if="!prefer.s.animatedMfm && allowAnim && animated" :class="$style.playMFMButton" :small="true" @click="animatedMFM()" @click.stop><i class="ph-stop ph-bold ph-lg "></i> {{ i18n.ts._animatedMFM.stop }}</MkButton>
 					</div>
-					<div v-if="appearNote.files && appearNote.files.length > 0">
-						<MkMediaList ref="galleryEl" :mediaList="appearNote.files" @click.stop/>
+					<div v-if="filesForGrid.length > 0">
+						<MkMediaList ref="galleryEl" :mediaList="filesForGrid" @click.stop/>
 					</div>
 					<MkPoll v-if="appearNote.poll" :noteId="appearNote.id" :poll="appearNote.poll" :local="!appearNote.user.host" :author="appearNote.user" :emojiUrls="appearNote.emojis" :class="$style.poll" @click.stop/>
 					<div v-if="instance.enableUrlPreview" :class="[$style.urlPreview, '_gaps_s']" @click.stop>
@@ -215,6 +216,7 @@ import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { getAbuseNoteMenu, getCopyNoteLinkMenu, getNoteClipMenu, getNoteMenu, translateNote } from '@/utility/get-note-menu.js';
 import { useAutoTranslate } from '@/composables/use-auto-translate.js';
+import { splitFilesByInline } from '@/utility/inline-files.js';
 import { getNoteVersionsMenu } from '@/utility/get-note-versions-menu.js';
 import { useNoteCapture } from '@/use/use-note-capture.js';
 import { deepClone } from '@/utility/clone.js';
@@ -301,6 +303,7 @@ const hideOriginalText = computed(() =>
 	&& !!translation.value
 	&& (translation.value as Misskey.entities.NotesTranslateResponse).text != null,
 );
+const filesForGrid = computed(() => splitFilesByInline(appearNote.value.files, appearNote.value.text).leftover);
 const showTicker = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceTicker === 'remote' && appearNote.value.user.instance);
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.value.visibility) || (appearNote.value.visibility === 'followers' && appearNote.value.userId === $i?.id));
 const canQuote = computed(() => canRenote.value && !props.mock && !$i?.rejectQuotes);

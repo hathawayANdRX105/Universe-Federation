@@ -2806,6 +2806,7 @@ _postForm:
   replyPlaceholder: "回复这个帖子..."
   quotePlaceholder: "引用这个帖子..."
   channelPlaceholder: "发布到频道…"
+  inlineAttach: "在光标处插入媒体(图文混排)"
   _placeholders:
     a: "现在如何？"
     b: "发生了什么？"

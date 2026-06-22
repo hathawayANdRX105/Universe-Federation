@@ -37,7 +37,7 @@ import { isPureRenote, isQuote, isRenote } from '@/misc/is-renote.js';
 import { FederatedInstanceService } from '@/core/FederatedInstanceService.js';
 import { TimeService } from '@/global/TimeService.js';
 import { JsonLdService, type Signed } from './JsonLdService.js';
-import { ApMfmService } from './ApMfmService.js';
+import { ApMfmService, stripInlineFilePlaceholders } from './ApMfmService.js';
 import { CONTEXT } from './misc/contexts.js';
 import { getApId, ILink, IOrderedCollection, IOrderedCollectionPage } from './type.js';
 import type { IAccept, IActivity, IAdd, IAnnounce, IApDocument, IApEmoji, IApHashtag, IApImage, IApMention, IBlock, ICreate, IDelete, IFlag, IFollow, IKey, ILike, IMove, IObject, IPost, IQuestion, IReject, IRemove, ITombstone, IUndo, IUpdate, IActor, IActorWithId } from './type.js';
@@ -467,7 +467,8 @@ export class ApRendererService {
 
 		const files = await getPromisedFiles(note.fileIds);
 
-		const text = note.text ?? '';
+		// 联邦输出剥离 $[file N] 占位符,远程实例看不懂
+		const text = stripInlineFilePlaceholders(note.text ?? '');
 		let poll: MiPoll | null = null;
 
 		if (note.hasPoll) {
@@ -714,7 +715,7 @@ export class ApRendererService {
 			type: 'Question',
 			id: `${this.config.url}/questions/${note.id}`,
 			actor: this.userEntityService.genLocalUserUri(user.id),
-			content: note.text ?? '',
+			content: stripInlineFilePlaceholders(note.text ?? ''),
 			[poll.multiple ? 'anyOf' : 'oneOf']: poll.choices.map((text, i) => ({
 				name: text,
 				_misskey_votes: poll.votes[i],

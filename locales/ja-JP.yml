@@ -2831,6 +2831,7 @@ _postForm:
   replyPlaceholder: "このノートに返信..."
   quotePlaceholder: "このノートを引用..."
   channelPlaceholder: "チャンネルに投稿..."
+  inlineAttach: "カーソル位置にメディアを挿入(本文に埋め込み)"
   _placeholders:
     a: "いまどうしてる？"
     b: "何かありましたか？"

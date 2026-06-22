@@ -11,16 +11,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div>
 			<MkA v-if="note.replyId" :class="$style.reply" :to="`/notes/${note.replyId}`" @click.stop><i class="ph-arrow-bend-left-up ph-bold ph-lg"></i></MkA>
 			<!-- 替换模式 + 译文已就绪 → 隐藏原文 -->
-			<Mfm v-if="note.text && !hideOriginalText" :text="note.text" :author="note.user" :nyaize="'respect'" :isAnim="allowAnim" :emojiUrls="note.emojis"/>
+			<Mfm v-if="note.text && !hideOriginalText" :text="note.text" :author="note.user" :nyaize="'respect'" :isAnim="allowAnim" :emojiUrls="note.emojis" :files="note.files"/>
 		</div>
 		<MkButton v-if="!allowAnim && animated && !hideFiles" :class="$style.playMFMButton" :small="true" @click="animatedMFM()" @click.stop><i class="ph-play ph-bold ph-lg "></i> {{ i18n.ts._animatedMFM.play }}</MkButton>
 		<MkButton v-else-if="!prefer.s.animatedMfm && allowAnim && animated && !hideFiles" :class="$style.playMFMButton" :small="true" @click="animatedMFM()" @click.stop><i class="ph-stop ph-bold ph-lg "></i> {{ i18n.ts._animatedMFM.stop }}</MkButton>
 		<SkNoteTranslation :note="note" :translation="translation" :translating="translating" :replaceMode="hideOriginalText"></SkNoteTranslation>
 		<MkA v-if="note.renoteId" :class="$style.rp" :to="`/notes/${note.renoteId}`" @click.stop>RN: ...</MkA>
 	</div>
-	<details v-if="note.files && note.files.length > 0" :open="!prefer.s.collapseFiles && !hideFiles">
-		<summary>({{ i18n.tsx.withNFiles({ n: note.files.length }) }})</summary>
-		<MkMediaList :mediaList="note.files"/>
+	<details v-if="filesForGrid.length > 0" :open="!prefer.s.collapseFiles && !hideFiles">
+		<summary>({{ i18n.tsx.withNFiles({ n: filesForGrid.length }) }})</summary>
+		<MkMediaList :mediaList="filesForGrid"/>
 	</details>
 	<details v-if="note.poll">
 		<summary>{{ i18n.ts.poll }}</summary>
@@ -49,6 +49,7 @@ import { checkAnimationFromMfm } from '@/utility/check-animated-mfm.js';
 import { useRouter } from '@/router';
 import { prefer } from '@/preferences.js';
 import SkNoteTranslation from '@/components/SkNoteTranslation.vue';
+import { splitFilesByInline } from '@/utility/inline-files.js';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
@@ -80,6 +81,7 @@ const hideOriginalText = computed(() =>
 	&& !!props.translation
 	&& (props.translation as Misskey.entities.NotesTranslateResponse).text != null,
 );
+const filesForGrid = computed(() => splitFilesByInline(props.note.files, props.note.text).leftover);
 let allowAnim = ref(prefer.s.advancedMfm && prefer.s.animatedMfm);
 
 const isLong = prefer.s.expandLongNote && !props.hideFiles ? false : shouldCollapsed(props.note, []);

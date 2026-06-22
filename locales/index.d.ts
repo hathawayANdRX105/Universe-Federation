@@ -11052,6 +11052,10 @@ export interface Locale extends ILocale {
          * チャンネルに投稿...
          */
         "channelPlaceholder": string;
+        /**
+         * カーソル位置にメディアを挿入(本文に埋め込み)
+         */
+        "inlineAttach": string;
         "_placeholders": {
             /**
              * いまどうしてる？

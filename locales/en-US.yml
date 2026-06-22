@@ -2818,6 +2818,7 @@ _postForm:
   replyPlaceholder: "Reply to this note..."
   quotePlaceholder: "Quote this note..."
   channelPlaceholder: "Post to a channel..."
+  inlineAttach: "Insert media at cursor (inline)"
   _placeholders:
     a: "What are you up to?"
     b: "What's happening around you?"

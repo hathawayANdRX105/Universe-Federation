@@ -11,6 +11,12 @@ import { bindThis } from '@/decorators.js';
 import { extractApHashtagObjects } from './models/tag.js';
 import type { IObject } from './type.js';
 
+// 移除 Sharkey 的图文混排占位符 $[file N] — 联邦端用不认识,留着会显示成字面 [file 0]
+const INLINE_FILE_PLACEHOLDER_RE = /\$\[file\s+\d+\]/g;
+export function stripInlineFilePlaceholders(text: string): string {
+	return text.replace(INLINE_FILE_PLACEHOLDER_RE, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 @Injectable()
 export class ApMfmService {
 	constructor(
@@ -27,7 +33,9 @@ export class ApMfmService {
 	@bindThis
 	public getNoteHtml(note: Pick<MiNote, 'text' | 'mentionedRemoteUsers'>, additionalAppender: Appender[] = []) {
 		let noMisskeyContent = false;
-		const srcMfm = (note.text ?? '');
+		// 联邦输出:剥离 Sharkey-specific 的图文混排占位符 $[file N]。
+		// 远程实例(Mastodon/其它 Misskey)看不懂这个 fn,直接去掉,附件仍走 attachment 字段。
+		const srcMfm = stripInlineFilePlaceholders(note.text ?? '');
 
 		const parsed = mfm.parse(srcMfm);
 

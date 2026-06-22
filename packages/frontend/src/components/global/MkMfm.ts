@@ -21,6 +21,7 @@ import MkCodeInline from '@/components/MkCodeInline.vue';
 import MkGoogle from '@/components/MkGoogle.vue';
 import MkSparkle from '@/components/MkSparkle.vue';
 import MkA from '@/components/global/MkA.vue';
+import MkInlineMedia from '@/components/MkInlineMedia.vue';
 import { prefer } from '@/preferences.js';
 import { clamp } from '@@/js/math.js';
 
@@ -55,6 +56,8 @@ type MfmProps = {
 	isAnim?: boolean;
 	linkNavigationBehavior?: MkABehavior;
 	isBlock?: boolean;
+	// 图文混排:把 note.files 传进来,$[file N] 会按索引取文件渲成内联媒体
+	files?: Misskey.entities.DriveFile[];
 };
 
 type MfmEvents = {
@@ -390,6 +393,28 @@ export default function MkMfm(props: MfmProps, { emit }: { emit: SetupContext<Mf
 							const clickEv = typeof token.props.args.ev === 'string' ? token.props.args.ev : '';
 							emit('clickEv', clickEv);
 						} }, genEl(token.children, scale));
+					}
+					// 图文混排:$[file N] 渲染 props.files[N] 为内联媒体。
+					// plain 模式下(摘要/折叠预览)只输出 [文件] 文本,不实际嵌入媒体。
+					case 'file': {
+						const childText = token.children[0]?.type === 'text' ? token.children[0].props.text.trim() : '';
+						const idx = parseInt(childText, 10);
+						if (Number.isNaN(idx)) {
+							return h('span', { style: 'opacity:0.5' }, ['[file ?]']);
+						}
+						const file = props.files?.[idx];
+						if (!file) {
+							return h('span', { style: 'opacity:0.5' }, [`[file ${idx}]`]);
+						}
+						if (props.plain) {
+							// 摘要预览给一个简短标记,不嵌入实际媒体
+							const tag = (file.type ?? '').startsWith('image/') ? '🖼️'
+								: (file.type ?? '').startsWith('video/') ? '🎬'
+								: (file.type ?? '').startsWith('audio/') ? '🎵'
+								: '📎';
+							return h('span', {}, [tag]);
+						}
+						return h(MkInlineMedia, { file });
 					}
 				}
 				if (style === undefined) {
