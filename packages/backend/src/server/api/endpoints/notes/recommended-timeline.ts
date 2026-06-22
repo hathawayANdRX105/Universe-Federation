@@ -413,8 +413,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	}
 
 	private applyScope(query: ReturnType<NotesRepository['createQueryBuilder']>, scope: RecommendationScope, meId: string | null): void {
+		// 频道帖子默认不进推荐/最新回复时间线;只有频道主"置顶"的帖子(channel.pinnedNoteIds)
+		// 才算被频道主主动推上首页 —— 这是我们用现有 pinnedNoteIds 语义当"是否推送到首页"的开关,
+		// 不引入新 DB 字段。注意 channel 表在 line 166 已 leftJoin 进来,这里直接引用即可。
+		const channelGate = `(note."channelId" IS NULL OR (note."channelId" IS NOT NULL AND note.id = ANY(COALESCE(channel."pinnedNoteIds", ARRAY[]::varchar[]))))`;
+
 		if (scope === 'local') {
 			query.andWhere('note.userHost IS NULL');
+			query.andWhere(channelGate);
 			return;
 		}
 
@@ -434,18 +440,21 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 						.andWhere('note.channelId IS NULL')))))
 				.andWhere(new Brackets(qb => this.queryService
 					.orFollowingChannel(qb, ':meId', 'note.channelId')
-					.orWhere('note.channelId IS NULL')));
+					.orWhere(channelGate)));
 			query.setParameters({ meId });
 			return;
 		}
 
 		if (scope === 'social') {
 			query.andWhere('note.userHost IS NULL');
+			query.andWhere(channelGate);
 			return;
 		}
 
 		query.andWhere(new Brackets(qb => {
-			qb.orWhere('note.userHost IS NULL');
+			qb.orWhere(new Brackets(qbb => qbb
+				.andWhere('note.userHost IS NULL')
+				.andWhere(channelGate)));
 			qb.orWhere(new Brackets(qbb => qbb
 				.andWhere('note.userHost IS NOT NULL')
 				.andWhere('note.channelId IS NULL')));

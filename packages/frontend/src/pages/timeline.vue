@@ -7,6 +7,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 <PageWithHeader ref="pageComponent" :actions="[]" :tabs="[]" :swipable="false" :hideTitle="true">
 	<div class="xTimelineWideShell" :class="$style.shell">
 		<main :class="$style.main" @wheel.passive="onMainWheel">
+			<!-- 移动端搜索框:桌面右栏自带搜索,所以这里只在窄屏显示 -->
+			<form :class="$style.mobileSearch" @submit.prevent="submitMobileSearch">
+				<i class="ph-magnifying-glass ph-bold ph-lg" :class="$style.mobileSearchIcon"></i>
+				<input
+					v-model="mobileSearchQuery"
+					type="search"
+					:placeholder="i18n.ts.searchPlaceholder ?? i18n.ts.search"
+					:class="$style.mobileSearchInput"
+					autocapitalize="off"
+					autocorrect="off"
+					spellcheck="false"
+				/>
+				<button v-if="mobileSearchQuery.length > 0" type="button" :class="$style.mobileSearchClear" @click="mobileSearchQuery = ''">
+					<i class="ph-x ph-bold ph-lg"></i>
+				</button>
+			</form>
+
 			<header :class="$style.tabs" role="tablist" :aria-label="i18n.ts.home">
 				<button
 					v-for="tab in homeTabs"
@@ -278,7 +295,7 @@ const initialTab = (() => {
 const initialScope = (() => {
 	const v = miLocalStorage.getItem(HOME_SCOPE_KEY) as Scope | null;
 	if (v === 'all' || v === 'local' || v === 'global') return v;
-	return 'all'; // 默认全部
+	return 'local'; // 默认本地服务器(用户偏好:首屏推荐先看本服)
 })();
 const homeTab = ref<HomeTab>(initialTab);
 const scope = ref<Scope>(initialScope);
@@ -327,42 +344,68 @@ async function aggregateTagsFromNotes(scope: 'local' | 'remote'): Promise<Array<
 async function fetchHotTags() {
 	hotTagsLoading.value = true;
 	try {
-		// scope='all' 拉两边数据合并;scope='local'/'global' 各拉一边
 		const s = scope.value;
 		const isLocal = s === 'local';
 		const isGlobal = s === 'global';
-		const r = await misskeyApi('hashtags/list', {
-			sort: isLocal ? '+attachedLocalUsers' : '+attachedRemoteUsers',
-			attachedToLocalUserOnly: isLocal,
-			attachedToRemoteUserOnly: isGlobal,
-			limit: 24,
-		}) as Array<{ tag: string; attachedLocalUsersCount?: number; attachedRemoteUsersCount?: number; attachedUsersCount?: number }>;
-		let result = (r ?? [])
-			.filter(x => !!x.tag)
-			.map(x => ({
-				tag: x.tag,
-				count: isLocal ? (x.attachedLocalUsersCount ?? 0)
-					: isGlobal ? (x.attachedRemoteUsersCount ?? 0)
-					: (x.attachedUsersCount ?? 0),
-			}));
 
-		// 不足 4 个,降级到客户端算法(拉最近 100 帖统计)
-		if (result.length < 4) {
-			const algoScope: 'local' | 'remote' = isLocal ? 'local' : 'remote';
-			const algo = await aggregateTagsFromNotes(algoScope);
-			const known = new Set(result.map(x => x.tag.toLowerCase()));
-			for (const t of algo) {
-				if (!known.has(t.tag.toLowerCase())) result.push(t);
-			}
-			result = result.slice(0, 24);
+		// 同时拉两源,把"用户关注度高的长期标签"(hashtags/list)和"最近 100 帖里频次高的实时标签"(aggregate)合并打分。
+		// 单独 hashtags/list 几乎不变 → 用户感觉"万年不变";加入 fresh 维度后,新热门话题能在 90~120s 内浮出来。
+		const algoScope: 'local' | 'remote' = isGlobal ? 'remote' : 'local';
+		const [longTerm, fresh] = await Promise.all([
+			misskeyApi('hashtags/list', {
+				sort: isLocal ? '+attachedLocalUsers' : '+attachedRemoteUsers',
+				attachedToLocalUserOnly: isLocal,
+				attachedToRemoteUserOnly: isGlobal,
+				limit: 24,
+			}).catch(() => []) as Promise<Array<{ tag: string; attachedLocalUsersCount?: number; attachedRemoteUsersCount?: number; attachedUsersCount?: number }>>,
+			aggregateTagsFromNotes(algoScope),
+		]);
+
+		const scores = new Map<string, { tag: string; count: number; freshHits: number }>();
+		// 长期维度:每个长期热门 tag 给一个基础分(以 attachedUsers 计)
+		for (const x of (longTerm ?? [])) {
+			if (!x.tag) continue;
+			const c = isLocal ? (x.attachedLocalUsersCount ?? 0)
+				: isGlobal ? (x.attachedRemoteUsersCount ?? 0)
+				: (x.attachedUsersCount ?? 0);
+			const k = x.tag.toLowerCase();
+			scores.set(k, { tag: x.tag, count: c, freshHits: 0 });
+		}
+		// fresh 维度:最近 100 帖的频次直接加进 freshHits(权重 4 倍于长期 count,让"新热"超过"老热")
+		for (const x of fresh) {
+			const k = x.tag.toLowerCase();
+			const cur = scores.get(k) ?? { tag: x.tag, count: 0, freshHits: 0 };
+			cur.freshHits = x.count;
+			scores.set(k, cur);
 		}
 
-		// 标记前 3 为"热"
-		hotTags.value = result.map((x, i) => ({ ...x, isHot: i < 3 }));
+		const merged = [...scores.values()]
+			.map(x => ({ tag: x.tag, count: x.count + x.freshHits * 4, freshHits: x.freshHits }))
+			.sort((a, b) => b.count - a.count)
+			.slice(0, 24);
+
+		// 标记前 3 为"热";另外 freshHits > 0 的也加 hot 红边(给新冒头的话题一个视觉提示)
+		hotTags.value = merged.map((x, i) => ({ tag: x.tag, count: x.count, isHot: i < 3 || x.freshHits > 0 }));
 	} catch {
 		hotTags.value = [];
 	} finally {
 		hotTagsLoading.value = false;
+	}
+}
+
+// 每 90s 自动刷新一次热门标签,避免"万年不变"。页面隐藏(切 tab 走开)时不刷,省流量。
+let hotTagsRefreshTimer: number | null = null;
+function startHotTagsAutoRefresh() {
+	if (hotTagsRefreshTimer != null) return;
+	hotTagsRefreshTimer = window.setInterval(() => {
+		if (window.document.hidden) return;
+		fetchHotTags();
+	}, 90_000);
+}
+function stopHotTagsAutoRefresh() {
+	if (hotTagsRefreshTimer != null) {
+		window.clearInterval(hotTagsRefreshTimer);
+		hotTagsRefreshTimer = null;
 	}
 }
 
@@ -371,8 +414,9 @@ watch(scope, () => {
 	categoryHashtag.value = null;
 	fetchHotTags();
 });
-// 首次主动拉一次
+// 首次主动拉一次 + 启 90s 自动刷新
 fetchHotTags();
+startHotTagsAutoRefresh();
 
 // 展开更多 + 计算展示哪些(置顶过滤掉,避免重复)
 const expandHotTags = ref(false);
@@ -383,6 +427,18 @@ const displayedHotTags = computed(() => {
 });
 const queue = ref(0);
 const sidebarSearchQuery = ref('');
+const mobileSearchQuery = ref('');
+function submitMobileSearch() {
+	const q = mobileSearchQuery.value.trim();
+	if (!q) return;
+	// 走站内搜索页;hashtag 直接进 tag 页,其余进 search
+	if (q.startsWith('#')) {
+		const tag = q.slice(1);
+		if (tag) router.push(`/tags/${encodeURIComponent(tag)}`);
+		return;
+	}
+	router.push(`/search?q=${encodeURIComponent(q)}`);
+}
 
 const searchTrends = ref<{
 	popularSearches: string[];
@@ -424,7 +480,7 @@ const homeTabs = computed(() => [{
 // 新统一 scope tabs (本地+联邦 / 本地服务器 / 联邦服务器),默认混合流
 const scopeTabs = computed(() => [{
 	key: 'all' as const,
-	title: '本地+联邦',
+	title: '全部',
 	icon: 'ti-circle-dot',
 }, {
 	key: 'local' as const,
@@ -504,6 +560,7 @@ onUnmounted(() => {
 	rightRailResizeObserver?.disconnect();
 	window.removeEventListener('resize', syncRightRailStickyBounds);
 	window.visualViewport?.removeEventListener('resize', syncRightRailStickyBounds);
+	stopHotTagsAutoRefresh();
 });
 
 function queueUpdated(q: number): void {
@@ -683,6 +740,56 @@ definePage(() => ({
 	min-width: 0;
 	background: var(--MI_THEME-bg);
 	min-height: 100cqh;
+}
+
+/* 移动端首页搜索框 —— 桌面右栏自带搜索,不重复显示 */
+.mobileSearch {
+	display: none;
+
+	@media (max-width: 700px) {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 10px 12px 6px;
+		padding: 8px 12px;
+		background: var(--MI_THEME-panel);
+		border: solid 1px var(--MI_THEME-divider);
+		border-radius: 999px;
+		box-sizing: border-box;
+	}
+}
+
+.mobileSearchIcon {
+	flex-shrink: 0;
+	font-size: 1em;
+	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.mobileSearchInput {
+	flex: 1;
+	min-width: 0;
+	border: none;
+	outline: none;
+	background: transparent;
+	color: var(--MI_THEME-fg);
+	font-size: 0.95em;
+	padding: 0;
+
+	&::placeholder {
+		color: var(--MI_THEME-fgTransparentWeak);
+	}
+}
+
+.mobileSearchClear {
+	flex-shrink: 0;
+	background: none;
+	border: none;
+	padding: 2px 6px;
+	color: var(--MI_THEME-fgTransparentWeak);
+	cursor: pointer;
+	font-size: 1em;
+
+	&:hover { color: var(--MI_THEME-fg); }
 }
 
 .tabs {
