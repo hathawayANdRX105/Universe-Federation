@@ -96,6 +96,9 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		limit: { type: 'integer', minimum: 1, maximum: 10, default: 6 },
+		// 'all' = 不过滤(默认,保持向后兼容);'local' = 只看本站用户(userHost IS NULL);
+		// 'global' = 只看远程联邦用户(userHost IS NOT NULL)
+		scope: { type: 'string', enum: ['all', 'local', 'global'], default: 'all' },
 	},
 	required: [],
 } as const;
@@ -125,11 +128,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const sinceId = this.idService.gen(this.timeService.now - DISCOVERY_WINDOW);
 			// 管理者が調整可能な推薦設定(低品質/広告/bug 語の除外に使う)
 			const config = await this.recommendationService.getRecommendationConfig();
+			const scope = ps.scope as 'all' | 'local' | 'global';
 			const [trends, coverNotes, hotNotes, tutorialNotes, channels, users] = await Promise.all([
 				this.searchTrendService.getTrends(ps.limit),
-				this.getCoverNotes(sinceId, ps.limit, me, config),
-				this.getHotNotes(sinceId, ps.limit, me, config),
-				this.getTutorialNotes(sinceId, ps.limit, me, config),
+				this.getCoverNotes(sinceId, ps.limit, me, config, scope),
+				this.getHotNotes(sinceId, ps.limit, me, config, scope),
+				this.getTutorialNotes(sinceId, ps.limit, me, config, scope),
 				this.getChannels(ps.limit, me),
 				this.getUsers(ps.limit, me),
 			]);
@@ -165,7 +169,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		return picked;
 	}
 
-	private baseNotesQuery(sinceId: string, me: Parameters<QueryService['generateVisibilityQuery']>[1], config: RecommendationConfig) {
+	private baseNotesQuery(sinceId: string, me: Parameters<QueryService['generateVisibilityQuery']>[1], config: RecommendationConfig, scope: 'all' | 'local' | 'global' = 'all') {
 		const sqlTerms = deriveSqlTerms(config);
 		const query = this.notesRepository.createQueryBuilder('note')
 			.where('note.id > :sinceId', { sinceId })
@@ -184,6 +188,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}))
 			.setParameter('discoveryLowValuePattern', buildDiscoveryLowValuePattern(sqlTerms.demoteKeywords))
 			.setParameter('discoveryLowValueTags', sqlTerms.lowValueTags.length > 0 ? sqlTerms.lowValueTags : ['__never_match_sentinel_zzqx__']);
+		// scope 过滤:userHost 空 = 本站用户,非空 = 联邦用户
+		if (scope === 'local') {
+			query.andWhere('note.userHost IS NULL');
+		} else if (scope === 'global') {
+			query.andWhere('note.userHost IS NOT NULL');
+		}
 		this.queryService.generateVisibilityQuery(query, me);
 		this.queryService.generateReplyTargetVisibilityQuery(query, me);
 		this.queryService.generateBlockedHostQueryForNote(query);
@@ -197,10 +207,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		return query;
 	}
 
-	private async getCoverNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1], config: RecommendationConfig) {
+	private async getCoverNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1], config: RecommendationConfig, scope: 'all' | 'local' | 'global' = 'all') {
 		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * DISCOVERY_FRESH_PRIORITY_HOURS);
 		const fresh3dId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 3);
-		const query = this.baseNotesQuery(sinceId, me, config)
+		const query = this.baseNotesQuery(sinceId, me, config, scope)
 			.andWhere('note.fileIds != \'{}\'')
 			.andWhere('user.isBot = FALSE')
 			.andWhere(new Brackets(qb => {
@@ -222,10 +232,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		return this.noteEntityService.packMany(this.pickWeighted(await query.getMany(), limit), me);
 	}
 
-	private async getHotNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1], config: RecommendationConfig) {
+	private async getHotNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1], config: RecommendationConfig, scope: 'all' | 'local' | 'global' = 'all') {
 		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * DISCOVERY_FRESH_PRIORITY_HOURS);
 		const fresh3dId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 3);
-		const query = this.baseNotesQuery(sinceId, me, config)
+		const query = this.baseNotesQuery(sinceId, me, config, scope)
 			.andWhere('user.isBot = FALSE')
 			.andWhere('LENGTH(COALESCE(note.text, \'\')) >= 20')
 			.andWhere(new Brackets(qb => {
@@ -256,10 +266,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		return this.noteEntityService.packMany(this.pickWeighted(await query.getMany(), limit), me);
 	}
 
-	private async getTutorialNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1], config: RecommendationConfig) {
+	private async getTutorialNotes(sinceId: string, limit: number, me: Parameters<NoteEntityService['packMany']>[1], config: RecommendationConfig, scope: 'all' | 'local' | 'global' = 'all') {
 		const fresh48hId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * DISCOVERY_FRESH_PRIORITY_HOURS);
 		const fresh3dId = this.idService.gen(this.timeService.now - 1000 * 60 * 60 * 24 * 3);
-		const query = this.baseNotesQuery(sinceId, me, config)
+		const query = this.baseNotesQuery(sinceId, me, config, scope)
 			.andWhere('user.isBot = FALSE')
 			.andWhere(new Brackets(qb => {
 				qb.orWhere('note.tags && CAST(:tutorialTags AS varchar[])');

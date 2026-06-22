@@ -497,6 +497,11 @@ watch(tab, () => {
 	loadExploreData();
 }, { immediate: true });
 
+// scope chip 改变后,discovery + 推荐都重拉(局部刷新,不动滚动位置)
+watch(exploreScope, () => {
+	loadExploreData();
+});
+
 onMounted(() => {
 	nextTick(() => {
 		installRightRailStickyObserver();
@@ -687,10 +692,12 @@ async function loadExploreData(): Promise<void> {
 	const requestId = ++exploreRequestId;
 	exploreLoading.value = true;
 	try {
+		// scope chip 选择"本地服务器"时,discovery-sections + 推荐流都按 scope 拉
+		const apiScope = exploreScope.value === 'all' ? 'mixed' : exploreScope.value;
 		const [sections, notes] = await Promise.all([
-			misskeyApi<DiscoverySections>('notes/discovery-sections', { limit: discoverySectionLimit }).catch(() => null),
+			misskeyApi<DiscoverySections>('notes/discovery-sections', { limit: discoverySectionLimit, scope: exploreScope.value }).catch(() => null),
 			misskeyApi<Misskey.entities.Note[]>('notes/recommended-timeline', {
-				scope: 'mixed',
+				scope: apiScope,
 				surface: 'explore',
 				category: currentTab,
 				limit: categoryNoteLimit,
