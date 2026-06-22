@@ -212,9 +212,10 @@ $widgets-hide-threshold: 1600px;
 }
 
 .standardContents {
-	flex: 0 1 var(--layout-main-column-width);
-	width: var(--layout-main-column-width);
-	max-width: min(100%, var(--layout-main-column-width));
+	// 之前钉死 600px 中柱,1920 屏 + widgets 出现时 .nonTitlebarArea(82vw≈1574)里还剩 ~600px 空白没用上。
+	// 改成 flex-grow:1,中柱吃掉 nav/widgets 之外的剩余空间;频道/公告/收藏/控制面板等页跟首页观感一致。
+	// 仍保留 --layout-main-column-width 作为最小基线,避免极窄屏(无 widgets 的桌面边缘情况)挤崩。
+	flex: 1 1 var(--layout-main-column-width);
 	min-width: 0;
 }
 
