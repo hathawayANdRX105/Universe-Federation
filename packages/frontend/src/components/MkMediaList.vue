@@ -61,9 +61,12 @@ const hasSingleVideo = computed(() => previewableMediaList.value.length === 1 &&
 let lightbox: PhotoSwipeLightbox | null = null;
 
 let activeEl: HTMLElement | null = null;
+let isLightboxClosing = false;
 
+// 设备硬件返回键 / 浏览器后退键:如果当前 lightbox 开着,优先把它关掉(不实际触发 pushState/back,避免 history 竞态)
 const popstateHandler = (): void => {
-	if (lightbox?.pswp && lightbox.pswp.isOpen === true) {
+	if (lightbox?.pswp && lightbox.pswp.isOpen === true && !isLightboxClosing) {
+		isLightboxClosing = true;
 		lightbox.pswp.close();
 	}
 };
@@ -210,20 +213,21 @@ onMounted(() => {
 	});
 
 	lightbox.on('afterInit', () => {
+		isLightboxClosing = false;
 		activeEl = window.document.activeElement instanceof HTMLElement ? window.document.activeElement : null;
 		focusParent(activeEl, true, true);
 		lightbox?.pswp?.element?.focus({
 			preventScroll: true,
 		});
-		window.history.pushState(null, '', '#pswp');
+		// 不再 history.pushState('#pswp')。原实现 + destroy 里的 history.back() + popstate close 三方竞态
+		// 会让"点 X 关图"偶发被吃掉(destroy 已触发 close,popstate 又跑去 close 一次)。
 	});
 
 	lightbox.on('destroy', () => {
 		focusParent(activeEl, true, false);
 		activeEl = null;
-		if (window.location.hash === '#pswp') {
-			window.history.back();
-		}
+		isLightboxClosing = false;
+		// 不再 history.back():之前会"点 X → destroy 回退 → popstate 又企图再 close",X 这一拍被吞掉。
 	});
 
 	window.addEventListener('popstate', popstateHandler);

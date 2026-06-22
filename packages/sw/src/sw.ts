@@ -12,8 +12,10 @@ import { createEmptyNotification, createNotification } from '@/scripts/create-no
 import { swLang } from '@/scripts/lang.js';
 import * as swos from '@/scripts/operations.js';
 
-globalThis.addEventListener('install', () => {
-	// ev.waitUntil(globalThis.skipWaiting());
+globalThis.addEventListener('install', (ev: ExtendableEvent) => {
+	// 新版本部署后立刻接管,避免旧 SW 继续把缓存里的旧 chunk 喂给新 HTML
+	// 导致刷新一次还是旧资产、整页静止只能滚动(bug:点击 X 偶发失效 + 再刷一次才恢复)
+	ev.waitUntil(globalThis.skipWaiting());
 });
 
 globalThis.addEventListener('activate', ev => {
