@@ -11,11 +11,21 @@ import type { UsersRepository, NotesRepository, BlockingsRepository, DriveFilesR
 import type { MiDriveFile } from '@/models/DriveFile.js';
 import type { MiNote } from '@/models/Note.js';
 import type { MiChannel } from '@/models/Channel.js';
-import type { Config } from '@/config.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
 import { NoteControlService } from '@/core/NoteControlService.js';
+import { RoleService } from '@/core/RoleService.js';
+import {
+	NOTE_CW_SCHEMA_MAX_LENGTH,
+	NOTE_FILES_SCHEMA_MAX_ITEMS,
+	NOTE_POLL_CHOICES_SCHEMA_MAX_ITEMS,
+	NOTE_POLL_CHOICE_SCHEMA_MAX_LENGTH,
+	NOTE_TEXT_SCHEMA_MAX_LENGTH,
+	isNoteLimitIdentifiableError,
+	type NoteLimitViolation,
+	validateLocalNoteContentLimits,
+} from '@/core/note-limits.js';
 import { DI } from '@/di-symbols.js';
 import { isQuote, isRenote } from '@/misc/is-renote.js';
 import { IdentifiableError } from '@/misc/identifiable-error.js';
@@ -154,6 +164,12 @@ export const meta = {
 			id: '4de0363a-3046-481b-9b0f-feff3e211025',
 		},
 
+		noteLimitExceeded: {
+			message: 'Cannot post because it exceeds the configured note limits.',
+			code: 'NOTE_LIMIT_EXCEEDED',
+			id: 'f8cbe6fd-4a7c-48a0-8d6a-bf99fbb1cd00',
+		},
+
 		quoteDisabledForUser: {
 			message: 'You do not have permission to create quote posts.',
 			code: 'QUOTE_DISABLED_FOR_USER',
@@ -169,7 +185,7 @@ export const paramDef = {
 		visibleUserIds: { type: 'array', uniqueItems: true, items: {
 			type: 'string', format: 'misskey:id',
 		} },
-		cw: { type: 'string', nullable: true },
+		cw: { type: 'string', nullable: true, maxLength: NOTE_CW_SCHEMA_MAX_LENGTH },
 		localOnly: { type: 'boolean', default: false },
 		reactionAcceptance: { type: 'string', nullable: true, enum: [null, 'likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote'], default: null },
 		noExtractMentions: { type: 'boolean', default: false },
@@ -184,20 +200,21 @@ export const paramDef = {
 		text: {
 			type: 'string',
 			minLength: 1,
+			maxLength: NOTE_TEXT_SCHEMA_MAX_LENGTH,
 			nullable: true,
 		},
 		fileIds: {
 			type: 'array',
 			uniqueItems: true,
 			minItems: 1,
-			maxItems: 16,
+			maxItems: NOTE_FILES_SCHEMA_MAX_ITEMS,
 			items: { type: 'string', format: 'misskey:id' },
 		},
 		mediaIds: {
 			type: 'array',
 			uniqueItems: true,
 			minItems: 1,
-			maxItems: 16,
+			maxItems: NOTE_FILES_SCHEMA_MAX_ITEMS,
 			items: { type: 'string', format: 'misskey:id' },
 		},
 		poll: {
@@ -208,8 +225,8 @@ export const paramDef = {
 					type: 'array',
 					uniqueItems: true,
 					minItems: 2,
-					maxItems: 10,
-					items: { type: 'string', minLength: 1, maxLength: 150 },
+					maxItems: NOTE_POLL_CHOICES_SCHEMA_MAX_ITEMS,
+					items: { type: 'string', minLength: 1, maxLength: NOTE_POLL_CHOICE_SCHEMA_MAX_LENGTH },
 				},
 				multiple: { type: 'boolean' },
 				expiresAt: { type: 'integer', nullable: true },
@@ -247,12 +264,19 @@ export const paramDef = {
 	},
 } as const;
 
+function throwNoteLimitApiError(result: NoteLimitViolation): never {
+	if (result.code === 'NOTE_TEXT_TOO_LONG') {
+		throw new ApiError(meta.errors.maxLength, result);
+	}
+	if (result.code === 'NOTE_CW_TOO_LONG') {
+		throw new ApiError(meta.errors.maxCwLength, result);
+	}
+	throw new ApiError(meta.errors.noteLimitExceeded, result);
+}
+
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
-		@Inject(DI.config)
-		private config: Config,
-
 		@Inject(DI.usersRepository)
 		private usersRepository: UsersRepository,
 
@@ -271,6 +295,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private noteEntityService: NoteEntityService,
 		private noteCreateService: NoteCreateService,
 		private noteControlService: NoteControlService,
+		private roleService: RoleService,
 		private readonly timeService: TimeService,
 		private readonly userService: UserService,
 	) {
@@ -278,13 +303,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			// 冻结全站发帖：除管理员/审核员外禁止发帖/回复/转发
 			if (await this.noteControlService.isPostingFrozenFor(me)) {
 				throw new ApiError(meta.errors.postingFrozen);
-			}
-
-			if (ps.text && ps.text.length > this.config.maxNoteLength) {
-				throw new ApiError(meta.errors.maxLength);
-			}
-			if (ps.cw && ps.cw.length > this.config.maxCwLength) {
-				throw new ApiError(meta.errors.maxCwLength);
 			}
 
 			let visibleUsers: MiUser[] = [];
@@ -309,6 +327,17 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				if (files.length !== fileIds.length) {
 					throw new ApiError(meta.errors.noSuchFile);
 				}
+			}
+
+			const policies = await this.roleService.getUserPolicies(me.id);
+			const limitResult = validateLocalNoteContentLimits({
+				text: ps.text ?? null,
+				cw: ps.cw ?? null,
+				files,
+				poll: ps.poll ?? null,
+			}, policies);
+			if (!limitResult.ok) {
+				throwNoteLimitApiError(limitResult);
 			}
 
 			let renote: MiNote | null = null;
@@ -406,6 +435,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 						throw new ApiError(meta.errors.containsProhibitedWords);
 					} else if (e.id === '9f466dab-c856-48cd-9e65-ff90ff750580') {
 						throw new ApiError(meta.errors.containsTooManyMentions);
+					} else if (isNoteLimitIdentifiableError(e)) {
+						throw new ApiError(meta.errors.noteLimitExceeded, { code: e.message });
 					} else if (e.id === '1c0ea108-d1e3-4e8e-aa3f-4d2487626153') {
 						throw new ApiError(meta.errors.quoteDisabledForUser);
 					} else if (e.id === 'fd4cc33e-2a37-48dd-99cc-9b806eb2031a') {

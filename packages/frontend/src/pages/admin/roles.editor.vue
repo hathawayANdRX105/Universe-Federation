@@ -298,6 +298,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</MkFolder>
 
+			<MkFolder v-if="matchQuery([i18n.ts._noteManagement.noteLimits, ...noteLimitPolicyKeys])">
+				<template #label>{{ i18n.ts._noteManagement.noteLimits }}</template>
+				<div class="_gaps_s">
+					<div v-for="policy in noteLimitPolicyKeys" :key="policy" class="_gaps_s">
+						<MkSwitch v-model="role.policies[policy].useDefault" :readonly="readonly">
+							<template #label>{{ i18n.ts._role._options[policy] }} - {{ i18n.ts._role.useBaseValue }}</template>
+						</MkSwitch>
+						<MkInput v-model="role.policies[policy].value" :disabled="role.policies[policy].useDefault" type="number" :min="0" :readonly="readonly">
+							<template #label>{{ i18n.ts._role._options[policy] }}</template>
+						</MkInput>
+						<MkRange v-model="role.policies[policy].priority" :min="0" :max="2" :step="1" easing :textConverter="(v) => v === 0 ? i18n.ts._role._priority.low : v === 1 ? i18n.ts._role._priority.middle : v === 2 ? i18n.ts._role._priority.high : ''">
+							<template #label>{{ i18n.ts._role.priority }}</template>
+						</MkRange>
+					</div>
+				</div>
+			</MkFolder>
+
 			<MkFolder v-if="matchQuery([i18n.ts._role._options.canInvite, 'canInvite'])">
 				<template #label>{{ i18n.ts._role._options.canInvite }}</template>
 				<template #suffix>
@@ -906,6 +923,17 @@ const props = defineProps<{
 }>();
 
 const role = ref(deepClone(props.modelValue));
+const noteLimitPolicyKeys = [
+	'noteMaxTextLength',
+	'noteMaxCwLength',
+	'noteMaxFiles',
+	'noteMaxImages',
+	'noteMaxVideos',
+	'noteMaxAudio',
+	'noteMaxOtherFiles',
+	'noteMaxPollChoices',
+	'noteMaxPollChoiceLength',
+] as const;
 
 const conditionTestUser = shallowRef<Misskey.entities.UserDetailed | null>(null);
 

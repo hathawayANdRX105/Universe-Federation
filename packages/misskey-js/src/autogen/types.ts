@@ -13784,6 +13784,15 @@ export type components = {
             canPublicNote: boolean;
             scheduleNoteMax: number;
             mentionLimit: number;
+            noteMaxTextLength: number;
+            noteMaxCwLength: number;
+            noteMaxFiles: number;
+            noteMaxImages: number;
+            noteMaxVideos: number;
+            noteMaxAudio: number;
+            noteMaxOtherFiles: number;
+            noteMaxPollChoices: number;
+            noteMaxPollChoiceLength: number;
             canInvite: boolean;
             inviteLimit: number;
             inviteLimitCycle: number;
@@ -51527,7 +51536,7 @@ export interface operations {
                      * @default forYou
                      * @enum {string}
                      */
-                    category?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'tutorials' | 'resources';
+                    category?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'games' | 'tutorials' | 'resources';
                     /**
                      * @default personalized
                      * @enum {string}

@@ -45,6 +45,15 @@ export type RolePolicies = {
 	canPublicNote: boolean;
 	scheduleNoteMax: number;
 	mentionLimit: number;
+	noteMaxTextLength: number;
+	noteMaxCwLength: number;
+	noteMaxFiles: number;
+	noteMaxImages: number;
+	noteMaxVideos: number;
+	noteMaxAudio: number;
+	noteMaxOtherFiles: number;
+	noteMaxPollChoices: number;
+	noteMaxPollChoiceLength: number;
 	canInvite: boolean;
 	inviteLimit: number;
 	inviteLimitCycle: number;
@@ -86,6 +95,15 @@ export const DEFAULT_POLICIES: RolePolicies = {
 	canPublicNote: true,
 	scheduleNoteMax: 5,
 	mentionLimit: 20,
+	noteMaxTextLength: 3000,
+	noteMaxCwLength: 500,
+	noteMaxFiles: 16,
+	noteMaxImages: 16,
+	noteMaxVideos: 16,
+	noteMaxAudio: 16,
+	noteMaxOtherFiles: 16,
+	noteMaxPollChoices: 10,
+	noteMaxPollChoiceLength: 150,
 	canInvite: false,
 	inviteLimit: 0,
 	inviteLimitCycle: 60 * 24 * 7,
@@ -133,6 +151,15 @@ const DefaultPoliciesSchema: JSONSchemaType<RolePolicies> = {
 		canPublicNote: { type: 'boolean' },
 		scheduleNoteMax: { type: 'integer', minimum: 0 },
 		mentionLimit: { type: 'integer', minimum: 0 },
+		noteMaxTextLength: { type: 'integer', minimum: 0 },
+		noteMaxCwLength: { type: 'integer', minimum: 0 },
+		noteMaxFiles: { type: 'integer', minimum: 0 },
+		noteMaxImages: { type: 'integer', minimum: 0 },
+		noteMaxVideos: { type: 'integer', minimum: 0 },
+		noteMaxAudio: { type: 'integer', minimum: 0 },
+		noteMaxOtherFiles: { type: 'integer', minimum: 0 },
+		noteMaxPollChoices: { type: 'integer', minimum: 0 },
+		noteMaxPollChoiceLength: { type: 'integer', minimum: 0 },
 		canInvite: { type: 'boolean' },
 		inviteLimit: { type: 'integer', minimum: 0 },
 		inviteLimitCycle: { type: 'integer', minimum: 0 },
@@ -614,6 +641,15 @@ export class RoleService implements OnApplicationShutdown, OnModuleInit {
 			canPublicNote: calc('canPublicNote', vs => vs.some(v => v === true)),
 			scheduleNoteMax: calc('scheduleNoteMax', vs => Math.max(...vs)),
 			mentionLimit: calc('mentionLimit', vs => Math.max(...vs)),
+			noteMaxTextLength: calc('noteMaxTextLength', vs => Math.max(...vs)),
+			noteMaxCwLength: calc('noteMaxCwLength', vs => Math.max(...vs)),
+			noteMaxFiles: calc('noteMaxFiles', vs => Math.max(...vs)),
+			noteMaxImages: calc('noteMaxImages', vs => Math.max(...vs)),
+			noteMaxVideos: calc('noteMaxVideos', vs => Math.max(...vs)),
+			noteMaxAudio: calc('noteMaxAudio', vs => Math.max(...vs)),
+			noteMaxOtherFiles: calc('noteMaxOtherFiles', vs => Math.max(...vs)),
+			noteMaxPollChoices: calc('noteMaxPollChoices', vs => Math.max(...vs)),
+			noteMaxPollChoiceLength: calc('noteMaxPollChoiceLength', vs => Math.max(...vs)),
 			canInvite: calc('canInvite', vs => vs.some(v => v === true)),
 			inviteLimit: calc('inviteLimit', vs => Math.max(...vs)),
 			inviteLimitCycle: calc('inviteLimitCycle', vs => Math.max(...vs)),

@@ -91,7 +91,7 @@ const props = withDefaults(defineProps<{
 	tag?: string | null;
 	tagScope?: 'local' | 'remote' | null;
 	recommendationSurface?: 'home' | 'explore';
-	recommendationCategory?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'tutorials' | 'resources';
+	recommendationCategory?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'games' | 'tutorials' | 'resources';
 	recommendationSort?: 'personalized' | 'latestReply';
 	recommendationRankMode?: 'personalized' | 'trending';
 	includeFollowedChannels?: boolean;
@@ -122,7 +122,7 @@ provide('inChannel', computed(() => props.src === 'channel'));
 type TimelineQueryType = {
 	scope?: 'local' | 'social' | 'global' | 'mixed',
 	surface?: 'home' | 'explore',
-	category?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'tutorials' | 'resources',
+	category?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'games' | 'tutorials' | 'resources',
 	sort?: 'personalized' | 'latestReply',
 	rankMode?: 'personalized' | 'trending',
 	antennaId?: string,

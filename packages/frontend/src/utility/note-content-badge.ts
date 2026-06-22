@@ -5,7 +5,7 @@
 
 import type * as Misskey from 'misskey-js';
 
-export type NoteContentBadgeKind = 'featured' | 'hot' | 'discussion' | 'resource' | 'channel';
+export type NoteContentBadgeKind = 'featured' | 'hot' | 'discussion' | 'resource' | 'game' | 'channel';
 
 export type NoteContentBadge = {
 	kind: NoteContentBadgeKind;
@@ -55,6 +55,17 @@ export function getNoteContentBadges(note: Misskey.entities.Note): NoteContentBa
 			kind: 'resource',
 			label: '资源/教程',
 			icon: 'ti ti-book-2',
+		});
+	}
+
+	if (
+		tags.some(tag => ['游戏', '我的世界', 'Minecraft', 'minecraft', 'Apex', 'apex', 'LOL', 'lol', 'GTA', 'gta', 'Steam', 'steam', '电竞', 'Gaming', 'gaming'].includes(tag))
+		|| /(游戏|我的世界|麦块|minecraft|apex|league\s*of\s*legends|\blol\b|gta\s*5?|gtav|gta\s*online|steam|pc\s*gaming|playstation|xbox|nintendo|fortnite|roblox|counter\s*strike|\bcs2\b|dota\s*2|overwatch|电竞|gaming|videogames?|esports?)/i.test(text)
+	) {
+		badges.push({
+			kind: 'game',
+			label: '游戏',
+			icon: 'ti ti-device-gamepad-2',
 		});
 	}
 

@@ -27,6 +27,7 @@ const badgeKindClasses: Record<NoteContentBadgeKind, string> = {
 	hot: styles.hot,
 	discussion: styles.discussion,
 	resource: styles.resource,
+	game: styles.game,
 	channel: styles.channel,
 };
 
@@ -85,6 +86,12 @@ const badges = computed(() => getNoteContentBadges(props.note));
 	background: color-mix(in srgb, #16a34a 15%, var(--MI_THEME-panel));
 	border-color: color-mix(in srgb, #16a34a 34%, var(--MI_THEME-divider));
 	color: color-mix(in srgb, #16a34a 74%, var(--MI_THEME-fg));
+}
+
+.game {
+	background: color-mix(in srgb, #14b8a6 16%, var(--MI_THEME-panel));
+	border-color: color-mix(in srgb, #14b8a6 36%, var(--MI_THEME-divider));
+	color: color-mix(in srgb, #14b8a6 76%, var(--MI_THEME-fg));
 }
 
 .channel {

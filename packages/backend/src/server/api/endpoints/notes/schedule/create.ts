@@ -24,6 +24,15 @@ import { QueueService } from '@/core/QueueService.js';
 import { IdService } from '@/core/IdService.js';
 import { MiScheduleNoteType } from '@/models/NoteSchedule.js';
 import { RoleService } from '@/core/RoleService.js';
+import {
+	NOTE_CW_SCHEMA_MAX_LENGTH,
+	NOTE_FILES_SCHEMA_MAX_ITEMS,
+	NOTE_POLL_CHOICES_SCHEMA_MAX_ITEMS,
+	NOTE_POLL_CHOICE_SCHEMA_MAX_LENGTH,
+	NOTE_TEXT_SCHEMA_MAX_LENGTH,
+	type NoteLimitViolation,
+	validateLocalNoteContentLimits,
+} from '@/core/note-limits.js';
 import { TimeService } from '@/global/TimeService.js';
 import { ApiError } from '../../../error.js';
 
@@ -116,6 +125,21 @@ export const meta = {
 			code: 'CANNOT_RENOTE_OUTSIDE_OF_CHANNEL',
 			id: '33510210-8452-094c-6227-4a6c05d99f00',
 		},
+		maxLength: {
+			message: 'You tried scheduling a note which is too long.',
+			code: 'MAX_LENGTH',
+			id: '3ac74a84-8fd5-4bb0-870f-01804f82ce16',
+		},
+		maxCwLength: {
+			message: 'You tried scheduling a content warning which is too long.',
+			code: 'MAX_CW_LENGTH',
+			id: '7004c478-bda3-4b4f-acb2-4316398c9d52',
+		},
+		noteLimitExceeded: {
+			message: 'Cannot schedule because it exceeds the configured note limits.',
+			code: 'NOTE_LIMIT_EXCEEDED',
+			id: 'a38e7af7-2c32-4e41-a02e-b891b86504ab',
+		},
 	},
 } as const;
 
@@ -126,7 +150,7 @@ export const paramDef = {
 		visibleUserIds: { type: 'array', uniqueItems: true, items: {
 			type: 'string', format: 'misskey:id',
 		} },
-		cw: { type: 'string', nullable: true, minLength: 1, maxLength: 100 },
+		cw: { type: 'string', nullable: true, minLength: 1, maxLength: NOTE_CW_SCHEMA_MAX_LENGTH },
 		reactionAcceptance: { type: 'string', nullable: true, enum: [null, 'likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote'], default: null },
 		noExtractMentions: { type: 'boolean', default: false },
 		noExtractHashtags: { type: 'boolean', default: false },
@@ -139,20 +163,21 @@ export const paramDef = {
 		text: {
 			type: 'string',
 			minLength: 1,
+			maxLength: NOTE_TEXT_SCHEMA_MAX_LENGTH,
 			nullable: true,
 		},
 		fileIds: {
 			type: 'array',
 			uniqueItems: true,
 			minItems: 1,
-			maxItems: 16,
+			maxItems: NOTE_FILES_SCHEMA_MAX_ITEMS,
 			items: { type: 'string', format: 'misskey:id' },
 		},
 		mediaIds: {
 			type: 'array',
 			uniqueItems: true,
 			minItems: 1,
-			maxItems: 16,
+			maxItems: NOTE_FILES_SCHEMA_MAX_ITEMS,
 			items: { type: 'string', format: 'misskey:id' },
 		},
 		poll: {
@@ -163,8 +188,8 @@ export const paramDef = {
 					type: 'array',
 					uniqueItems: true,
 					minItems: 2,
-					maxItems: 10,
-					items: { type: 'string', minLength: 1, maxLength: 50 },
+					maxItems: NOTE_POLL_CHOICES_SCHEMA_MAX_ITEMS,
+					items: { type: 'string', minLength: 1, maxLength: NOTE_POLL_CHOICE_SCHEMA_MAX_LENGTH },
 				},
 				multiple: { type: 'boolean' },
 				expiresAt: { type: 'integer', nullable: true },
@@ -190,6 +215,16 @@ export const paramDef = {
 	],
 	required: ['scheduleNote'],
 } as const;
+
+function throwNoteLimitApiError(result: NoteLimitViolation): never {
+	if (result.code === 'NOTE_TEXT_TOO_LONG') {
+		throw new ApiError(meta.errors.maxLength, result);
+	}
+	if (result.code === 'NOTE_CW_TOO_LONG') {
+		throw new ApiError(meta.errors.maxCwLength, result);
+	}
+	throw new ApiError(meta.errors.noteLimitExceeded, result);
+}
 
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
@@ -219,7 +254,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			const scheduleNoteCount = await this.noteScheduleRepository.countBy({ userId: me.id });
-			const scheduleNoteMax = (await this.roleService.getUserPolicies(me.id)).scheduleNoteMax;
+			const policies = await this.roleService.getUserPolicies(me.id);
+			const scheduleNoteMax = policies.scheduleNoteMax;
 			if (scheduleNoteCount >= scheduleNoteMax) {
 				throw new ApiError(meta.errors.scheduleNoteMax);
 			}
@@ -245,6 +281,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				if (files.length !== fileIds.length) {
 					throw new ApiError(meta.errors.noSuchFile);
 				}
+			}
+
+			const limitResult = validateLocalNoteContentLimits({
+				text: ps.text ?? null,
+				cw: ps.cw ?? null,
+				files,
+				poll: ps.poll ?? null,
+			}, policies);
+			if (!limitResult.ok) {
+				throwNoteLimitApiError(limitResult);
 			}
 
 			let renote: MiNote | null = null;

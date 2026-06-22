@@ -411,7 +411,7 @@ export type Endpoints = Overwrite<
 			req: {
 				scope?: 'local' | 'social' | 'global' | 'mixed';
 				surface?: 'home' | 'explore';
-				category?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'tutorials' | 'resources';
+				category?: 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'games' | 'tutorials' | 'resources';
 				sort?: 'personalized' | 'latestReply';
 				rankMode?: 'personalized' | 'trending';
 				withFiles?: boolean;

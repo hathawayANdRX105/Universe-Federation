@@ -321,7 +321,7 @@ const props = withDefaults(defineProps<{
 	initialTab: 'forYou',
 });
 
-type ExploreTab = 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment';
+type ExploreTab = 'forYou' | 'trending' | 'messages' | 'sports' | 'entertainment' | 'games';
 type DiscoverySections = Misskey.Endpoints['notes/discovery-sections']['res'];
 
 const router = useRouter();
@@ -386,6 +386,9 @@ const exploreTabs = computed(() => [{
 }, {
 	key: 'entertainment' as const,
 	title: i18n.ts.exploreEntertainment,
+}, {
+	key: 'games' as const,
+	title: i18n.ts.exploreGames,
 }]);
 
 const searchEmpty = computed(() => !searchLoading.value && submittedQuery.value.length > 0 && noteResults.value.length === 0 && userResults.value.length === 0 && tagResults.value.length === 0);
@@ -407,7 +410,7 @@ const featureMeta = computed(() => {
 	if (featureNote.value == null) return '';
 	return featureNote.value.user.name ?? featureNote.value.user.username;
 });
-const activeSectionTitle = computed(() => tab.value === 'trending' ? i18n.ts.exploreTrending : tab.value === 'messages' ? i18n.ts.exploreMessages : tab.value === 'sports' ? i18n.ts.exploreSports : tab.value === 'entertainment' ? i18n.ts.exploreEntertainment : i18n.ts.todayNews);
+const activeSectionTitle = computed(() => tab.value === 'trending' ? i18n.ts.exploreTrending : tab.value === 'messages' ? i18n.ts.exploreMessages : tab.value === 'sports' ? i18n.ts.exploreSports : tab.value === 'entertainment' ? i18n.ts.exploreEntertainment : tab.value === 'games' ? i18n.ts.exploreGames : i18n.ts.todayNews);
 const activeNotes = computed(() => {
 	if (categoryNotes.value.length > 0) return categoryNotes.value;
 	if (tab.value === 'trending') return discoverySections.value.hotNotes;
@@ -459,7 +462,7 @@ onUnmounted(() => {
 });
 
 function normalizeTab(value?: string): ExploreTab {
-	if (value === 'trending' || value === 'messages' || value === 'sports' || value === 'entertainment') return value;
+	if (value === 'trending' || value === 'messages' || value === 'sports' || value === 'entertainment' || value === 'games') return value;
 	return 'forYou';
 }
 
@@ -783,8 +786,9 @@ function isGoodFeatureNote(note: Misskey.entities.Note): boolean {
 
 function matchesCategory(value: string, currentTab: ExploreTab): boolean {
 	const normalized = value.toLowerCase();
-	if (currentTab === 'sports') return /运动|体育|赛事|比赛|球队|足球|篮球|网球|跑步|健身|训练|sports?|football|basketball|tennis|fitness|workout|match|game|team/.test(normalized);
-	if (currentTab === 'entertainment') return /娱乐|电影|音乐|游戏|动漫|动画|漫画|综艺|追剧|明星|剧集|影院|演唱会|movie|film|music|game|anime|comic|show|entertainment|concert/.test(normalized);
+	if (currentTab === 'sports') return /运动|体育|赛事|比赛|球队|足球|篮球|网球|跑步|健身|训练|sports?|football|basketball|tennis|fitness|workout|match|team/.test(normalized);
+	if (currentTab === 'entertainment') return /娱乐|电影|音乐|动漫|动画|漫画|综艺|追剧|明星|剧集|影院|演唱会|movie|film|music|anime|comic|show|entertainment|concert/.test(normalized);
+	if (currentTab === 'games') return /游戏|我的世界|麦块|方块|服务器|电竞|开黑|手游|主机|单机|网游|minecraft|mine.?craft|mc服务器|apex|apex\s*legends|league\s*of\s*legends|\blol\b|riot\s*games|valorant|gta\s*5?|gtav|gta\s*online|rockstar|steam|pc\s*gaming|playstation|xbox|nintendo|switch|fortnite|roblox|counter\s*strike|\bcs2\b|dota\s*2|overwatch|game\s*dev|gamedev|indie\s*games?|gaming|videogames?|esports?/.test(normalized);
 	if (currentTab === 'messages') return /公告|讨论|问题|bug|更新|社区|通知|反馈|announcement|discussion|issue|update|community|notice|feedback/.test(normalized);
 	return true;
 }

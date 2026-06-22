@@ -42,6 +42,7 @@ import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { ApDeliverManagerService } from '@/core/activitypub/ApDeliverManagerService.js';
 import { RemoteUserResolveService } from '@/core/RemoteUserResolveService.js';
 import { RoleService } from '@/core/RoleService.js';
+import { assertLocalNoteContentLimits } from '@/core/note-limits.js';
 import { SearchService } from '@/core/SearchService.js';
 import { FanoutTimelineService } from '@/core/FanoutTimelineService.js';
 import { UtilityService } from '@/core/UtilityService.js';
@@ -389,13 +390,9 @@ export class NoteEditService implements OnApplicationShutdown {
 			data.localOnly = true;
 		}
 
-		const maxTextLength = user.host == null
-			? this.config.maxNoteLength
-			: this.config.maxRemoteNoteLength;
-
 		if (data.text) {
-			if (data.text.length > maxTextLength) {
-				data.text = data.text.slice(0, maxTextLength);
+			if (user.host != null && data.text.length > this.config.maxRemoteNoteLength) {
+				data.text = data.text.slice(0, this.config.maxRemoteNoteLength);
 			}
 			data.text = data.text.trim();
 			if (data.text === '') {
@@ -403,18 +400,23 @@ export class NoteEditService implements OnApplicationShutdown {
 			}
 		}
 
-		const maxCwLength = user.host == null
-			? this.config.maxCwLength
-			: this.config.maxRemoteCwLength;
-
 		if (data.cw) {
-			if (data.cw.length > maxCwLength) {
-				data.cw = data.cw.slice(0, maxCwLength);
+			if (user.host != null && data.cw.length > this.config.maxRemoteCwLength) {
+				data.cw = data.cw.slice(0, this.config.maxRemoteCwLength);
 			}
 			data.cw = data.cw.trim();
 			if (data.cw === '') {
 				data.cw = null;
 			}
+		}
+
+		if (user.host == null) {
+			assertLocalNoteContentLimits({
+				text: data.text,
+				cw: data.cw,
+				files: data.files,
+				poll: data.poll,
+			}, await this.roleService.getUserPolicies(user.id));
 		}
 
 		let tags = data.apHashtags;

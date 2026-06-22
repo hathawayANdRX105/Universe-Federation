@@ -50,6 +50,51 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</MkFolder>
 
+			<!-- 发帖限制 -->
+			<MkFolder :defaultOpen="true">
+				<template #icon><i class="ti ti-adjustments"></i></template>
+				<template #label>{{ i18n.ts._noteManagement.noteLimits }}</template>
+
+				<div class="_gaps_m">
+					<MkInfo>{{ i18n.ts._noteManagement.noteLimitsCaption }}</MkInfo>
+					<div :class="$style.limitGrid">
+						<MkInput v-model="noteMaxTextLength" type="number" :min="0" :disabled="!iAmAdmin">
+							<template #label>{{ i18n.ts._role._options.noteMaxTextLength }}</template>
+						</MkInput>
+						<MkInput v-model="noteMaxCwLength" type="number" :min="0" :disabled="!iAmAdmin">
+							<template #label>{{ i18n.ts._role._options.noteMaxCwLength }}</template>
+						</MkInput>
+						<MkInput v-model="noteMaxFiles" type="number" :min="0" :disabled="!iAmAdmin">
+							<template #label>{{ i18n.ts._role._options.noteMaxFiles }}</template>
+						</MkInput>
+						<MkInput v-model="noteMaxImages" type="number" :min="0" :disabled="!iAmAdmin">
+							<template #label>{{ i18n.ts._role._options.noteMaxImages }}</template>
+						</MkInput>
+						<MkInput v-model="noteMaxVideos" type="number" :min="0" :disabled="!iAmAdmin">
+							<template #label>{{ i18n.ts._role._options.noteMaxVideos }}</template>
+						</MkInput>
+						<MkInput v-model="noteMaxAudio" type="number" :min="0" :disabled="!iAmAdmin">
+							<template #label>{{ i18n.ts._role._options.noteMaxAudio }}</template>
+						</MkInput>
+						<MkInput v-model="noteMaxOtherFiles" type="number" :min="0" :disabled="!iAmAdmin">
+							<template #label>{{ i18n.ts._role._options.noteMaxOtherFiles }}</template>
+						</MkInput>
+						<MkInput v-model="noteMaxPollChoices" type="number" :min="0" :disabled="!iAmAdmin">
+							<template #label>{{ i18n.ts._role._options.noteMaxPollChoices }}</template>
+						</MkInput>
+						<MkInput v-model="noteMaxPollChoiceLength" type="number" :min="0" :disabled="!iAmAdmin">
+							<template #label>{{ i18n.ts._role._options.noteMaxPollChoiceLength }}</template>
+						</MkInput>
+						<MkInput v-model="mentionLimit" type="number" :min="0" :disabled="!iAmAdmin">
+							<template #label>{{ i18n.ts._role._options.mentionMax }}</template>
+						</MkInput>
+					</div>
+					<div class="_buttons">
+						<MkButton primary rounded :disabled="!iAmAdmin" :wait="savingNoteLimits" @click="saveNoteLimits"><i class="ti ti-check"></i> {{ i18n.ts.save }}</MkButton>
+					</div>
+				</div>
+			</MkFolder>
+
 			<!-- 全部帖子 -->
 			<MkFolder :defaultOpen="true">
 				<template #icon><i class="ti ti-notes"></i></template>
@@ -357,6 +402,53 @@ const ARCHIVE_LIMIT = 30;
 type AuthorSummary = { isSuspended: boolean; isSilenced: boolean; emailVerified: boolean; notesCount: number; ipCount: number; fingerprintCount: number };
 
 const instanceMeta = await misskeyApi('admin/meta') as Misskey.entities.AdminMetaResponse;
+let currentPolicies = instanceMeta.policies as Record<string, unknown>;
+
+function policyNumber(name: string, fallback: number): number {
+	const value = currentPolicies[name];
+	return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeLimit(value: number | string): number {
+	return Math.max(0, Math.floor(Number(value) || 0));
+}
+
+// 发帖限制
+const noteMaxTextLength = ref<number | string>(policyNumber('noteMaxTextLength', 3000));
+const noteMaxCwLength = ref<number | string>(policyNumber('noteMaxCwLength', 500));
+const noteMaxFiles = ref<number | string>(policyNumber('noteMaxFiles', 16));
+const noteMaxImages = ref<number | string>(policyNumber('noteMaxImages', 16));
+const noteMaxVideos = ref<number | string>(policyNumber('noteMaxVideos', 16));
+const noteMaxAudio = ref<number | string>(policyNumber('noteMaxAudio', 16));
+const noteMaxOtherFiles = ref<number | string>(policyNumber('noteMaxOtherFiles', 16));
+const noteMaxPollChoices = ref<number | string>(policyNumber('noteMaxPollChoices', 10));
+const noteMaxPollChoiceLength = ref<number | string>(policyNumber('noteMaxPollChoiceLength', 150));
+const mentionLimit = ref<number | string>(policyNumber('mentionLimit', 20));
+const savingNoteLimits = ref(false);
+
+async function saveNoteLimits() {
+	savingNoteLimits.value = true;
+	const nextPolicies = {
+		...currentPolicies,
+		noteMaxTextLength: normalizeLimit(noteMaxTextLength.value),
+		noteMaxCwLength: normalizeLimit(noteMaxCwLength.value),
+		noteMaxFiles: normalizeLimit(noteMaxFiles.value),
+		noteMaxImages: normalizeLimit(noteMaxImages.value),
+		noteMaxVideos: normalizeLimit(noteMaxVideos.value),
+		noteMaxAudio: normalizeLimit(noteMaxAudio.value),
+		noteMaxOtherFiles: normalizeLimit(noteMaxOtherFiles.value),
+		noteMaxPollChoices: normalizeLimit(noteMaxPollChoices.value),
+		noteMaxPollChoiceLength: normalizeLimit(noteMaxPollChoiceLength.value),
+		mentionLimit: normalizeLimit(mentionLimit.value),
+	};
+	try {
+		await os.apiWithDialog('admin/roles/update-default-policies', { policies: nextPolicies });
+		currentPolicies = nextPolicies;
+		await fetchInstance(true);
+	} finally {
+		savingNoteLimits.value = false;
+	}
+}
 
 // 紧急方案
 const hideMode = ref<boolean>((instanceMeta as any).notesHideEmergencyMode ?? false);
@@ -758,6 +850,7 @@ loadArchive();
 
 <style lang="scss" module>
 .filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.limitGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
 .switches { display: flex; gap: 16px; flex-wrap: wrap; }
 .grow { flex: 2 1 240px; }
 .filterItem { flex: 1 1 160px; }

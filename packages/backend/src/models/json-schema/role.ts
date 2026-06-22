@@ -192,6 +192,42 @@ export const packedRolePoliciesSchema = {
 			type: 'integer',
 			optional: false, nullable: false,
 		},
+		noteMaxTextLength: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
+		noteMaxCwLength: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
+		noteMaxFiles: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
+		noteMaxImages: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
+		noteMaxVideos: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
+		noteMaxAudio: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
+		noteMaxOtherFiles: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
+		noteMaxPollChoices: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
+		noteMaxPollChoiceLength: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
 		canInvite: {
 			type: 'boolean',
 			optional: false, nullable: false,

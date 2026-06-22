@@ -92,6 +92,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<XPostFormAttaches v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName" @replaceFile="replaceFile"/>
+	<MkInfo v-if="noteLimitWarning" warn :class="$style.limitWarning">{{ noteLimitWarning }}</MkInfo>
 	<MkPollEditor v-if="poll" v-model="poll" @destroyed="poll = null"/>
 	<MkScheduleEditor v-if="scheduleNote" v-model="scheduleNote" @destroyed="scheduleNote = null"/>
 	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :user="postAccount ?? $i"/>
@@ -293,16 +294,81 @@ const textLength = computed((): number => {
 	return (text.value + imeText.value).length;
 });
 
+const activePolicies = computed(() => $i.policies ?? instance.policies);
+
 const maxTextLength = computed((): number => {
-	return instance ? instance.maxNoteTextLength : 1000;
+	return activePolicies.value?.noteMaxTextLength ?? (instance ? instance.maxNoteTextLength : 1000);
 });
 
 const cwTextLength = computed((): number => {
 	return cw.value?.length ?? 0;
 });
 
-const maxCwTextLength = computed(() => instance.maxCwLength);
+const maxCwTextLength = computed(() => activePolicies.value?.noteMaxCwLength ?? instance.maxCwLength);
 const postFormUploadings = computed(() => uploads.value.filter(ctx => uploadingIds.value.includes(ctx.id)));
+
+const fileCounts = computed(() => {
+	const counts = {
+		total: files.value.length,
+		image: 0,
+		video: 0,
+		audio: 0,
+		other: 0,
+	};
+	for (const file of files.value) {
+		if (file.type.startsWith('image/')) {
+			counts.image++;
+		} else if (file.type.startsWith('video/')) {
+			counts.video++;
+		} else if (file.type.startsWith('audio/')) {
+			counts.audio++;
+		} else {
+			counts.other++;
+		}
+	}
+	return counts;
+});
+
+const filesWithinLimits = computed(() => {
+	const policies = activePolicies.value;
+	return fileCounts.value.total <= (policies?.noteMaxFiles ?? 16) &&
+		fileCounts.value.image <= (policies?.noteMaxImages ?? 16) &&
+		fileCounts.value.video <= (policies?.noteMaxVideos ?? 16) &&
+		fileCounts.value.audio <= (policies?.noteMaxAudio ?? 16) &&
+		fileCounts.value.other <= (policies?.noteMaxOtherFiles ?? 16);
+});
+
+const pollWithinLimits = computed(() => {
+	if (!poll.value) return true;
+	const policies = activePolicies.value;
+	const choicesLimit = policies?.noteMaxPollChoices ?? 10;
+	const choiceLengthLimit = policies?.noteMaxPollChoiceLength ?? 150;
+	return poll.value.choices.length <= choicesLimit &&
+		poll.value.choices.every(choice => choice.length <= choiceLengthLimit);
+});
+
+function limitText(label: string, current: number, limit: number): string {
+	return `${label}: ${current}/${limit}`;
+}
+
+const noteLimitWarning = computed(() => {
+	const policies = activePolicies.value;
+	if (textLength.value > maxTextLength.value) return limitText(i18n.ts._role._options.noteMaxTextLength, textLength.value, maxTextLength.value);
+	if (useCw.value && cwTextLength.value > maxCwTextLength.value) return limitText(i18n.ts._role._options.noteMaxCwLength, cwTextLength.value, maxCwTextLength.value);
+	if (fileCounts.value.total > (policies?.noteMaxFiles ?? 16)) return limitText(i18n.ts._role._options.noteMaxFiles, fileCounts.value.total, policies?.noteMaxFiles ?? 16);
+	if (fileCounts.value.image > (policies?.noteMaxImages ?? 16)) return limitText(i18n.ts._role._options.noteMaxImages, fileCounts.value.image, policies?.noteMaxImages ?? 16);
+	if (fileCounts.value.video > (policies?.noteMaxVideos ?? 16)) return limitText(i18n.ts._role._options.noteMaxVideos, fileCounts.value.video, policies?.noteMaxVideos ?? 16);
+	if (fileCounts.value.audio > (policies?.noteMaxAudio ?? 16)) return limitText(i18n.ts._role._options.noteMaxAudio, fileCounts.value.audio, policies?.noteMaxAudio ?? 16);
+	if (fileCounts.value.other > (policies?.noteMaxOtherFiles ?? 16)) return limitText(i18n.ts._role._options.noteMaxOtherFiles, fileCounts.value.other, policies?.noteMaxOtherFiles ?? 16);
+	if (poll.value) {
+		const choicesLimit = policies?.noteMaxPollChoices ?? 10;
+		const choiceLengthLimit = policies?.noteMaxPollChoiceLength ?? 150;
+		const longestChoice = poll.value.choices.reduce((max, choice) => Math.max(max, choice.length), 0);
+		if (poll.value.choices.length > choicesLimit) return limitText(i18n.ts._role._options.noteMaxPollChoices, poll.value.choices.length, choicesLimit);
+		if (longestChoice > choiceLengthLimit) return limitText(i18n.ts._role._options.noteMaxPollChoiceLength, longestChoice, choiceLengthLimit);
+	}
+	return null;
+});
 
 const canPost = computed((): boolean => {
 	return !props.mock && !posting.value && !posted.value &&
@@ -322,7 +388,8 @@ const canPost = computed((): boolean => {
 					cwTextLength.value <= maxCwTextLength.value
 				) : true
 		) &&
-		(files.value.length <= 16) &&
+		filesWithinLimits.value &&
+		pollWithinLimits.value &&
 		(!poll.value || poll.value.choices.length >= 2);
 });
 
@@ -1657,6 +1724,10 @@ defineExpose({
 
 .uploadingProgressIndeterminate {
 	opacity: .72;
+}
+
+.limitWarning {
+	margin: 8px 16px 0;
 }
 
 .footer {

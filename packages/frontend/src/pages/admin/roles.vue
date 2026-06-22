@@ -94,6 +94,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</MkInput>
 					</MkFolder>
 
+					<MkFolder v-if="matchQuery([i18n.ts._noteManagement.noteLimits, ...noteLimitPolicyKeys])">
+						<template #label>{{ i18n.ts._noteManagement.noteLimits }}</template>
+						<div class="_gaps_s">
+							<MkInput v-for="policy in noteLimitPolicyKeys" :key="policy" v-model="policies[policy]" type="number" :min="0">
+								<template #label>{{ i18n.ts._role._options[policy] }}</template>
+							</MkInput>
+						</div>
+					</MkFolder>
+
 					<MkFolder v-if="matchQuery([i18n.ts._role._options.canInvite, 'canInvite'])">
 						<template #label>{{ i18n.ts._role._options.canInvite }}</template>
 						<template #suffix>{{ policies.canInvite ? i18n.ts.yes : i18n.ts.no }}</template>
@@ -359,10 +368,21 @@ import { useRouter } from '@/router.js';
 
 const router = useRouter();
 const baseRoleQ = ref('');
+const noteLimitPolicyKeys = [
+	'noteMaxTextLength',
+	'noteMaxCwLength',
+	'noteMaxFiles',
+	'noteMaxImages',
+	'noteMaxVideos',
+	'noteMaxAudio',
+	'noteMaxOtherFiles',
+	'noteMaxPollChoices',
+	'noteMaxPollChoiceLength',
+] as const;
 
 const roles = await misskeyApi('admin/roles/list');
 
-const policies = reactive<Record<typeof ROLE_POLICIES[number], any>>({});
+const policies = reactive({} as Record<typeof ROLE_POLICIES[number], any>);
 for (const ROLE_POLICY of ROLE_POLICIES) {
 	policies[ROLE_POLICY] = instance.policies[ROLE_POLICY];
 }

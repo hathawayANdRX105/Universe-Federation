@@ -5685,6 +5685,14 @@ export interface Locale extends ILocale {
          */
         "keywordBlocklistCaption": string;
         /**
+         * 投稿制限
+         */
+        "noteLimits": string;
+        /**
+         * ローカル投稿、編集、予約投稿に使う既定の制限です。ロール上書きで特定ユーザーの上限を増減できます。
+         */
+        "noteLimitsCaption": string;
+        /**
          * すべての投稿
          */
         "allNotes": string;
@@ -8835,6 +8843,42 @@ export interface Locale extends ILocale {
              * ノート内の最大メンション数
              */
             "mentionMax": string;
+            /**
+             * 投稿本文の上限
+             */
+            "noteMaxTextLength": string;
+            /**
+             * CW本文の上限
+             */
+            "noteMaxCwLength": string;
+            /**
+             * 添付数の上限
+             */
+            "noteMaxFiles": string;
+            /**
+             * 画像数の上限
+             */
+            "noteMaxImages": string;
+            /**
+             * 動画数の上限
+             */
+            "noteMaxVideos": string;
+            /**
+             * 音声数の上限
+             */
+            "noteMaxAudio": string;
+            /**
+             * その他ファイル数の上限
+             */
+            "noteMaxOtherFiles": string;
+            /**
+             * 投票選択肢数の上限
+             */
+            "noteMaxPollChoices": string;
+            /**
+             * 投票選択肢の文字数上限
+             */
+            "noteMaxPollChoiceLength": string;
             /**
              * サーバー招待コードの発行
              */

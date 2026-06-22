@@ -169,9 +169,15 @@ describe('api:notes/create', () => {
 					.toBe(INVALID);
 			});
 
-			test('reject over 17 files', () => {
+			test('accept files above legacy UI limit', () => {
 				const valid = v({ text: 'Hello, world!', fileIds: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18'] });
-				expect(valid).toBe(INVALID);
+				expect(valid).toBe(VALID);
+			});
+
+			test('reject files above schema safety limit', () => {
+				const fileIds = Array.from({ length: 101 }, (_, i) => `${i + 1}`);
+				expect(v({ text: 'Hello, world!', fileIds }))
+					.toBe(INVALID);
 			});
 		});
 
@@ -221,13 +227,19 @@ describe('api:notes/create', () => {
 					.toBe(INVALID);
 			});
 
-			test('reject poll with too long choice', async () => {
-				expect(v({ poll: { choices: [tooLong(config.maxNoteLength), '2'] } }))
+			test('reject poll with choice above schema safety limit', async () => {
+				expect(v({ poll: { choices: [tooLong(1000), '2'] } }))
 					.toBe(INVALID);
 			});
 
-			test('reject poll with too many choices', () => {
+			test('accept poll choices above legacy limit', () => {
 				expect(v({ poll: { choices: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k'] } }))
+					.toBe(VALID);
+			});
+
+			test('reject poll choices above schema safety limit', () => {
+				const choices = Array.from({ length: 51 }, (_, i) => `${i + 1}`);
+				expect(v({ poll: { choices } }))
 					.toBe(INVALID);
 			});
 

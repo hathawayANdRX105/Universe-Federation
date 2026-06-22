@@ -21,7 +21,7 @@ import { ApiError } from '../../error.js';
 const scopeValues = ['local', 'social', 'global', 'mixed'] as const;
 type RecommendationScope = typeof scopeValues[number];
 const surfaceValues = ['home', 'explore'] as const;
-const categoryValues = ['forYou', 'trending', 'messages', 'sports', 'entertainment', 'tutorials', 'resources'] as const;
+const categoryValues = ['forYou', 'trending', 'messages', 'sports', 'entertainment', 'games', 'tutorials', 'resources'] as const;
 const sortValues = ['personalized', 'latestReply'] as const;
 const rankModeValues = ['personalized', 'trending'] as const;
 type RecommendationSurface = typeof surfaceValues[number];
@@ -477,14 +477,26 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				qb.orWhere('LOWER(COALESCE(note.text, \'\')) ~ :categorySportsPattern');
 			}));
 			query.setParameter('categorySportsTags', ['运动', '体育', '赛事', '比赛', '球队', '足球', '篮球', '网球', '跑步', '健身', 'Sports', 'sports']);
-			query.setParameter('categorySportsPattern', '运动|体育|赛事|比赛|球队|足球|篮球|网球|跑步|健身|训练|sports?|football|basketball|tennis|fitness|workout|match|game|team');
+			query.setParameter('categorySportsPattern', '运动|体育|赛事|比赛|球队|足球|篮球|网球|跑步|健身|训练|sports?|football|basketball|tennis|fitness|workout|match|team');
 		} else if (category === 'entertainment') {
 			query.andWhere(new Brackets(qb => {
 				qb.orWhere('note.tags && CAST(:categoryEntertainmentTags AS varchar[])');
 				qb.orWhere('LOWER(COALESCE(note.text, \'\')) ~ :categoryEntertainmentPattern');
 			}));
-			query.setParameter('categoryEntertainmentTags', ['娱乐', '电影', '音乐', '游戏', '动漫', '动画', '漫画', '综艺', '追剧', '明星', 'Entertainment', 'entertainment']);
-			query.setParameter('categoryEntertainmentPattern', '娱乐|电影|音乐|游戏|动漫|动画|漫画|综艺|追剧|明星|剧集|影院|演唱会|movie|film|music|game|anime|comic|show|entertainment|concert');
+			query.setParameter('categoryEntertainmentTags', ['娱乐', '电影', '音乐', '动漫', '动画', '漫画', '综艺', '追剧', '明星', 'Entertainment', 'entertainment']);
+			query.setParameter('categoryEntertainmentPattern', '娱乐|电影|音乐|动漫|动画|漫画|综艺|追剧|明星|剧集|影院|演唱会|movie|film|music|anime|comic|show|entertainment|concert');
+		} else if (category === 'games') {
+			query.andWhere(new Brackets(qb => {
+				qb.orWhere('note.tags && CAST(:categoryGameTags AS varchar[])');
+				qb.orWhere('LOWER(COALESCE(note.text, \'\')) ~ :categoryGamePattern');
+			}));
+			query.setParameter('categoryGameTags', [
+				'游戏', '我的世界', '电竞', '手游', '主机', '单机', '网游', '开黑', 'Minecraft', 'minecraft',
+				'Apex', 'apex', 'ApexLegends', 'apexlegends', 'LOL', 'lol', 'LeagueOfLegends', 'leagueoflegends',
+				'GTA', 'gta', 'GTA5', 'gta5', 'GTAV', 'gtav', 'GTAOnline', 'gtaonline', 'Steam', 'steam',
+				'PCGaming', 'pcgaming', 'GameDev', 'gamedev', 'Gaming', 'gaming', 'Esports', 'esports',
+			]);
+			query.setParameter('categoryGamePattern', '游戏|我的世界|麦块|方块|服务器|电竞|开黑|手游|主机|单机|网游|minecraft|mine.?craft|mc服务器|apex|apex\\s*legends|league\\s*of\\s*legends|\\blol\\b|riot\\s*games|valorant|gta\\s*5?|gtav|gta\\s*online|rockstar|steam|pc\\s*gaming|playstation|xbox|nintendo|switch|fortnite|roblox|counter\\s*strike|\\bcs2\\b|dota\\s*2|overwatch|game\\s*dev|gamedev|indie\\s*games?|gaming|videogames?|esports?');
 		}
 	}
 

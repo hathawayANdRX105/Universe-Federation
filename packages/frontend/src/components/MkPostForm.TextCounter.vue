@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, useTemplateRef } from 'vue';
-import { instance } from '@/instance.js';
+import { instance, policies } from '@/instance.js';
 import { i18n } from '@/i18n.js';
 import number from '@/filters/number.js';
 
@@ -29,7 +29,7 @@ const props = defineProps<{
 }>();
 
 const maxTextLength = computed(() => {
-	return instance ? instance.maxNoteTextLength : 1000;
+	return policies.value?.noteMaxTextLength ?? (instance ? instance.maxNoteTextLength : 1000);
 });
 
 const textCountPercentage = computed(() => {
