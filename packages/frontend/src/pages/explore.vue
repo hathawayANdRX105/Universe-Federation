@@ -29,26 +29,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 						{{ item.title }}
 					</button>
 				</nav>
-
-				<!-- 与首页同款的 scope + 视图切换 + 自动翻译;chip 风格统一 -->
-				<nav :class="$style.scopeRow" role="tablist" aria-label="范围">
-					<button
-						v-for="s in exploreScopeTabs"
-						:key="s.key"
-						class="_button"
-						:class="[$style.scopeChip, { [$style.scopeChipActive]: exploreScope === s.key }]"
-						role="tab"
-						:aria-selected="exploreScope === s.key"
-						@click="exploreScope = s.key"
-					>
-						<i :class="['ti', s.icon, $style.scopeChipIcon]"></i>
-						<span>{{ s.title }}</span>
-					</button>
-					<div :class="$style.scopeRowRight">
-						<SkAutoTranslateSwitch/>
-						<SkTimelineViewSwitch/>
-					</div>
-				</nav>
 			</header>
 
 			<section v-if="searchHistoryRows.length > 0" :class="$style.searchShortcutPanel">
@@ -220,6 +200,26 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</section>
 
+				<!-- 与首页一致的 scope + 视图切换 + 自动翻译 chip 行 -->
+				<nav :class="$style.scopeRow" role="tablist" aria-label="范围">
+					<button
+						v-for="s in exploreScopeTabs"
+						:key="s.key"
+						class="_button"
+						:class="[$style.scopeChip, { [$style.scopeChipActive]: exploreScope === s.key }]"
+						role="tab"
+						:aria-selected="exploreScope === s.key"
+						@click="exploreScope = s.key"
+					>
+						<i :class="['ti', s.icon, $style.scopeChipIcon]"></i>
+						<span>{{ s.title }}</span>
+					</button>
+					<div :class="$style.scopeRowRight">
+						<SkAutoTranslateSwitch/>
+						<SkTimelineViewSwitch/>
+					</div>
+				</nav>
+
 				<section v-if="activeNotes.length > 0" :class="$style.discoverySection">
 					<div :class="$style.sectionHeader">
 						<div>
@@ -227,8 +227,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<h2>{{ activeSectionTitle }}</h2>
 						</div>
 					</div>
-					<div class="_gaps" :class="$style.noteList">
-						<DynamicNote v-for="note in activeNotes" :key="note.id" :note="note" :withHardMute="true"/>
+					<!-- viewMode 跟首页 timeline 一致;切了视图浏览风格立刻生效 -->
+					<div v-if="viewMode === 'masonry'" :class="$style.masonryGrid">
+						<SkTimelineMasonryCard v-for="note in scopedActiveNotes" :key="note.id" :note="note"/>
+					</div>
+					<div v-else-if="viewMode === 'forum'" :class="$style.forumList">
+						<SkTimelineForumItem v-for="note in scopedActiveNotes" :key="note.id" :note="note"/>
+					</div>
+					<div v-else class="_gaps" :class="$style.noteList">
+						<DynamicNote v-for="note in scopedActiveNotes" :key="note.id" :note="note" :withHardMute="true"/>
 					</div>
 				</section>
 
@@ -332,6 +339,9 @@ import * as os from '@/os.js';
 import { buildSearchTrendRows } from '@/utility/search-trends.js';
 import SkAutoTranslateSwitch from '@/components/SkAutoTranslateSwitch.vue';
 import SkTimelineViewSwitch from '@/components/SkTimelineViewSwitch.vue';
+import SkTimelineMasonryCard from '@/components/SkTimelineMasonryCard.vue';
+import SkTimelineForumItem from '@/components/SkTimelineForumItem.vue';
+import { prefer } from '@/preferences.js';
 
 provide('shouldOmitHeaderTitle', true);
 
@@ -374,6 +384,17 @@ const exploreScopeTabs = [
 	{ key: 'local' as const, title: '本地服务器', icon: 'ti-home' },
 	{ key: 'global' as const, title: '联邦服务器', icon: 'ti-world' },
 ];
+
+// 视图模式跟首页共用全局偏好(timelineViewMode);切了立即同步生效
+const viewMode = computed(() => prefer.r.timelineViewMode.value ?? 'twitter');
+
+// scope 客户端过滤(后端 notes/discovery-sections 当前不接 scope 参数,先在前端过滤):
+// local = userHost null;global = userHost != null;all = 不过滤
+function applyScopeFilter<T extends { userHost?: string | null; user?: { host?: string | null } }>(arr: T[]): T[] {
+	if (exploreScope.value === 'all') return arr;
+	if (exploreScope.value === 'local') return arr.filter(n => (n.userHost ?? n.user?.host ?? null) == null);
+	return arr.filter(n => (n.userHost ?? n.user?.host ?? null) != null);
+}
 const searchQuery = ref(props.query ?? '');
 const submittedQuery = ref('');
 const searchLoading = ref(false);
@@ -454,6 +475,7 @@ const activeNotes = computed(() => {
 	if (tab.value === 'forYou') return discoverySections.value.tutorialNotes.length > 0 ? discoverySections.value.tutorialNotes : discoverySections.value.hotNotes;
 	return discoverySections.value.tutorialNotes.length > 0 ? discoverySections.value.tutorialNotes : discoverySections.value.hotNotes;
 });
+const scopedActiveNotes = computed(() => applyScopeFilter(activeNotes.value));
 const categoryEmpty = computed(() => !exploreLoading.value && submittedQuery.value.length === 0 && tab.value !== 'forYou' && categoryNotes.value.length === 0);
 const visibleChannels = computed(() => discoverySections.value.channels.slice(0, discoverySectionLimit));
 const sideChannels = computed(() => visibleChannels.value.slice(0, sideChannelLimit));
