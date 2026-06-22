@@ -91,7 +91,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					ref="scrollerEl"
 					:items="visibleTimeline"
 					:min-item-size="60"
-					key-field="id"
+					key-field="_dynKey"
 					:buffer="600"
 					:class="$style.timeline"
 				>
@@ -290,7 +290,15 @@ function getItemSizeDependencies(item: ReturnType<typeof timeline.value[number]>
 	return [item.type];
 }
 const timeline = makeDateSeparatedTimelineComputedRef(messages);
-const visibleTimeline = computed(() => timeline.value.toReversed());
+// DynamicScroller 用的稳定 key:发自己时本地先以 pending 入列(id 为 ~chat-pending-…),
+// 服务器回包后会"原地替换"为真实消息(id 变了,但保留 clientId)。把 key 改成 pending:${clientId}
+// 之类的稳定值,避免这一拍 DOM 重挂导致头像/MkMfm 闪烁。
+const visibleTimeline = computed(() => timeline.value.toReversed().map(item => ({
+	...item,
+	_dynKey: item.type === 'item' && (item.data as NormalizedChatMessage).clientId != null
+		? `c:${(item.data as NormalizedChatMessage).clientId}`
+		: item.id,
+})));
 const contextTargetMessageId = ref<string | null>(null);
 const pendingContextScrollId = ref<string | null>(null);
 const usersById = ref(new Map<string, Misskey.entities.UserLite>());
@@ -1294,6 +1302,43 @@ function removeMatchingPendingMessagesFrom(current: NormalizedChatMessage[], inc
 	return removed ? next : current;
 }
 
+/**
+ * 流路径下"server confirmed"原地替换 pending:返回新的 messages 数组以及被消费掉的 incoming id 集合。
+ * 关键:adopted message 保留 pending 的 clientId,DynamicScroller key (`c:${clientId}`) 不变,DOM 不重挂。
+ */
+function adoptPendingMessagesFrom(current: NormalizedChatMessage[], incoming: NormalizedChatMessage[]): {
+	next: NormalizedChatMessage[];
+	consumedIncomingIds: Set<string>;
+} {
+	if (incoming.length === 0) return { next: current, consumedIncomingIds: new Set() };
+
+	const pendingIndexByKey = new Map<string, number>();
+	for (let i = 0; i < current.length; i++) {
+		if (isPendingMessage(current[i])) {
+			pendingIndexByKey.set(outgoingMessageKey(current[i]), i);
+		}
+	}
+	if (pendingIndexByKey.size === 0) return { next: current, consumedIncomingIds: new Set() };
+
+	const consumed = new Set<string>();
+	let next = current;
+	let mutated = false;
+	for (const msg of incoming) {
+		const key = outgoingMessageKey(msg);
+		const idx = pendingIndexByKey.get(key);
+		if (idx == null) continue;
+		if (!mutated) {
+			next = [...current];
+			mutated = true;
+		}
+		const pending = next[idx];
+		next[idx] = { ...msg, clientId: pending.clientId };
+		consumed.add(msg.id);
+		pendingIndexByKey.delete(key);
+	}
+	return { next: mutated ? next : current, consumedIncomingIds: consumed };
+}
+
 function removePendingMessage(clientId: string) {
 	messages.value = messages.value.filter(message => message.clientId !== clientId);
 }
@@ -1311,11 +1356,24 @@ function onSendingMessage(message: NormalizedChatMessage) {
 }
 
 function onSentMessage(message: Misskey.entities.ChatMessageLite, clientId?: string) {
+	const normalized = normalizeMessage(message);
+
+	// 关键:把"已确认"的真实消息原地替换 pending,并保留 clientId。
+	// DynamicScroller 用 `c:${clientId}` 做 key,这样 DOM 不重挂 → 头像不闪。
 	if (clientId != null) {
+		const idx = messages.value.findIndex(m => m.clientId === clientId);
+		if (idx >= 0) {
+			const adopted: NormalizedChatMessage = { ...normalized, clientId };
+			messages.value = [...messages.value.slice(0, idx), adopted, ...messages.value.slice(idx + 1)];
+			replyTarget.value = null;
+			quoteTarget.value = null;
+			nextTick(() => scrollToLatest('instant'));
+			return;
+		}
 		removePendingMessage(clientId);
 	}
 
-	const normalized = normalizeMessage(message);
+	// fallback:没有 clientId,或没匹配到 pending(理论上不该发生),走旧的 remove+prepend 路径
 	removeMatchingPendingMessage(normalized);
 	prependMessage(normalized);
 	replyTarget.value = null;
@@ -2178,13 +2236,21 @@ function processIncomingMessageBatch(batch: Misskey.entities.ChatMessageLite[], 
 	const firstNormalized = normalized[0];
 	if (firstNormalized == null) return;
 
-	const current = removeMatchingPendingMessagesFrom(messages.value, normalized);
-	messages.value = normalized.length === 1
-		? prependChatMessageForTimeline(current, firstNormalized, { limit: messageLimit() })
-		: mergeChatMessagesForTimeline(current, normalized, { limit: messageLimit() });
+	// 1) 先把流路径里"已确认"的消息原地替换 pending(保留 clientId → DynamicScroller key 不变 → 头像不闪)
+	const { next: adopted, consumedIncomingIds } = adoptPendingMessagesFrom(messages.value, normalized);
+	// 2) 剩下没匹配到 pending 的(别人发来的 + 自己但 stream 比 HTTP 回包先到的真新消息),按原逻辑 merge
+	const remaining = consumedIncomingIds.size === 0 ? normalized : normalized.filter(m => !consumedIncomingIds.has(m.id));
+	if (remaining.length === 0) {
+		messages.value = adopted;
+	} else if (remaining.length === 1) {
+		messages.value = prependChatMessageForTimeline(adopted, remaining[0], { limit: messageLimit() });
+	} else {
+		messages.value = mergeChatMessagesForTimeline(adopted, remaining, { limit: messageLimit() });
+	}
 
 	// 新到消息标 fresh,触发 data-fresh CSS 入场动画(替代 SkTransitionGroup 的 enter)
-	markFreshlyArrived(normalized.map(m => m.id));
+	// 只对"全新"出现的消息播,被 adopt 的 pending 不需要(它的 DOM 一直在,本地光标自己就看到了)
+	markFreshlyArrived(remaining.map(m => m.id));
 
 	// TODO: DOM的にバックグラウンドになっていないかどうかも考慮する
 	if (newestOtherMessage != null && !window.document.hidden && isActivated) {
