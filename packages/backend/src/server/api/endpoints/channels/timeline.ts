@@ -63,6 +63,8 @@ export const paramDef = {
 			description: 'Only show notes that have attached files.',
 		},
 		withBots: { type: 'boolean', default: true },
+		// 当 true 时,把"回复到本频道帖子但回复本身没标 channelId 的"也算进时间线
+		includeReplies: { type: 'boolean', default: false },
 	},
 	required: ['channelId'],
 } as const;
@@ -103,7 +105,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			if (!this.serverSettings.enableFanoutTimeline) {
-				return await this.noteEntityService.packMany(await this.getFromDb({ untilId, sinceId, limit: ps.limit, channelId: channel.id, withFiles: ps.withFiles, withRenotes: ps.withRenotes, withBots: ps.withBots }, me), me);
+				return await this.noteEntityService.packMany(await this.getFromDb({ untilId, sinceId, limit: ps.limit, channelId: channel.id, withFiles: ps.withFiles, withRenotes: ps.withRenotes, withBots: ps.withBots, includeReplies: ps.includeReplies }, me), me);
 			}
 
 			return await this.fanoutTimelineEndpointService.timeline({
@@ -118,7 +120,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				excludeNoFiles: ps.withFiles,
 				excludeBots: !ps.withBots,
 				dbFallback: async (untilId, sinceId, limit) => {
-					return await this.getFromDb({ untilId, sinceId, limit, channelId: channel.id, withFiles: ps.withFiles, withRenotes: ps.withRenotes, withBots: ps.withBots }, me);
+					return await this.getFromDb({ untilId, sinceId, limit, channelId: channel.id, withFiles: ps.withFiles, withRenotes: ps.withRenotes, withBots: ps.withBots, includeReplies: ps.includeReplies }, me);
 				},
 			});
 		});
@@ -132,10 +134,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		withFiles: boolean,
 		withRenotes: boolean,
 		withBots: boolean,
+		includeReplies?: boolean,
 	}, me: MiLocalUser | null) {
 		//#region fallback to database
 		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), ps.sinceId, ps.untilId)
-			.andWhere('note.channelId = :channelId', { channelId: ps.channelId })
 			.innerJoinAndSelect('note.user', 'user')
 			.leftJoinAndSelect('note.reply', 'reply')
 			.leftJoinAndSelect('note.renote', 'renote')
@@ -143,6 +145,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.leftJoinAndSelect('renote.user', 'renoteUser')
 			.leftJoinAndSelect('note.channel', 'channel')
 			.limit(ps.limit);
+
+		if (ps.includeReplies) {
+			// 包括:1) 本频道帖子 2) 任何回复到本频道帖子的帖子(reply.channelId 等于本频道)
+			// reply 已 leftJoin,直接用 reply 别名引用
+			query.andWhere('(note.channelId = :channelId OR reply.channelId = :channelId)', { channelId: ps.channelId });
+		} else {
+			query.andWhere('note.channelId = :channelId', { channelId: ps.channelId });
+		}
 
 		this.queryService.generateVisibilityQuery(query, me);
 		this.queryService.generateBlockedHostQueryForNote(query);

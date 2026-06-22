@@ -356,6 +356,7 @@ function updatePaginationQuery() {
 			withFiles: props.onlyFiles ? true : undefined,
 			withBots: props.withBots,
 			channelId: props.channel,
+			includeReplies: true, // 拉对本频道帖子的回复也算进时间线,让"活跃感"更强
 		};
 	} else if (props.src === 'role') {
 		endpoint = 'roles/notes';
@@ -371,7 +372,8 @@ function updatePaginationQuery() {
 	if (endpoint && query) {
 		paginationQuery = {
 			endpoint: endpoint,
-			limit: 10,
+			// channel 时间线初次给 30(默认 10 太少,频道页第一屏体感太空);其它源沿用 10
+			limit: props.src === 'channel' ? 30 : 10,
 			params: query,
 			offsetMode: recommendationScope != null || (props.src === 'local' && props.localTimelineMode !== 'chronological'),
 		};
