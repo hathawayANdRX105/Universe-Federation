@@ -1363,6 +1363,8 @@ function connectStream() {
 		userConnection.on('pruned', onPruned);
 		userConnection.on('react', onReact);
 		userConnection.on('unreact', onUnreact);
+		// 1on1 进 DM 时服务端立刻 push 最新 30 条消息,替代 chat/messages/user-timeline 初次 HTTP
+		userConnection.on('bootstrap', onUserBootstrap);
 		connection.value = userConnection;
 	} else if (room.value != null) {
 		const roomConnection = useStream().useChannel('chatRoom', {
@@ -1642,11 +1644,13 @@ async function initializeContextTimeline(messageId: string) {
 async function loadLatestTimeline() {
 	clearIncomingMessageQueue({ flushReadReceipt: true });
 	streamRecoverySinceId = undefined;
-	// 等 200ms 看 bootstrap 是不是先到了(典型 WS 接通后 ~50ms 就拿到);拿到就完全跳过 HTTP
-	if (!props.userId && room.value != null) {
+	// 等 bootstrap:WS 连接 + 后端 packedRoomTimeline + send,实测国内蜂窝网下要 300~800ms,
+	// 之前给 200ms 不够,导致大部分用户都 fallback 到 HTTP。给 1500ms 上限,WS 健康时绝大多数
+	// 在 200ms 内拿到 bootstrap;真的连不通了再走 HTTP 兜底。
+	if (room.value != null || props.userId != null) {
 		const startWait = Date.now();
-		while (Date.now() - startWait < 200 && bootstrapAppliedAt === 0) {
-			await new Promise(r => window.setTimeout(r, 20));
+		while (Date.now() - startWait < 1500 && bootstrapAppliedAt === 0) {
+			await new Promise(r => window.setTimeout(r, 30));
 		}
 		if (bootstrapAppliedAt > 0) {
 			// bootstrap 已经填好 messages + canFetchMore,直接出
@@ -2291,6 +2295,15 @@ function onPruned(ctx: Parameters<Misskey.Channels['chatRoom']['events']['pruned
 // 进群 bootstrap:WS 端口直推的初始数据。把 messages + mutes 全套填进去,
 // 后续 loadLatestTimeline / loadMutedRoomUsers 看到 bootstrapAppliedAt 就直接跳过 HTTP。
 let bootstrapAppliedAt = 0;
+// 1on1 DM 的 bootstrap:服务端推过来 30 条 messages,跳过 HTTP user-timeline
+function onUserBootstrap(payload: Parameters<Misskey.Channels['chatUser']['events']['bootstrap']>[0]) {
+	if (payload.messages.length > 0) {
+		// ChatMessageLiteFor1on1 跟 ChatMessageLite 在 frontend 这一侧统一处理;运行时一致
+		appendFetchedMessages(payload.messages as unknown as Misskey.entities.ChatMessageLite[]);
+		canFetchMore.value = payload.messages.length === 30;
+	}
+	bootstrapAppliedAt = Date.now();
+}
 function onBootstrap(payload: Parameters<Misskey.Channels['chatRoom']['events']['bootstrap']>[0]) {
 	// room 信息:HTTP 已经在跑了,但 bootstrap 一般会更新——以 HTTP 为准时也接受 bootstrap 的 latest 字段
 	if (room.value == null) {

@@ -74,8 +74,30 @@ export class ChannelsService {
 			case 'reversi': return this.reversiChannelService;
 			case 'reversiGame': return this.reversiGameChannelService;
 
+			// legacy:老 Misskey 客户端用的(messaging / messagingIndex / chat),
+			// 早就改名成 chatUser / chatRoom 了。给一个 no-op stub,避免每次连进来都抛 Unhandled rejection 刷日志。
+			// 客户端拿不到事件会自动 fallback 到 HTTP,不影响功能。
+			case 'chat':
+			case 'messaging':
+			case 'messagingIndex': return new LegacyChannelStub();
+
 			default:
 				throw new Error(`no such channel: ${name}`);
 		}
+	}
+}
+
+/** 老 Misskey 客户端的 channel 名兼容 stub。init 返回 false 让 WS 友好拒绝,不抛错。 */
+class LegacyChannelStub implements MiChannelService<false> {
+	public readonly shouldShare = false;
+	public readonly requireCredential = false as const;
+	public readonly kind = null;
+	public create(_id: string, _connection: any): any {
+		return {
+			chName: 'legacy-stub',
+			init: async () => false,
+			dispose: () => {},
+			onMessage: () => {},
+		};
 	}
 }
