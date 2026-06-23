@@ -317,7 +317,40 @@ const alignObserver = new ResizeObserver((entries, observer) => {
 	align();
 });
 
+// 移动端返回键 / 桌面浏览器后退键关掉浮层。打开时 pushState 一个标记 hash,关掉时把它退回去,
+// 用户按返回键时 popstate 触发,我们识别出是关浮层而非真去上一页,直接 close()。
+const HISTORY_FLAG = '#mkmodal';
+let pushedHistoryState = false;
+
+function popstateHandler() {
+	const isShowing = props.manualShowing != null ? props.manualShowing : showing.value;
+	if (!isShowing) return;
+	// 用户按了返回键 → 关掉浮层。不用再 history.back(),浏览器已经退过一格了。
+	pushedHistoryState = false;
+	emit('click');
+}
+
+function onShowToggle(shouldShow: boolean) {
+	if (shouldShow) {
+		if (!pushedHistoryState) {
+			try {
+				window.history.pushState({ mkmodal: true }, '', window.location.href.includes(HISTORY_FLAG) ? window.location.href : window.location.href + HISTORY_FLAG);
+				pushedHistoryState = true;
+			} catch { /* SSR / 锁定环境忽略 */ }
+		}
+	} else if (pushedHistoryState) {
+		pushedHistoryState = false;
+		try {
+			if (window.location.hash.endsWith(HISTORY_FLAG.slice(1)) || window.history.state?.mkmodal) {
+				window.history.back();
+			}
+		} catch { /* ignore */ }
+	}
+}
+
 onMounted(() => {
+	window.addEventListener('popstate', popstateHandler);
+
 	watch(() => props.src, async () => {
 		if (props.src) {
 			// eslint-disable-next-line vue/no-mutating-props
@@ -331,7 +364,9 @@ onMounted(() => {
 	}, { immediate: true });
 
 	watch([showing, () => props.manualShowing], ([showing, manualShowing]) => {
-		if (manualShowing === true || (manualShowing == null && showing === true)) {
+		const isShowing = manualShowing === true || (manualShowing == null && showing === true);
+		onShowToggle(isShowing);
+		if (isShowing) {
 			if (modalRootEl.value != null) {
 				const { release } = focusTrap(modalRootEl.value, props.hasInteractionWithOtherFocusTrappedEls);
 
@@ -353,6 +388,16 @@ onMounted(() => {
 
 onUnmounted(() => {
 	alignObserver.disconnect();
+	window.removeEventListener('popstate', popstateHandler);
+	// 组件 unmount 时如果还留着我们的 history state,退回去,避免后退键浏览历史里多塞一格
+	if (pushedHistoryState) {
+		pushedHistoryState = false;
+		try {
+			if (window.location.hash.endsWith(HISTORY_FLAG.slice(1)) || window.history.state?.mkmodal) {
+				window.history.back();
+			}
+		} catch { /* ignore */ }
+	}
 });
 
 defineExpose({
