@@ -341,8 +341,11 @@ function onShowToggle(shouldShow: boolean) {
 	} else if (pushedHistoryState) {
 		pushedHistoryState = false;
 		try {
-			if (window.location.hash.endsWith(HISTORY_FLAG.slice(1)) || window.history.state?.mkmodal) {
-				window.history.back();
+			// 之前用 history.back() — 用户点"删除"等菜单项关掉菜单时,这个 back 会把整个页面退回去,
+			// 删除动作刚启动就被导航打断了。改用 replaceState 摘掉 hash,留在原页面,不动 back stack。
+			if (window.history.state?.mkmodal && window.location.hash.endsWith(HISTORY_FLAG.slice(1))) {
+				const cleanUrl = window.location.href.replace(HISTORY_FLAG, '');
+				window.history.replaceState(null, '', cleanUrl);
 			}
 		} catch { /* ignore */ }
 	}
@@ -389,12 +392,13 @@ onMounted(() => {
 onUnmounted(() => {
 	alignObserver.disconnect();
 	window.removeEventListener('popstate', popstateHandler);
-	// 组件 unmount 时如果还留着我们的 history state,退回去,避免后退键浏览历史里多塞一格
+	// 组件 unmount:清掉 hash 标记,同样用 replaceState 而非 back,免得导航打断
 	if (pushedHistoryState) {
 		pushedHistoryState = false;
 		try {
-			if (window.location.hash.endsWith(HISTORY_FLAG.slice(1)) || window.history.state?.mkmodal) {
-				window.history.back();
+			if (window.history.state?.mkmodal && window.location.hash.endsWith(HISTORY_FLAG.slice(1))) {
+				const cleanUrl = window.location.href.replace(HISTORY_FLAG, '');
+				window.history.replaceState(null, '', cleanUrl);
 			}
 		} catch { /* ignore */ }
 	}
