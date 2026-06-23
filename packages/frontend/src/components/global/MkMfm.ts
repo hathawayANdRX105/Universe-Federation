@@ -22,6 +22,7 @@ import MkGoogle from '@/components/MkGoogle.vue';
 import MkSparkle from '@/components/MkSparkle.vue';
 import MkA from '@/components/global/MkA.vue';
 import MkInlineMedia from '@/components/MkInlineMedia.vue';
+import { expandInlineObjectReplacements } from '@/utility/inline-files.js';
 import { prefer } from '@/preferences.js';
 import { clamp } from '@@/js/math.js';
 
@@ -74,7 +75,11 @@ export default function MkMfm(props: MfmProps, { emit }: { emit: SetupContext<Mf
 	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 	if (props.text == null || props.text === '') return;
 
-	const rootAst = props.parsedNodes ?? (props.plain ? mfm.parseSimple : mfm.parse)(props.text);
+	// Discourse / 富文本编辑器粘贴过来的内容里,内联图片占位符是 U+FFFC (`￼`),
+	// 不是 MFM 原生的 $[file N]。这里在解析前顺序映射:第 i 个 ￼ → $[file i],
+	// 让现有 file 渲染分支(下面 case 'file')自动接管,图文混排还原。
+	const expandedText = expandInlineObjectReplacements(props.text, props.files?.length ?? 0);
+	const rootAst = props.parsedNodes ?? (props.plain ? mfm.parseSimple : mfm.parse)(expandedText);
 
 	const validTime = (t: string | boolean | null | undefined) => {
 		if (t == null) return null;

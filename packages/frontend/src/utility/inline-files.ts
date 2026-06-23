@@ -14,14 +14,41 @@ import type * as Misskey from 'misskey-js';
 // MFM 函数语法允许参数前后空白
 const INLINE_FILE_RE = /\$\[file\s+(\d+)\]/g;
 
-export function extractInlinedIndexes(text: string | null | undefined): Set<number> {
+// U+FFFC OBJECT REPLACEMENT CHARACTER —— Discourse / 浏览器富文本编辑器
+// 复制粘贴出来的内联图片占位符。顺序映射到 file[0..N-1] 即可正确还原图文混排。
+const OBJ_REPL = '￼';
+
+/** 把文本里第 i 个 `￼` 替换成 `$[file i]`(i 在 [0, fileCount) 范围内),超出的留原样。 */
+export function expandInlineObjectReplacements(text: string | null | undefined, fileCount: number): string {
+	if (text == null || text === '') return text ?? '';
+	if (fileCount <= 0 || !text.includes(OBJ_REPL)) return text;
+	let counter = 0;
+	return text.replace(/￼/g, () => {
+		if (counter >= fileCount) return OBJ_REPL;
+		const idx = counter++;
+		return `$[file ${idx}]`;
+	});
+}
+
+export function extractInlinedIndexes(text: string | null | undefined, fileCount?: number): Set<number> {
 	const set = new Set<number>();
 	if (!text) return set;
+	// 显式 $[file N]
 	INLINE_FILE_RE.lastIndex = 0;
 	let m: RegExpExecArray | null;
 	while ((m = INLINE_FILE_RE.exec(text)) !== null) {
 		const i = parseInt(m[1], 10);
 		if (!Number.isNaN(i) && i >= 0) set.add(i);
+	}
+	// ￼ 占位符顺序映射,跟 expandInlineObjectReplacements 保持一致
+	if (fileCount != null && fileCount > 0 && text.includes(OBJ_REPL)) {
+		let counter = 0;
+		for (let i = 0; i < text.length; i++) {
+			if (text.charCodeAt(i) === 0xFFFC) {
+				if (counter < fileCount) set.add(counter);
+				counter++;
+			}
+		}
 	}
 	return set;
 }
@@ -31,7 +58,7 @@ export function splitFilesByInline(
 	text: string | null | undefined,
 ): { inlined: Misskey.entities.DriveFile[]; leftover: Misskey.entities.DriveFile[] } {
 	const allFiles = files ?? [];
-	const inlinedIdx = extractInlinedIndexes(text);
+	const inlinedIdx = extractInlinedIndexes(text, allFiles.length);
 	if (inlinedIdx.size === 0) {
 		return { inlined: [], leftover: allFiles };
 	}
