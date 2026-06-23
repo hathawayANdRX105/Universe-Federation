@@ -2192,9 +2192,26 @@ function processIncomingMessageBatch(batch: Misskey.entities.ChatMessageLite[], 
 		sound.playMisskeySfx('chatMessage');
 	}
 
+	const firstNormalized = normalized[0];
+	if (firstNormalized == null) return;
+
+	// 不论在不在底部,都把消息塞进 messages.value:用户向上翻看历史时,新消息追加在底部
+	// 不在视口内,不会打断阅读;到底部一拉就自然看到。**之前用 detachedIncomingMessages 暂存,
+	// 直到用户滑到 80px 以内才 flush,导致网友说的"吞消息"**。直接 merge,既不丢也不打扰。
+	const { next: adopted, consumedIncomingIds } = adoptPendingMessagesFrom(messages.value, normalized);
+	const remaining = consumedIncomingIds.size === 0 ? normalized : normalized.filter(m => !consumedIncomingIds.has(m.id));
+	if (remaining.length === 0) {
+		messages.value = adopted;
+	} else if (remaining.length === 1) {
+		messages.value = prependChatMessageForTimeline(adopted, remaining[0], { limit: messageLimit() });
+	} else {
+		messages.value = mergeChatMessagesForTimeline(adopted, remaining, { limit: messageLimit() });
+	}
+
+	markFreshlyArrived(remaining.map(m => m.id));
+
 	if (!wasAtLatest) {
-		detachedIncomingMessages = appendDetachedChatMessages(detachedIncomingMessages, visibleBatch, messages.value);
-		messages.value = removeMatchingPendingMessagesFrom(messages.value, normalized);
+		// 用户在向上翻历史。不滚动,仅亮起 "+N 条新消息" 指示器 + 到底按钮
 		if (otherCount > 0) {
 			notifyNewMessages(otherCount);
 		}
@@ -2205,30 +2222,10 @@ function processIncomingMessageBatch(batch: Misskey.entities.ChatMessageLite[], 
 		return;
 	}
 
-	const firstNormalized = normalized[0];
-	if (firstNormalized == null) return;
-
-	// 1) 先把流路径里"已确认"的消息原地替换 pending(保留 clientId → DynamicScroller key 不变 → 头像不闪)
-	const { next: adopted, consumedIncomingIds } = adoptPendingMessagesFrom(messages.value, normalized);
-	// 2) 剩下没匹配到 pending 的(别人发来的 + 自己但 stream 比 HTTP 回包先到的真新消息),按原逻辑 merge
-	const remaining = consumedIncomingIds.size === 0 ? normalized : normalized.filter(m => !consumedIncomingIds.has(m.id));
-	if (remaining.length === 0) {
-		messages.value = adopted;
-	} else if (remaining.length === 1) {
-		messages.value = prependChatMessageForTimeline(adopted, remaining[0], { limit: messageLimit() });
-	} else {
-		messages.value = mergeChatMessagesForTimeline(adopted, remaining, { limit: messageLimit() });
-	}
-
-	// 新到消息标 fresh,触发 data-fresh CSS 入场动画(替代 SkTransitionGroup 的 enter)
-	// 只对"全新"出现的消息播,被 adopt 的 pending 不需要(它的 DOM 一直在,本地光标自己就看到了)
-	markFreshlyArrived(remaining.map(m => m.id));
-
-	// TODO: DOM的にバックグラウンドになっていないかどうかも考慮する
+	// 在底部:标已读 + 自动锚底
 	if (newestOtherMessage != null && !window.document.hidden && isActivated) {
 		readReceiptBatcher.queue(newestOtherMessage.id);
 	}
-
 	void revealLatestMessagesAfterLayout({ behavior: 'instant', flushReadReceipt: true });
 	if (shouldRecoverGap) {
 		scheduleStreamRecovery('manual');
