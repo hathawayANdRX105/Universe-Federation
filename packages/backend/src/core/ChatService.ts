@@ -1802,9 +1802,9 @@ export class ChatService {
 			const found = history.map(m => (m.fromUserId === meId) ? m.toUserId! : m.fromUserId!);
 
 			const query = this.chatMessagesRepository.createQueryBuilder('message')
-				.leftJoin(MiChatUserConversationSetting, 'conversationSetting', [
-					'conversationSetting."userId" = :meId',
-					'conversationSetting."otherUserId" = CASE WHEN message."fromUserId" = :meId THEN message."toUserId" ELSE message."fromUserId" END',
+				.leftJoin(MiChatUserConversationSetting, 'conversation_setting', [
+					'conversation_setting."userId" = :meId',
+					'conversation_setting."otherUserId" = CASE WHEN message."fromUserId" = :meId THEN message."toUserId" ELSE message."fromUserId" END',
 				].join(' AND '))
 				.orderBy('message.id', 'DESC')
 				.where(new Brackets(qb => {
@@ -1815,8 +1815,8 @@ export class ChatService {
 				.andWhere('message.toRoomId IS NULL')
 				.andWhere(new Brackets(qb => {
 					qb
-						.where('conversationSetting."hiddenUntilMessageId" IS NULL')
-						.orWhere('message.id > conversationSetting."hiddenUntilMessageId"');
+						.where('conversation_setting."hiddenUntilMessageId" IS NULL')
+						.orWhere('message.id > conversation_setting."hiddenUntilMessageId"');
 				}))
 				.andWhere(`message.fromUserId NOT IN (${ mutingQuery.getQuery() })`)
 				.andWhere(`message.toUserId NOT IN (${ mutingQuery.getQuery() })`);
