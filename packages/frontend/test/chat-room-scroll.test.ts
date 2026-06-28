@@ -274,7 +274,7 @@ describe('chat room scroll state', () => {
 		assert.match(roomSource, /function markOutgoingMessageAutoStick\(\)/);
 		assert.match(roomSource, /function shouldForceStickIncomingBatchToLatest\(batch: Misskey\.entities\.ChatMessageLite\[\]\)/);
 		assert.match(roomSource, /return Date\.now\(\) <= outgoingMessageAutoStickUntil \|\| batch\.some\(message => message\.fromUserId === \$i\.id\);/);
-		assert.match(roomSource, /previousMetrics\.latestDistance <= SCROLL_AUTO_STICK_THRESHOLD &&[\s\S]*metrics\.latestDistance <= SCROLL_LATEST_THRESHOLD/);
+		assert.match(roomSource, /previousMetrics\.latestDistance <= SCROLL_AUTO_STICK_THRESHOLD &&[\s\S]*isNearLatestRevealDistance\(metrics\.latestDistance\)/);
 		assert.match(roomSource, /const shouldStickToLatest = options\?\.stickToLatest === true \|\| shouldForceStickIncomingBatchToLatest\(visibleBatch\) \|\| shouldAutoRevealLatestMessages\(\);/);
 		assert.match(roomSource, /pendingIncomingShouldStickToLatest = pendingIncomingShouldStickToLatest \|\| shouldForceStickIncomingBatchToLatest\(\[message\]\) \|\| shouldAutoRevealLatestMessages\(\);/);
 		assert.match(roomSource, /function onSendingMessage\(message: NormalizedChatMessage\) \{[\s\S]*markOutgoingMessageAutoStick\(\);[\s\S]*void revealLatestMessagesAfterLayout\(\{ behavior: 'instant' \}\);/);
@@ -284,11 +284,12 @@ describe('chat room scroll state', () => {
 	test('does not auto-jump mobile users who are pulling upward near latest', () => {
 		assert.match(roomSource, /latestThreshold: SCROLL_AUTO_STICK_THRESHOLD/);
 		assert.match(roomSource, /function isAtLatestEdgeDistance\(latestDistance: number\): boolean \{[\s\S]*return latestDistance <= SCROLL_AUTO_STICK_THRESHOLD;[\s\S]*\}/);
+		assert.match(roomSource, /function isNearLatestRevealDistance\(latestDistance: number\): boolean \{[\s\S]*return latestDistance <= SCROLL_LATEST_THRESHOLD;[\s\S]*\}/);
 		assert.match(roomSource, /function shouldAutoRevealLatestMessages\(\) \{[\s\S]*if \(autoScrollState\.isUserInteracting\(\)\) \{[\s\S]*autoScrollState\.updateFromScroll\(metrics\.latestDistance\);[\s\S]*return false;[\s\S]*\}/);
 		assert.match(roomSource, /function isAtLatest\(\) \{[\s\S]*if \(autoScrollState\.isUserInteracting\(\)\) \{[\s\S]*autoScrollState\.updateFromScroll\(latestDistance\);[\s\S]*return false;[\s\S]*\}/);
-		assert.match(roomSource, /if \(isAtLatestEdgeDistance\(latestDistance\)\) \{[\s\S]*detachedIncomingMessages\.length > 0 \|\| canFetchNewer\.value[\s\S]*void showLatestMessages\('instant'\);/);
-		assert.match(roomSource, /if \(!isContextMode\.value\) \{[\s\S]*if \(isAtLatestEdgeDistance\(latestDistance\)\) \{[\s\S]*void showLatestMessages\('instant'\);[\s\S]*\} else \{[\s\S]*showScrollToLatestButton\.value = true;/);
-		assert.strictEqual(/latestDistance <= SCROLL_LATEST_THRESHOLD\) \{[\s\S]*void showLatestMessages\('instant'\);/.test(roomSource), false);
+		assert.match(roomSource, /const shouldRevealNearLatest = !autoScrollState\.isUserInteracting\(\) && isNearLatestRevealDistance\(latestDistance\);/);
+		assert.match(roomSource, /if \(isAtLatestEdgeDistance\(latestDistance\) \|\| shouldRevealNearLatest\) \{[\s\S]*detachedIncomingMessages\.length > 0 \|\| canFetchNewer\.value[\s\S]*void showLatestMessages\('instant'\);/);
+		assert.match(roomSource, /if \(!isContextMode\.value\) \{[\s\S]*if \(isAtLatestEdgeDistance\(latestDistance\) \|\| shouldRevealNearLatest\) \{[\s\S]*void showLatestMessages\('instant'\);[\s\S]*\} else \{[\s\S]*showScrollToLatestButton\.value = true;/);
 	});
 
 	test('shows a direct latest button while detached from the chat bottom', () => {
@@ -493,7 +494,7 @@ describe('chat room scroll state', () => {
 	test('reveals the authoritative latest window before jumping to the real room bottom', () => {
 		assert.match(roomSource, /async function showLatestMessages\(behavior: ScrollBehavior = 'smooth'\) \{[\s\S]*await revealAuthoritativeLatestWindow\(\);[\s\S]*await scrollToLatestAfterLayout\(\{ behavior, flushReadReceipt: true \}\);/);
 		assert.match(roomSource, /async function revealAuthoritativeLatestWindow\(\) \{[\s\S]*const latestWindow = await reconcileLatestTimelineWindow\(\);[\s\S]*flushIncomingMessagesNow\(\{ stickToLatest: true \}\);[\s\S]*const latestResult = appendFetchedMessagesWithWindow\(latestWindow, 'newest'\);[\s\S]*flushDetachedIncomingMessages\(\{ queueReadReceipt: true, keep: 'newest' \}\);[\s\S]*if \(latestResult\.length > 0 \|\| detachedIncomingMessages\.length === 0\) \{[\s\S]*canFetchNewer\.value = false;/);
-		assert.match(roomSource, /if \(!isRestoringHistoryScroll\.value && canFetchNewer\.value && !newerFetching\.value && !moreFetching\.value && messages\.value\.length > 0 && newerFetchArmed && latestDistance < SCROLL_TAIL_THRESHOLD\) \{[\s\S]*if \(!isContextMode\.value\) \{[\s\S]*if \(isAtLatestEdgeDistance\(latestDistance\)\) \{[\s\S]*newerFetchArmed = false;[\s\S]*void showLatestMessages\('instant'\);/);
+		assert.match(roomSource, /if \(!isRestoringHistoryScroll\.value && canFetchNewer\.value && !newerFetching\.value && !moreFetching\.value && messages\.value\.length > 0 && newerFetchArmed && latestDistance < SCROLL_TAIL_THRESHOLD\) \{[\s\S]*if \(!isContextMode\.value\) \{[\s\S]*if \(isAtLatestEdgeDistance\(latestDistance\) \|\| shouldRevealNearLatest\) \{[\s\S]*newerFetchArmed = false;[\s\S]*void showLatestMessages\('instant'\);/);
 	});
 
 	test('detects only local messages missing from the latest authoritative window', () => {
@@ -624,7 +625,7 @@ describe('chat room scroll state', () => {
 		assert.match(commonBootSource, /html\.match\(\/\\bvar\\s\+VERSION/);
 		assert.match(commonBootSource, /html\.match\(\/\\bvar\\s\+CLIENT_ENTRY/);
 		assert.match(commonBootSource, /function isDifferentFrontendDeployment\(next: FrontendDeploymentFingerprint\): boolean \{[\s\S]*next\.clientEntry\.length > 0 && next\.clientEntry !== currentFrontendDeployment\.clientEntry/);
-		assert.strictEqual(/next\.version !== currentFrontendDeployment\.version/.test(commonBootSource), false);
+		assert.match(commonBootSource, /function shouldPromptFrontendDeploymentUpdate\(next: FrontendDeploymentFingerprint\): boolean \{[\s\S]*next\.version !== currentFrontendDeployment\.version/);
 		assert.match(commonBootSource, /const FRONTEND_UPDATE_DECLINED_MS = 24 \* 60 \* 60_000;/);
 		assert.match(commonBootSource, /const FRONTEND_UPDATE_RELOAD_ATTEMPT_MS = 24 \* 60 \* 60_000;/);
 		assert.match(commonBootSource, /function frontendUpdateReloadingKey\(next: FrontendDeploymentFingerprint\): string/);
@@ -635,6 +636,7 @@ describe('chat room scroll state', () => {
 		assert.match(commonBootSource, /const \{ canceled \} = await os\.confirm\(\{[\s\S]*text: i18n\.ts\.youShouldUpgradeClient,[\s\S]*okText: i18n\.ts\.reload/);
 		assert.match(commonBootSource, /if \(canceled\) \{[\s\S]*const value = Date\.now\(\)\.toString\(\);[\s\S]*window\.sessionStorage\.setItem\(frontendUpdateDeclinedKey\(next\), value\);[\s\S]*window\.localStorage\.setItem\(frontendUpdateDeclinedKey\(next\), value\);[\s\S]*return;/);
 		assert.match(commonBootSource, /url\.searchParams\.delete\('_frontendUpdatedTo'\);[\s\S]*url\.searchParams\.set\('_frontendUpdateCheck', Date\.now\(\)\.toString\(\)\);/);
+		assert.match(commonBootSource, /await repairAcceptedFrontendUpdateIfStillStale\(next\);[\s\S]*if \(!shouldPromptFrontendDeploymentUpdate\(next\)\) return;/);
 		assert.match(commonBootSource, /await repairAcceptedFrontendUpdateIfStillStale\(next\);[\s\S]*if \(wasFrontendUpdateReloadRecentlyAttempted\(next\)\) return;/);
 		assert.match(commonBootSource, /if \(!_DEV_\) \{[\s\S]*clearFrontendUpdateReloadMarkerIfCurrent\(\);[\s\S]*const scheduleFrontendDeploymentUpdateCheck/);
 		assert.match(commonBootSource, /window\.setInterval\(\(\) => \{[\s\S]*checkFrontendDeploymentUpdate\(\);[\s\S]*\}, 60_000\);/);

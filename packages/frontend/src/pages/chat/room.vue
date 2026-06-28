@@ -296,10 +296,10 @@ const headerTitle = computed(() => {
 });
 
 const CHAT_ROOM_ANNOUNCEMENT_EXPANDED_KEY_PREFIX = 'chatRoomAnnouncementExpanded:';
-// 之前 24px。图片/反应等异步加载 + 用户手指动一下,latestDistance 经常飘到 30~70px,导致
-// "用户其实已经在底部附近、但新消息还是被塞进 detached 池子(看不到)"。给到 80px 容差,
-// 大多数"用户在底部区"的情况都能立刻 flush 新消息出来,不会被吞。
-const SCROLL_LATEST_THRESHOLD = 80;
+// 4px 只用于"真的贴底"的自动跟随,避免用户往上拉时被拽回底部。
+// 接近底部时展示/补齐最新消息用更宽的 160px:移动端图片/头像晚加载和手指轻微位移
+// 很容易让 latestDistance 飘到 80px 以上,之前会错误显示"新消息"而不是直接补出来。
+const SCROLL_LATEST_THRESHOLD = 160;
 const SCROLL_AUTO_STICK_THRESHOLD = 4;
 const SCROLL_HISTORY_THRESHOLD = 480;
 const SCROLL_TAIL_THRESHOLD = 480;
@@ -455,6 +455,9 @@ function markOutgoingMessageAutoStick() {
 }
 
 function shouldForceStickIncomingBatchToLatest(batch: Misskey.entities.ChatMessageLite[]) {
+	// 用户已经手动滚离底部时,不要被"3秒内刚发过"或"batch里夹了自己消息"强行抢回底
+	if (autoScrollState.isUserInteracting()) return false;
+	if (latestScrollMetricsSnapshot != null && latestScrollMetricsSnapshot.latestDistance > SCROLL_AUTO_STICK_THRESHOLD) return false;
 	return Date.now() <= outgoingMessageAutoStickUntil || batch.some(message => message.fromUserId === $i.id);
 }
 
@@ -499,6 +502,10 @@ function isLatestEdgeInitialLockActive(generation = latestEdgeLockGeneration) {
 
 function isAtLatestEdgeDistance(latestDistance: number): boolean {
 	return latestDistance <= SCROLL_AUTO_STICK_THRESHOLD;
+}
+
+function isNearLatestRevealDistance(latestDistance: number): boolean {
+	return latestDistance <= SCROLL_LATEST_THRESHOLD;
 }
 
 function shouldInitialLatestEdgeLockStick(metrics: ScrollMetricsSnapshot): boolean {
@@ -593,10 +600,15 @@ function shouldAutoRevealLatestMessages() {
 		return true;
 	}
 
+	if (isNearLatestRevealDistance(metrics.latestDistance)) {
+		autoScrollState.markLatest();
+		return true;
+	}
+
 	if (
 		previousMetrics != null &&
 		previousMetrics.latestDistance <= SCROLL_AUTO_STICK_THRESHOLD &&
-		metrics.latestDistance <= SCROLL_LATEST_THRESHOLD
+		isNearLatestRevealDistance(metrics.latestDistance)
 	) {
 		autoScrollState.markLatest();
 		return true;
@@ -694,9 +706,26 @@ function scrollToLatest(behavior: ScrollBehavior = 'smooth', options?: { flushRe
 }
 
 async function revealLatestMessagesAfterLayout(options?: { behavior?: ScrollBehavior; flushReadReceipt?: boolean }) {
-	await nextTick();
-	await waitAnimationFrame();
-	scrollToLatest(options?.behavior ?? 'instant', { flushReadReceipt: options?.flushReadReceipt });
+	// DynamicScroller / avatar / 媒体在多个帧后才撑高内容,单帧 scroll 拿到的 maxScrollTop
+	// 经常是过时的(自己发完消息后体感"没贴底")。跨多帧持续 scroll,直到 maxScrollTop 稳定。
+	let previousMaxScrollTop = Number.NEGATIVE_INFINITY;
+	let stableFrames = 0;
+	for (let i = 0; i < 6; i++) {
+		await nextTick();
+		await waitAnimationFrame();
+		const scrollContainer = timelineEl.value == null ? null : getScrollContainer(timelineEl.value);
+		if (scrollContainer == null) break;
+		const { maxScrollTop } = getChatScrollMetrics(scrollContainer);
+		const isFirstIteration = i === 0;
+		scrollToLatest(options?.behavior ?? 'instant', isFirstIteration ? { flushReadReceipt: options?.flushReadReceipt } : undefined);
+		if (maxScrollTop === previousMaxScrollTop) {
+			stableFrames++;
+			if (stableFrames >= 2) break;
+		} else {
+			stableFrames = 0;
+			previousMaxScrollTop = maxScrollTop;
+		}
+	}
 }
 
 function setupTimelineScrollListener() {
@@ -712,11 +741,23 @@ function setupTimelineScrollListener() {
 		autoScrollState.markUserInteraction();
 	};
 
+	// pointermove / pointerdown / touchstart 在桌面悬停或手机点击表情时都会触发,
+	// 会把进群8s兜底锁打掉导致进群没滚到底。只信"真的发生滚动"的信号:
+	// - wheel(桌面输入)
+	// - 滚动事件里检测到 scrollTop 向上移动(手机滑动 / 拖滚动条)
+	let lastUserDirectedScrollTop = scrollContainer.scrollTop;
+
 	const onScroll = () => {
 		const metrics = getChatScrollMetrics(scrollContainer);
+		// 真实上滑(scrollTop 变小)且非程序化恢复 → 视为用户操作
+		if (!isRestoringHistoryScroll.value && metrics.scrollTop + 2 < lastUserDirectedScrollTop) {
+			markUserScrollInteraction();
+		}
+		lastUserDirectedScrollTop = metrics.scrollTop;
 		rememberLatestScrollMetrics(metrics);
 		const { latestDistance, historyDistance } = metrics;
 		autoScrollState.updateFromScroll(latestDistance);
+		const shouldRevealNearLatest = !autoScrollState.isUserInteracting() && isNearLatestRevealDistance(latestDistance);
 		showScrollToLatestButton.value = latestDistance > SCROLL_TAIL_THRESHOLD;
 		if (historyDistance >= SCROLL_HISTORY_THRESHOLD) {
 			historyFetchArmed = true;
@@ -727,7 +768,7 @@ function setupTimelineScrollListener() {
 			fetchMore();
 		}
 
-		if (isAtLatestEdgeDistance(latestDistance)) {
+		if (isAtLatestEdgeDistance(latestDistance) || shouldRevealNearLatest) {
 			if (!isContextMode.value && (detachedIncomingMessages.length > 0 || canFetchNewer.value)) {
 				void showLatestMessages('instant');
 				return;
@@ -743,7 +784,7 @@ function setupTimelineScrollListener() {
 
 		if (!isRestoringHistoryScroll.value && canFetchNewer.value && !newerFetching.value && !moreFetching.value && messages.value.length > 0 && newerFetchArmed && latestDistance < SCROLL_TAIL_THRESHOLD) {
 			if (!isContextMode.value) {
-				if (isAtLatestEdgeDistance(latestDistance)) {
+				if (isAtLatestEdgeDistance(latestDistance) || shouldRevealNearLatest) {
 					newerFetchArmed = false;
 					void showLatestMessages('instant');
 				} else {
@@ -757,17 +798,9 @@ function setupTimelineScrollListener() {
 	};
 
 	scrollContainer.addEventListener('scroll', onScroll, { passive: true });
-	scrollContainer.addEventListener('touchstart', markUserScrollInteraction, { passive: true });
-	scrollContainer.addEventListener('touchmove', markUserScrollInteraction, { passive: true });
-	scrollContainer.addEventListener('pointerdown', markUserScrollInteraction, { passive: true });
-	scrollContainer.addEventListener('pointermove', markUserScrollInteraction, { passive: true });
 	scrollContainer.addEventListener('wheel', markUserScrollInteraction, { passive: true });
 	removeTimelineScrollListener = () => {
 		scrollContainer.removeEventListener('scroll', onScroll);
-		scrollContainer.removeEventListener('touchstart', markUserScrollInteraction);
-		scrollContainer.removeEventListener('touchmove', markUserScrollInteraction);
-		scrollContainer.removeEventListener('pointerdown', markUserScrollInteraction);
-		scrollContainer.removeEventListener('pointermove', markUserScrollInteraction);
 		scrollContainer.removeEventListener('wheel', markUserScrollInteraction);
 	};
 
