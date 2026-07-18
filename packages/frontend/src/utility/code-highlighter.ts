@@ -72,7 +72,7 @@ async function initHighlighter() {
 		themes,
 		langs: [
 			...(jsLangInfo ? [async () => await jsLangInfo.import()] : []),
-			async () => (await import('aiscript-vscode/aiscript/syntaxes/aiscript.tmLanguage.json')).default as unknown as LanguageRegistration,
+			async () => (await import('./aiscript.tmLanguage.json')).default as unknown as LanguageRegistration,
 		],
 	});
 
