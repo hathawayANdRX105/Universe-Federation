@@ -26,6 +26,14 @@ describe('deleted account identifier release', () => {
 		assert.match(deleteAccountProcessorSource, /lower\("username"\) = :username/);
 	});
 
+	test('root-note cleanup advances its cursor in the same direction as its query', () => {
+		const noteCleanup = deleteAccountProcessorSource.match(/\{ \/\/ Delete notes[\s\S]*?this\.logger\.info\('All of notes deleted'\);/)?.[0];
+
+		assert.ok(noteCleanup);
+		assert.match(noteCleanup, /cursor \? \{ id: MoreThan\(cursor\) \} : \{\}/);
+		assert.match(noteCleanup, /order: \{\n\s*id: 1,\n\s*\}/);
+	});
+
 	test('soft-deleted profiles no longer retain email identifiers', () => {
 		assert.match(deleteAccountProcessorSource, /email: null/);
 		assert.match(deleteAccountProcessorSource, /emailVerified: false/);

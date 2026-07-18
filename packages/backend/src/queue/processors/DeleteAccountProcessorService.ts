@@ -306,7 +306,7 @@ export class DeleteAccountProcessorService {
 					},
 					take: 100,
 					order: {
-						id: 'desc',
+						id: 1,
 					},
 				}) as MiNote[];
 
