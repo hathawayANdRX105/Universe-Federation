@@ -1,0 +1,165 @@
+name: CI - medium
+
+on:
+  pull_request:
+    paths:
+      - 'packages/backend/**'
+      - 'packages/frontend/**'
+      - 'packages/frontend-embed/**'
+      - 'packages/frontend-shared/**'
+      - 'packages/shared/**'
+      - 'packages/sw/**'
+      - 'packages/misskey-js/**'
+      - 'packages/megalodon/**'
+      - 'packages/misskey-reversi/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/actions/setup-ci/**'
+      - '.github/workflows/medium-tests.yml'
+      - '.github/workflows/heavy-tests.yml'
+      - '.github/workflows/pr-tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-medium-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend-unit:
+    name: Backend unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: ci
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 6379:6379
+    env:
+      MK_CONFIG_DB_HOST: 127.0.0.1
+      MK_CONFIG_REDIS_HOST: 127.0.0.1
+      MK_CONFIG_REDISFORPUBSUB_HOST: 127.0.0.1
+      MK_CONFIG_REDISFORJOBQUEUE_HOST: 127.0.0.1
+      MK_CONFIG_REDISFORTIMELINES_HOST: 127.0.0.1
+      MK_CONFIG_REDISFORREACTIONS_HOST: 127.0.0.1
+      MK_CONFIG_REDISFORRATELIMIT_HOST: 127.0.0.1
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-ci
+      - name: Configure test instance
+        run: |
+          cp .config/ci.yml .config/default.yml
+          cp .config/ci.yml .config/test.yml
+      - run: pnpm --filter backend build:pre
+      - run: pnpm --filter backend build
+      - run: pnpm --filter backend migrate
+      - run: pnpm --filter backend test
+
+  frontend-unit:
+    name: Frontend unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-ci
+      - run: pnpm --filter frontend build:pre
+      - run: pnpm --filter frontend build
+      - run: pnpm --filter frontend test
+
+  backend-typecheck:
+    name: Backend type check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-ci
+      - run: pnpm --filter backend typecheck
+
+  frontend-typecheck:
+    name: Frontend type check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-ci
+      - run: pnpm --filter frontend typecheck
+
+  backend-api-e2e:
+    name: Backend API integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: test-misskey
+        options: >-
+          --health-cmd "pg_isready -U postgres -d test-misskey"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 6379:6379
+    env:
+      MK_CONFIG_DB_PASS: postgres
+      MK_CONFIG_DB_HOST: 127.0.0.1
+      MK_CONFIG_REDIS_HOST: 127.0.0.1
+      MK_CONFIG_REDISFORPUBSUB_HOST: 127.0.0.1
+      MK_CONFIG_REDISFORJOBQUEUE_HOST: 127.0.0.1
+      MK_CONFIG_REDISFORTIMELINES_HOST: 127.0.0.1
+      MK_CONFIG_REDISFORREACTIONS_HOST: 127.0.0.1
+      MK_CONFIG_REDISFORRATELIMIT_HOST: 127.0.0.1
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-ci
+      - name: Configure backend API test instance
+        run: |
+          cp .config/test-example.yml .config/default.yml
+          cp .config/test-example.yml .config/test.yml
+          echo 'clusterLimit: 1' >> .config/test.yml
+      - name: Build backend API test prerequisites
+        run: pnpm --filter backend build:pre
+      - name: Run backend API tests
+        run: pnpm --filter backend test:e2e
