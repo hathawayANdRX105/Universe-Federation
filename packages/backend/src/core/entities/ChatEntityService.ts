@@ -753,8 +753,10 @@ export class ChatEntityService {
 		const [packedUsers, packedRooms] = await Promise.all([
 			this.userEntityService.packMany(users, me)
 				.then(users => new Map(users.map(u => [u.id, u]))),
-			this.packRooms(rooms, me)
-				.then(rooms => new Map(rooms.map(r => [r.id, r]))),
+			options.populateRoom
+				? this.packRooms(rooms, me)
+					.then(rooms => new Map(rooms.map(r => [r.id, r])))
+				: new Map<MiChatRoomMembership['roomId'], Packed<'ChatRoom'>>(),
 		]);
 
 		return await Promise.all(memberships.map(membership => this.packRoomMembership(membership, me, { ...options, _hint_: { packedUsers, packedRooms } })));

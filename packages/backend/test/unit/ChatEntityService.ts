@@ -245,6 +245,31 @@ describe('ChatEntityService', () => {
 		expect(ctx.roleService.isModerator).toHaveBeenCalledTimes(1);
 	});
 
+	test('skips room packing for memberships without populated rooms', async () => {
+		const ctx = createService();
+		const memberships: any[] = [{
+			id: 'membership-id',
+			userId: 'member',
+			user: { id: 'member' },
+			roomId: 'room',
+			role: 'member',
+			mutedUntil: null,
+		}];
+
+		const [packed] = await ctx.service.packRoomMemberships(memberships, { id: 'me' }, {
+			populateUser: true,
+			populateRoom: false,
+		});
+
+		expect(packed).toMatchObject({
+			userId: 'member',
+			user: { id: 'member' },
+			roomId: 'room',
+		});
+		expect(packed.room).toBeUndefined();
+		expect(ctx.chatRoomMembershipsRepository.createQueryBuilder).not.toHaveBeenCalled();
+	});
+
 	test('packs owned rooms as manageable with retention settings visible', async () => {
 		const ctx = createService();
 		ctx.chatRoomMembershipsRepository.countBy.mockResolvedValueOnce(2);
