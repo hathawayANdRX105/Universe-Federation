@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export class DropApiAccessGrantRedundantUserIdIndex1783100000000 {
-	name = 'DropApiAccessGrantRedundantUserIdIndex1783100000000';
+export class DropApiAccessGrantRedundantUserIdIndex1784415966734 {
+	name = 'DropApiAccessGrantRedundantUserIdIndex1784415966734';
 
 	async up(queryRunner) {
 		await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_api_access_grant_userId"`);
