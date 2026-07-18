@@ -11,6 +11,9 @@ import { bindThis } from '@/decorators.js';
 import type { JsonObject } from '@/misc/json-value.js';
 import { type Channel, NoteChannel, type MiChannelService } from '../channel.js';
 
+const HASHTAG_STREAM_QUERY_MAX_ITEMS = 8;
+const HASHTAG_STREAM_TAG_MAX_LENGTH = 128;
+
 class HashtagChannel extends NoteChannel {
 	public readonly chName = 'hashtag';
 	public static shouldShare = false;
@@ -28,12 +31,14 @@ class HashtagChannel extends NoteChannel {
 	@bindThis
 	public async init(params: JsonObject): Promise<boolean> {
 		if (!Array.isArray(params.q)) return false;
+		if (params.q.length < 1 || params.q.length > HASHTAG_STREAM_QUERY_MAX_ITEMS) return false;
 		if (!params.q.every((x): x is string[] => (
 			Array.isArray(x) &&
 			x.length >= 1 &&
-			x.every(y => typeof y === 'string')
+			x.length <= HASHTAG_STREAM_QUERY_MAX_ITEMS &&
+			x.every(y => typeof y === 'string' && y.length >= 1 && y.length <= HASHTAG_STREAM_TAG_MAX_LENGTH)
 		))) return false;
-		this.q = params.q;
+		this.q = params.q.map(tags => tags.map(tag => normalizeForSearch(tag)));
 
 		this.subscriber.on('notesStream', this.onNote);
 
@@ -43,7 +48,7 @@ class HashtagChannel extends NoteChannel {
 	@bindThis
 	private async onNote(note: Packed<'Note'>) {
 		const noteTags = note.tags ? note.tags.map((t: string) => t.toLowerCase()) : [];
-		const matched = this.q.some(tags => tags.every(tag => noteTags.includes(normalizeForSearch(tag))));
+		const matched = this.q.some(tags => tags.every(tag => noteTags.includes(tag)));
 		if (!matched) return;
 
 		const preparedNote = await this.prepareNote(note);
