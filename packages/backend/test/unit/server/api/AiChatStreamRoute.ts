@@ -50,7 +50,29 @@ function createReply() {
 	return { reply, state };
 }
 
-function createApiCallService(apiAccessMode: 'open' | 'closed') {
+type RateLimitInfo = {
+	blocked: boolean;
+	remaining: number;
+	resetSec: number;
+	resetMs: number;
+	fullResetSec: number;
+	fullResetMs: number;
+};
+
+const unblockedRateLimit: RateLimitInfo = {
+	blocked: false,
+	remaining: 9,
+	resetSec: 0,
+	resetMs: 0,
+	fullResetSec: 0,
+	fullResetMs: 0,
+};
+
+function createApiCallService(
+	apiAccessMode: 'open' | 'closed',
+	nodeEnv: 'test' | 'production' = 'test',
+	developerRateLimit: RateLimitInfo = unblockedRateLimit,
+) {
 	const meta = {
 		id: 'meta-1',
 		enableIpLogging: false,
@@ -62,6 +84,9 @@ function createApiCallService(apiAccessMode: 'open' | 'closed') {
 		apiDefaultTokenRateLimit: 60,
 		rootUserId: null,
 	};
+	const developerTokenRateLimiter = {
+		limit: jest.fn(async () => developerRateLimit),
+	};
 	const service = new ApiCallService(
 		meta as never,
 		{ findOneByOrFail: jest.fn(async () => meta) } as never,
@@ -70,12 +95,12 @@ function createApiCallService(apiAccessMode: 'open' | 'closed') {
 		{} as never,
 		{ findOneBy: jest.fn() } as never,
 		{} as never,
-		{ limit: jest.fn() } as never,
+		developerTokenRateLimiter as never,
 		{} as never,
 		{ logger: { error: jest.fn(), warn: jest.fn() } } as never,
 		{ now: 0 } as never,
 		{} as never,
-		{ env: { NODE_ENV: 'test' } } as never,
+		{ env: { NODE_ENV: nodeEnv } } as never,
 		{
 			createMemoryKVCache: jest.fn(() => ({
 				get: jest.fn(),
@@ -89,12 +114,16 @@ function createApiCallService(apiAccessMode: 'open' | 'closed') {
 
 function createRouteContext({
 	apiAccessMode = 'open',
+	nodeEnv = 'test',
 	tokenStatus = 'active',
 	tokenInfo = true,
+	developerRateLimit = unblockedRateLimit,
 }: {
 	apiAccessMode?: 'open' | 'closed';
+	nodeEnv?: 'test' | 'production';
 	tokenStatus?: string;
 	tokenInfo?: boolean;
+	developerRateLimit?: RateLimitInfo;
 } = {}) {
 	const user = { id: 'user-1' } as never;
 	const token = tokenInfo ? {
@@ -104,7 +133,7 @@ function createRouteContext({
 		status: tokenStatus,
 		app: null,
 	} as never : null;
-	const apiCallService = createApiCallService(apiAccessMode);
+	const apiCallService = createApiCallService(apiAccessMode, nodeEnv, developerRateLimit);
 	const guardSpy = jest.spyOn(apiCallService, 'assertDeveloperApiAccess');
 	const aiService = {
 		streamChat: jest.fn(async () => ({ id: 'assistant-message-1' })),
@@ -216,5 +245,35 @@ describe('/ai/chat-stream', () => {
 		expect(context.guardSpy).not.toHaveBeenCalled();
 		expect(context.aiService.streamChat).toHaveBeenCalledTimes(1);
 		expect(reply.raw.writeHead).toHaveBeenCalledTimes(1);
+	});
+
+	test('returns the developer token RPM error before it starts an AI stream', async () => {
+		const context = createRouteContext({
+			nodeEnv: 'production',
+			developerRateLimit: {
+				blocked: true,
+				remaining: 0,
+				resetSec: 12,
+				resetMs: 12000,
+				fullResetSec: 60,
+				fullResetMs: 60000,
+			},
+		});
+		const { reply, state } = createReply();
+
+		await context.handler({
+			headers: { authorization: 'Bearer developer-token' },
+			body: { content: 'hello' },
+			ip: '127.0.0.1',
+		}, reply);
+
+		expect(state.statusCode).toBe(429);
+		expect(state.payload).toMatchObject({ error: { code: 'API_TOKEN_RATE_LIMIT_EXCEEDED' } });
+		expect(reply.header).toHaveBeenCalledWith('X-RateLimit-Clear', '60.000');
+		expect(reply.header).toHaveBeenCalledWith('X-RateLimit-Remaining', '0');
+		expect(reply.header).toHaveBeenCalledWith('Retry-After', '12');
+		expect(reply.header).toHaveBeenCalledWith('X-RateLimit-Reset', '12.000');
+		expect(context.aiService.streamChat).not.toHaveBeenCalled();
+		expect(reply.raw.writeHead).not.toHaveBeenCalled();
 	});
 });
