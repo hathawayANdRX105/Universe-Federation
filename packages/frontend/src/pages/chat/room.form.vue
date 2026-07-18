@@ -124,6 +124,17 @@ type SendSnapshot = {
 	quoteTarget: NormalizedChatMessage | null;
 };
 
+type ChatMessageDraft = {
+	updatedAt: Date | string;
+	data: {
+		text?: string;
+		file?: Misskey.entities.DriveFile | null;
+		files?: Misskey.entities.DriveFile[];
+		replyTarget?: NormalizedChatMessage | null;
+		quoteTarget?: NormalizedChatMessage | null;
+	};
+};
+
 const textareaEl = shallowRef<HTMLTextAreaElement>();
 const fileEl = shallowRef<HTMLInputElement>();
 
@@ -141,6 +152,7 @@ let autocompleteInstance: Autocomplete | null = null;
 let focusScrollTimers: number[] = [];
 let compositionEndGuardTimer: number | undefined;
 let sendSerial = 0;
+let draftSavePaused = false;
 
 // ミュート期限切れの自動解除のために定期的に更新する
 const now = ref(Date.now());
@@ -169,7 +181,7 @@ function getDraftKey(): string | null {
 	return null;
 }
 
-watch([text, files], saveDraft, { deep: true });
+watch([text, files, () => props.replyTarget, () => props.quoteTarget], saveDraft, { deep: true });
 
 async function onPaste(ev: ClipboardEvent) {
 	if (!ev.clipboardData) return;
@@ -519,16 +531,21 @@ async function send() {
 }
 
 function clear() {
+	draftSavePaused = true;
 	text.value = '';
 	files.value = [];
 	emit('clearReply');
 	emit('clearQuote');
 	deleteDraft();
+	nextTick(() => {
+		draftSavePaused = false;
+	});
 }
 
 function restoreSnapshotsIfIdle(snapshots: SendSnapshot[]) {
-	if (snapshots.length === 0 || text.value !== '' || files.value.length > 0) return;
+	if (snapshots.length === 0 || !canRestoreSnapshots(snapshots[0])) return;
 
+	draftSavePaused = false;
 	text.value = snapshots[0].text;
 	files.value = snapshots
 		.map(snapshot => snapshot.file)
@@ -537,6 +554,18 @@ function restoreSnapshotsIfIdle(snapshots: SendSnapshot[]) {
 		replyTarget: snapshots[0].replyTarget,
 		quoteTarget: snapshots[0].quoteTarget,
 	});
+	nextTick(saveDraft);
+}
+
+function canRestoreSnapshots(snapshot: SendSnapshot) {
+	if (text.value !== '' || files.value.length > 0) return false;
+
+	const currentReplyId = props.replyTarget?.id ?? null;
+	const currentQuoteId = props.quoteTarget?.id ?? null;
+	const snapshotReplyId = snapshot.replyTarget?.id ?? null;
+	const snapshotQuoteId = snapshot.quoteTarget?.id ?? null;
+
+	return (currentReplyId == null || currentReplyId === snapshotReplyId) && (currentQuoteId == null || currentQuoteId === snapshotQuoteId);
 }
 
 function getReferenceText(message: NormalizedChatMessage | Misskey.entities.ChatMessageLite) {
@@ -544,12 +573,14 @@ function getReferenceText(message: NormalizedChatMessage | Misskey.entities.Chat
 }
 
 function saveDraft() {
+	if (draftSavePaused) return;
+
 	const draftKey = getDraftKey();
 	if (draftKey == null) return;
 
-	const drafts = JSON.parse(miLocalStorage.getItem('chatMessageDrafts') || '{}');
+	const drafts = getChatMessageDrafts();
 
-	if (!canSend.value) {
+	if (muteState.value != null || !hasDraftContent()) {
 		delete drafts[draftKey];
 	} else {
 		drafts[draftKey] = {
@@ -557,6 +588,8 @@ function saveDraft() {
 			data: {
 				text: text.value,
 				files: files.value,
+				replyTarget: props.replyTarget ?? null,
+				quoteTarget: props.quoteTarget ?? null,
 			},
 		};
 	}
@@ -568,11 +601,23 @@ function deleteDraft() {
 	const draftKey = getDraftKey();
 	if (draftKey == null) return;
 
-	const drafts = JSON.parse(miLocalStorage.getItem('chatMessageDrafts') || '{}');
+	const drafts = getChatMessageDrafts();
 
 	delete drafts[draftKey];
 
 	miLocalStorage.setItem('chatMessageDrafts', JSON.stringify(drafts));
+}
+
+function hasDraftContent() {
+	return text.value.trim().length > 0 || files.value.length > 0 || props.replyTarget != null || props.quoteTarget != null;
+}
+
+function getChatMessageDrafts(): Record<string, ChatMessageDraft> {
+	try {
+		return JSON.parse(miLocalStorage.getItem('chatMessageDrafts') || '{}');
+	} catch {
+		return {};
+	}
 }
 
 async function insertEmoji(ev: MouseEvent) {
@@ -620,10 +665,16 @@ onMounted(() => {
 
 	// 書きかけの投稿を復元
 	const draftKey = getDraftKey();
-	const draft = draftKey == null ? null : JSON.parse(miLocalStorage.getItem('chatMessageDrafts') || '{}')[draftKey];
-	if (draft) {
-		text.value = draft.data.text;
+	const draft = draftKey == null ? null : getChatMessageDrafts()[draftKey];
+	if (draft?.data != null) {
+		text.value = typeof draft.data.text === 'string' ? draft.data.text : '';
 		files.value = Array.isArray(draft.data.files) ? draft.data.files : (draft.data.file != null ? [draft.data.file] : []);
+		if (draft.data.replyTarget != null || draft.data.quoteTarget != null) {
+			emit('restoreReferences', {
+				replyTarget: draft.data.replyTarget ?? null,
+				quoteTarget: draft.data.quoteTarget ?? null,
+			});
+		}
 	}
 });
 
