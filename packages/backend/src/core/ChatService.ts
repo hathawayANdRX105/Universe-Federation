@@ -368,13 +368,35 @@ export class ChatService {
 		sinceId?: MiChatMessage['id'] | null,
 	): Promise<PackedRoomChatMessage[] | null> {
 		try {
+			// A normal bootstrap only needs its requested newest messages. When a
+			// viewer has muted users or asks for a newer page, retain the full cache
+			// window so filtering and pagination can still find enough messages.
+			const useRequestedCacheWindow = mutedUserIds.size === 0
+				&& sinceId == null
+				&& limit > 0
+				&& limit < ROOM_TIMELINE_CACHE_LIMIT;
+			const cacheReadLimit = useRequestedCacheWindow ? limit : ROOM_TIMELINE_CACHE_LIMIT;
 			const [rawMessages, rawMeta, latestRoomChatMessageId] = await Promise.all([
-				this.redisClient.lrange(this.roomTimelineCacheKey(roomId), 0, ROOM_TIMELINE_CACHE_LIMIT - 1),
+				this.redisClient.lrange(this.roomTimelineCacheKey(roomId), 0, cacheReadLimit - 1),
 				this.redisClient.get(this.roomTimelineCacheMetaKey(roomId)),
 				this.redisClient.get(this.latestRoomChatMessageKey(roomId)),
 			]);
 			const meta = this.parseRoomTimelineCacheMeta(rawMeta);
-			const packed = rawMessages.map(raw => this.parsePackedRoomMessage(raw)).filter((message): message is PackedRoomChatMessage => message != null);
+			let packed = rawMessages.map(raw => this.parsePackedRoomMessage(raw)).filter((message): message is PackedRoomChatMessage => message != null);
+
+			// A corrupt entry in the requested window could hide valid older items.
+			// Fall back to the old full-window behavior so a complete cache still
+			// returns as many valid messages as it did before this optimization.
+			if (useRequestedCacheWindow && packed.length !== rawMessages.length) {
+				const fullRawMessages = await this.redisClient.lrange(
+					this.roomTimelineCacheKey(roomId),
+					0,
+					ROOM_TIMELINE_CACHE_LIMIT - 1,
+				);
+				packed = fullRawMessages
+					.map(raw => this.parsePackedRoomMessage(raw))
+					.filter((message): message is PackedRoomChatMessage => message != null);
+			}
 
 			if (this.isPackedRoomTimelineCacheBehindLatestMarker(packed, latestRoomChatMessageId)) {
 				return null;
