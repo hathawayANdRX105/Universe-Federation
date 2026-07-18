@@ -345,12 +345,12 @@ export type Channels = {
 				| { type: 'unreact'; body: { reaction: string; user?: UserLite; messageId: ChatMessageLite['id'] } }
 			>) => void;
 			// 连上 chatRoom 通道后服务端直推的初始数据,客户端拿到就能渲染,
-			// 替代 chat/rooms/show + chat/messages/room-timeline + chat/rooms/user-mutes/list + chat/rooms/members 四个 HTTP。
+			// 替代 chat/rooms/show + chat/messages/room-timeline + chat/rooms/user-mutes/list 三个 HTTP。
 			bootstrap: (payload: {
 				room: ChatRoom;
 				messages: ChatMessageLite[];
 				mutedRoomUserIds: string[];
-				members: ChatRoomMembership[];
+				members?: ChatRoomMembership[];
 			}) => void;
 		};
 		receives: {
