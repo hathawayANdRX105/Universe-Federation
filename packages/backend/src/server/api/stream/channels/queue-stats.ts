@@ -11,12 +11,11 @@ import { InternalEventService, type InternalEventTypes } from '@/global/Internal
 import { QueueStatsService, QueueStatsLogSize } from '@/core/QueueStatsService.js';
 import { Channel, type MiChannelService } from '../channel.js';
 
-// TODO require auth
-
 class QueueStatsChannel extends Channel {
 	public readonly chName = 'queueStats';
 	public static shouldShare = true as const;
-	public static requireCredential = false as const;
+	public static requireCredential = true as const;
+	public static kind = 'read:admin:queue' as const;
 
 	constructor(
 		private readonly internalEventService: InternalEventService,
@@ -57,7 +56,7 @@ class QueueStatsChannel extends Channel {
 }
 
 @Injectable()
-export class QueueStatsChannelService implements MiChannelService<false> {
+export class QueueStatsChannelService implements MiChannelService<true> {
 	public readonly shouldShare = QueueStatsChannel.shouldShare;
 	public readonly requireCredential = QueueStatsChannel.requireCredential;
 	public readonly kind = QueueStatsChannel.kind;
