@@ -291,6 +291,30 @@ describe('AiService', () => {
 		}), expect.anything());
 	});
 
+	it('saves client-stopped provider aborts with stopped generation wording', async () => {
+		const { service, providers, messages, httpRequestService } = createService();
+		providers.set('provider1', createProvider());
+		const abortController = new AbortController();
+		httpRequestService.send.mockImplementation(async () => {
+			abortController.abort();
+			const error = new Error('provider request aborted');
+			error.name = 'AbortError';
+			throw error;
+		});
+
+		await expect(service.streamChat({
+			user: { id: 'user1' } as never,
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			content: 'Hi',
+			abortSignal: abortController.signal,
+		})).rejects.toThrow('provider request aborted');
+
+		const assistant = messages.find(message => message.role === 'assistant');
+		expect(assistant?.error).toBe('AI generation was stopped by the client.');
+		expect(assistant?.error).not.toBe('Request timed out.');
+	});
+
 	it('rejects image attachments for non-vision models', async () => {
 		const { service, providers } = createService();
 		providers.set('provider1', createProvider({

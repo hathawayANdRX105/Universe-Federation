@@ -590,6 +590,11 @@ export class AiService {
 			conversation = await this.getOwnedConversation(params.user.id, conversation.id);
 		} catch (err) {
 			const savedAt = this.timeService.date;
+			// node-fetch reports caller-triggered request aborts as AbortError;
+			// internal timeouts must keep timeout wording.
+			const persistedError = params.abortSignal?.aborted && err instanceof Error && err.name === 'AbortError'
+				? new AiServiceError('STREAM_ABORTED', 'AI generation was stopped by the client.', 499)
+				: err;
 			assistantMessage = await this.aiMessagesRepository.insertOne({
 				id: this.idService.gen(),
 				conversationId: conversation.id,
@@ -598,7 +603,7 @@ export class AiService {
 				content: assistantContent,
 				attachments: [],
 				usage: null,
-				error: this.sanitizeError(err),
+				error: this.sanitizeError(persistedError),
 				createdAt: savedAt,
 			});
 			await this.aiConversationsRepository.update(conversation.id, {
