@@ -114,7 +114,12 @@ describe('ChatService large room fast path', () => {
 			upsert: jest.fn(async () => ({ identifiers: [] })),
 			delete: jest.fn(async () => ({ affected: 1 })),
 		};
-		const chatUserConversationSettingsRepository: any = {};
+		const chatUserConversationSettingsRepository: any = {
+			findOneBy: jest.fn(async () => null),
+			insertOne: jest.fn(async (setting) => setting),
+			update: jest.fn(async () => ({ affected: 1 })),
+			delete: jest.fn(async () => ({ affected: 1 })),
+		};
 		const chatMessagesQueryBuilder: any = {
 			alias: 'message',
 			update: jest.fn(function (this: any) { return this; }),
@@ -365,6 +370,24 @@ describe('ChatService large room fast path', () => {
 		};
 	}
 
+	function createCachedRoomMessage(id: string, fromUserId: string) {
+		return {
+			id,
+			fromUserId,
+			fromUser: { id: fromUserId },
+			toRoomId: 'room',
+			text: `message ${id}`,
+			fileId: null,
+			file: null,
+			replyId: null,
+			reply: null,
+			quoteId: null,
+			quote: null,
+			mentionedUserIds: [],
+			reactions: [],
+		};
+	}
+
 	test('room timeline filters messages from muted room users for the current user only', async () => {
 		const ctx = createService(2);
 		const query = createMessageQueryBuilder([{ id: 'visible-message' }]);
@@ -403,6 +426,66 @@ describe('ChatService large room fast path', () => {
 		expect(ctx.chatEntityService.packMessagesLiteForRoom).not.toHaveBeenCalled();
 	});
 
+	test('packed room timeline reads only the requested hot-cache window without muted users or a cursor', async () => {
+		const ctx = createService(LARGE_CHAT_ROOM_MEMBER_THRESHOLD + 1);
+		const cached = Array.from({ length: 300 }, (_, index) => createCachedRoomMessage(`m${300 - index}`, `user-${index}`));
+		ctx.redisState.set('chat:room:room:timeline:v1', cached.map(message => JSON.stringify(message)));
+		ctx.redisState.set('chat:room:room:timeline:v1:meta', JSON.stringify({ warmedAt: 1, complete: true }));
+
+		await expect(ctx.service.packedRoomTimeline('reader', 'room', 30)).resolves.toEqual(cached.slice(0, 30));
+
+		expect(ctx.redisClient.lrange).toHaveBeenCalledTimes(1);
+		expect(ctx.redisClient.lrange).toHaveBeenCalledWith('chat:room:room:timeline:v1', 0, 29);
+		expect(ctx.chatMessagesRepository.createQueryBuilder).not.toHaveBeenCalled();
+	});
+
+	test('packed room timeline keeps the full hot-cache window when muted users need filtering', async () => {
+		const ctx = createService(LARGE_CHAT_ROOM_MEMBER_THRESHOLD + 1);
+		const cached = Array.from({ length: 300 }, (_, index) => createCachedRoomMessage(
+			`m${300 - index}`,
+			index % 2 === 0 ? 'muted' : `user-${index}`,
+		));
+		ctx.redisState.set('chat:room:room:timeline:v1', cached.map(message => JSON.stringify(message)));
+		ctx.redisState.set('chat:room:room:timeline:v1:meta', JSON.stringify({ warmedAt: 1, complete: true }));
+		ctx.redisState.set('chat:room:room:muted:reader', JSON.stringify(['muted']));
+
+		await expect(ctx.service.packedRoomTimeline('reader', 'room', 30)).resolves.toEqual(cached.filter(message => message.fromUserId !== 'muted').slice(0, 30));
+
+		expect(ctx.redisClient.lrange).toHaveBeenCalledTimes(1);
+		expect(ctx.redisClient.lrange).toHaveBeenCalledWith('chat:room:room:timeline:v1', 0, 299);
+		expect(ctx.chatMessagesRepository.createQueryBuilder).not.toHaveBeenCalled();
+	});
+
+	test('packed room timeline keeps the full hot-cache window for sinceId pagination', async () => {
+		const ctx = createService(LARGE_CHAT_ROOM_MEMBER_THRESHOLD + 1);
+		const cached = Array.from({ length: 300 }, (_, index) => createCachedRoomMessage(
+			String(300 - index).padStart(3, '0'),
+			`user-${index}`,
+		));
+		ctx.redisState.set('chat:room:room:timeline:v1', cached.map(message => JSON.stringify(message)));
+		ctx.redisState.set('chat:room:room:timeline:v1:meta', JSON.stringify({ warmedAt: 1, complete: true }));
+
+		await expect(ctx.service.packedRoomTimeline('reader', 'room', 30, '150')).resolves.toHaveLength(30);
+
+		expect(ctx.redisClient.lrange).toHaveBeenCalledTimes(1);
+		expect(ctx.redisClient.lrange).toHaveBeenCalledWith('chat:room:room:timeline:v1', 0, 299);
+		expect(ctx.chatMessagesRepository.createQueryBuilder).not.toHaveBeenCalled();
+	});
+
+	test('packed room timeline falls back to the full hot-cache window when the requested range contains malformed data', async () => {
+		const ctx = createService(LARGE_CHAT_ROOM_MEMBER_THRESHOLD + 1);
+		const cached = Array.from({ length: 299 }, (_, index) => createCachedRoomMessage(`m${299 - index}`, `user-${index}`));
+		ctx.redisState.set('chat:room:room:timeline:v1', ['not-json', ...cached.map(message => JSON.stringify(message))]);
+		ctx.redisState.set('chat:room:room:timeline:v1:meta', JSON.stringify({ warmedAt: 1, complete: true }));
+
+		await expect(ctx.service.packedRoomTimeline('reader', 'room', 30)).resolves.toEqual(cached.slice(0, 30));
+
+		expect(ctx.redisClient.lrange).toHaveBeenNthCalledWith(1, 'chat:room:room:timeline:v1', 0, 29);
+		expect(ctx.redisClient.lrange).toHaveBeenNthCalledWith(2, 'chat:room:room:timeline:v1', 0, 299);
+		expect(ctx.redisClient.lrange).toHaveBeenCalledTimes(2);
+		expect(ctx.chatMessagesRepository.createQueryBuilder).not.toHaveBeenCalled();
+	});
+
 	test('packed room timeline refreshes redis cache when the latest room marker is newer', async () => {
 		const ctx = createService(LARGE_CHAT_ROOM_MEMBER_THRESHOLD + 1);
 		const cached = [
@@ -421,6 +504,7 @@ describe('ChatService large room fast path', () => {
 		const result = await ctx.service.packedRoomTimeline('reader', 'room', 2);
 
 		expect(result.map(message => message.id)).toEqual(['m4', 'm3']);
+		expect(ctx.redisClient.lrange).toHaveBeenCalledWith('chat:room:room:timeline:v1', 0, 1);
 		expect(ctx.chatMessagesRepository.createQueryBuilder).toHaveBeenCalledTimes(1);
 		expect(ctx.chatEntityService.packMessagesLiteForRoom).toHaveBeenCalledTimes(1);
 	});
