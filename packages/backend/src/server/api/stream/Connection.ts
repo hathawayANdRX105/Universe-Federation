@@ -60,6 +60,12 @@ export const MaxSubscriptionsPerChannel = 512;
 export const MaxWsBufferedAmount = 16 * 1024 * 1024;
 
 /**
+ * Maximum size of a single incoming websocket frame.
+ * Keep this aligned with the regular API body limit.
+ */
+export const MaxWsPayloadSize = 1024 * 1024;
+
+/**
  * Maximum number of milliseconds to wait for close() before terminating immediately.
  * https://github.com/websockets/ws/blob/master/doc/ws.md#new-websocketserveroptions-callback
  */

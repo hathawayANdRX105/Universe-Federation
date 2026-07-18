@@ -32,6 +32,7 @@ import {
 	Connection,
 	ConnectionBacklogLimit,
 	CloseTimeout,
+	MaxWsPayloadSize,
 	SocketConnectRateLimit,
 	MaxConnectionsPerClient,
 	type ConnectionEvents,
@@ -104,6 +105,7 @@ export class StreamingApiServerService implements BeforeApplicationShutdown {
 			noServer: true,
 			perMessageDeflate: this.config.websocketCompression,
 			backlog: ConnectionBacklogLimit,
+			maxPayload: MaxWsPayloadSize,
 			// @ts-expect-error type definitions have not been updated for version 8.19.0.
 			closeTimeout: CloseTimeout,
 		});
