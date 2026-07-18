@@ -24,7 +24,7 @@ describe('download service SSRF safety', () => {
 	test('keeps user-controlled URL imports on the safe default path', () => {
 		assert.match(driveServiceSource, /downloadService\.downloadUrl\(url,\s*path,\s*\{/);
 		assert.doesNotMatch(driveServiceSource, /isLocalAddressAllowed:\s*true/);
-		assert.match(fileServerSource, /downloadService\.downloadUrl\(url,\s*path,\s*\{ agent: options\.agent \}\)/);
+		assert.match(fileServerSource, /downloadService\.downloadUrl\(url,\s*path,\s*\{ agent: options\.agent,\s*blockPrivateAddress: options\.blockPrivateAddress \}\)/);
 	});
 
 	test('rejects private network URL preview targets before fetching', () => {
@@ -33,5 +33,13 @@ describe('download service SSRF safety', () => {
 		assert.match(urlPreviewServiceSource, /await this\.isPrivatePreviewUrl\(new URL\(summary\.url\)\)/);
 		assert.match(urlPreviewServiceSource, /isPrivateUrl\(url,\s*this\.httpRequestService\.lookup\)/);
 		assert.match(urlPreviewServiceSource, /URL_PREVIEW_PRIVATE_ADDRESS_BLOCKED/);
+	});
+
+	test('blocks private URL preview media proxy downloads and redirects', () => {
+		assert.match(fileServerSource, /blockPrivateAddress: true/);
+		assert.match(downloadServiceSource, /blockPrivateAddress\?: boolean/);
+		assert.match(downloadServiceSource, /beforeRedirect:/);
+		assert.match(downloadServiceSource, /isPrivateDownloadUrlBlocked\(redirectUrl\)/);
+		assert.match(downloadServiceSource, /isPrivateUrl\(url,\s*this\.httpRequestService\.lookup\)/);
 	});
 });

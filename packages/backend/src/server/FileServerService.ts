@@ -518,6 +518,7 @@ export class FileServerService {
 			this.meta.urlPreviewOutboundProxies ?? [],
 			proxy => this.downloadAndDetectTypeFromUrl(url, {
 				agent: this.urlPreviewProxyService.createAgents(proxy),
+				blockPrivateAddress: true,
 			}),
 			(proxy, error) => {
 				this.logger.warn(`Failed URL preview media via proxy ${describeUrlPreviewProxy(proxy)}: ${renderUrlPreviewProxyError(error, proxy)}`);
@@ -526,12 +527,12 @@ export class FileServerService {
 	}
 
 	@bindThis
-	private async downloadAndDetectTypeFromUrl(url: string, options: { agent?: Agents } = {}): Promise<
+	private async downloadAndDetectTypeFromUrl(url: string, options: { agent?: Agents, blockPrivateAddress?: boolean } = {}): Promise<
 		{ state: 'remote'; mime: string; ext: string | null; path: string; cleanup: () => void; filename: string; }
 	> {
 		const [path, cleanup] = await createTemp();
 		try {
-			const { filename } = await this.downloadService.downloadUrl(url, path, { agent: options.agent });
+			const { filename } = await this.downloadService.downloadUrl(url, path, { agent: options.agent, blockPrivateAddress: options.blockPrivateAddress });
 
 			const { mime, ext } = await this.fileInfoService.detectType(path);
 

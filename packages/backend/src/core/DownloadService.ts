@@ -11,7 +11,7 @@ import got, * as Got from 'got';
 import { parse } from 'content-disposition';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
-import { HttpRequestService } from '@/core/HttpRequestService.js';
+import { HttpRequestService, isPrivateUrl } from '@/core/HttpRequestService.js';
 import { createTemp } from '@/misc/create-temp.js';
 import { StatusError } from '@/misc/status-error.js';
 import { LoggerService } from '@/core/LoggerService.js';
@@ -37,7 +37,7 @@ export class DownloadService {
 	}
 
 	@bindThis
-	public async downloadUrl(url: string, path: string, options: { timeout?: number, operationTimeout?: number, maxSize?: number, agent?: Got.Agents, isLocalAddressAllowed?: boolean } = {} ): Promise<{
+	public async downloadUrl(url: string, path: string, options: { timeout?: number, operationTimeout?: number, maxSize?: number, agent?: Got.Agents, isLocalAddressAllowed?: boolean, blockPrivateAddress?: boolean } = {} ): Promise<{
 		filename: string;
 	}> {
 		// Allow fragments for backwards compatibility
@@ -51,6 +51,10 @@ export class DownloadService {
 		const isLocalAddressAllowed = options.isLocalAddressAllowed ?? false;
 
 		const urlObj = new URL(url);
+		if (options.blockPrivateAddress && await this.isPrivateDownloadUrlBlocked(urlObj)) {
+			throw new StatusError(`Blocked private address: ${url}`, 403, 'Private address blocked');
+		}
+
 		let filename = urlObj.pathname.split('/').pop() ?? 'untitled';
 
 		const req = got.stream(url, {
@@ -75,6 +79,16 @@ export class DownloadService {
 				limit: 0,
 			},
 			enableUnixSockets: false,
+			hooks: options.blockPrivateAddress ? {
+				beforeRedirect: [
+					async redirectOptions => {
+						const redirectUrl = redirectOptions.url;
+						if (redirectUrl instanceof URL && await this.isPrivateDownloadUrlBlocked(redirectUrl)) {
+							throw new StatusError(`Blocked private redirect address: ${redirectUrl.href}`, 403, 'Private address blocked');
+						}
+					},
+				],
+			} : undefined,
 		}).on('response', (res: Got.Response) => {
 			const contentLength = res.headers['content-length'];
 			if (contentLength != null) {
@@ -122,6 +136,16 @@ export class DownloadService {
 		return {
 			filename,
 		};
+	}
+
+	@bindThis
+	private async isPrivateDownloadUrlBlocked(url: URL): Promise<boolean> {
+		try {
+			return await isPrivateUrl(url, this.httpRequestService.lookup);
+		} catch (err) {
+			this.logger.warn(`Blocking download of ${url.href}: failed to resolve host: ${renderInlineError(err)}`);
+			return true;
+		}
 	}
 
 	@bindThis
