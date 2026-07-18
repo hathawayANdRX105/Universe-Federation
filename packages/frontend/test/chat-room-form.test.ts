@@ -128,6 +128,11 @@ async function waitMacrotask() {
 	await nextTick();
 }
 
+async function waitImeGuard() {
+	await new Promise<void>(resolve => window.setTimeout(resolve, 220));
+	await nextTick();
+}
+
 function createMessage(text: string): Misskey.entities.ChatMessageLite {
 	return {
 		id: `server-${text}`,
@@ -290,8 +295,13 @@ describe('chat room form', () => {
 		await fireEvent.keyDown(textarea, { key: 'Enter', keyCode: 229 });
 		await fireEvent.compositionEnd(textarea);
 		await waitMacrotask();
-		await fireEvent.keyDown(textarea, { key: 'Enter' });
+		const postCompositionEnterNotPrevented = textarea.dispatchEvent(new KeyboardEvent('keydown', {
+			key: 'Enter',
+			bubbles: true,
+			cancelable: true,
+		}));
 
+		assert.strictEqual(postCompositionEnterNotPrevented, false);
 		assert.strictEqual(vi.mocked(misskeyApi).mock.calls.length, 0);
 		assert.strictEqual(textarea.value, 'pin');
 
@@ -304,6 +314,25 @@ describe('chat room form', () => {
 
 		request.resolve(createMessage('pin'));
 		await flushPromises();
+	});
+
+	test('does not keep the IME guard after composition ends without Enter', async () => {
+		preferState['chat.sendOnEnter'] = true;
+		vi.mocked(misskeyApi).mockResolvedValueOnce(createMessage('candidate') as never);
+		const form = renderForm();
+		const textarea = form.container.querySelector<HTMLTextAreaElement>('textarea');
+		assert.exists(textarea);
+
+		await fireEvent.update(textarea, 'candidate');
+		await fireEvent.compositionStart(textarea);
+		await fireEvent.compositionEnd(textarea);
+		await waitImeGuard();
+		await fireEvent.keyDown(textarea, { key: 'Enter' });
+		await flushPromises();
+
+		assert.strictEqual(vi.mocked(misskeyApi).mock.calls.length, 1);
+		const createPayload = vi.mocked(misskeyApi).mock.calls[0]![1] as { text?: string };
+		assert.strictEqual(createPayload.text, 'candidate');
 	});
 
 	test('keeps Shift+Enter as a native multiline edit instead of sending', async () => {
