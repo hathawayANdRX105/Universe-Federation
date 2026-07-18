@@ -42,7 +42,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
 
-			await this.chatService.muteRoom(me.id, ps.roomId, ps.mute);
+			await this.chatService.muteRoom(me.id, ps.roomId, ps.mute).catch(() => {
+				throw new ApiError(meta.errors.noSuchRoom);
+			});
 		});
 	}
 }
