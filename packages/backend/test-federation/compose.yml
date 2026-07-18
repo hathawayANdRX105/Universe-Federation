@@ -43,12 +43,12 @@ services:
         target: /misskey/packages/backend/test-federation/test
         read_only: true
       - type: bind
-        source: ../jest.config.cjs
-        target: /misskey/packages/backend/jest.config.cjs
+        source: ../jest.config.common.ts
+        target: /misskey/packages/backend/jest.config.common.ts
         read_only: true
       - type: bind
-        source: ../jest.config.fed.cjs
-        target: /misskey/packages/backend/jest.config.fed.cjs
+        source: ../jest.config.fed.ts
+        target: /misskey/packages/backend/jest.config.fed.ts
         read_only: true
       - type: bind
         source: ../jest.js
@@ -86,8 +86,7 @@ services:
         pnpm -F backend i --frozen-lockfile
         exec "$0" "$@"
       '
-    command: pnpm -F backend test:fed
-
+    command: pnpm -F backend jest:fed
   daemon:
     image: node:${NODE_VERSION}
     depends_on:

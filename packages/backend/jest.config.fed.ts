@@ -5,8 +5,11 @@
 
 import base from './jest.config.common.ts';
 
-module.exports = {
+export default {
 	...base,
+	roots: [
+		'<rootDir>/test-federation',
+	],
 	testMatch: [
 		'<rootDir>/test-federation/test/**/*.test.ts',
 	],
