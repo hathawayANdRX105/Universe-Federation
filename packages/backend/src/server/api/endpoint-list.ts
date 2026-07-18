@@ -188,6 +188,7 @@ export * as 'ai/conversations/list' from './endpoints/ai/conversations/list.js';
 export * as 'ai/conversations/show' from './endpoints/ai/conversations/show.js';
 export * as 'ai/conversations/update' from './endpoints/ai/conversations/update.js';
 export * as 'ai/messages/delete' from './endpoints/ai/messages/delete.js';
+export * as 'ai/messages/delete-from' from './endpoints/ai/messages/delete-from.js';
 export * as 'ai/messages/list' from './endpoints/ai/messages/list.js';
 export * as 'ai/status' from './endpoints/ai/status.js';
 export * as 'announcements' from './endpoints/announcements.js';

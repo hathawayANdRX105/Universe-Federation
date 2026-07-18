@@ -695,10 +695,7 @@ async function regenerateFrom(message: AiMessage) {
 	const userMessage = [...messages.value.slice(0, index)].reverse().find(item => item.role === 'user');
 	if (!userMessage?.content) return;
 
-	const tail = messages.value.slice(index).filter(item => !isTemp(item));
-	for (const item of tail) {
-		await misskeyApi('ai/messages/delete', { messageId: item.id });
-	}
+	await misskeyApi('ai/messages/delete-from', { messageId: message.id });
 	messages.value = messages.value.slice(0, index);
 	draft.value = userMessage.content;
 	await nextTick();
@@ -716,10 +713,7 @@ async function editMessage(message: AiMessage) {
 
 	// Delete this message and everything after it on the server, then resend.
 	const index = messages.value.findIndex(item => item.id === message.id);
-	const tail = messages.value.slice(index).filter(item => !isTemp(item));
-	for (const item of tail) {
-		await misskeyApi('ai/messages/delete', { messageId: item.id });
-	}
+	await misskeyApi('ai/messages/delete-from', { messageId: message.id });
 	messages.value = messages.value.slice(0, index);
 	draft.value = result;
 	await nextTick();

@@ -26,9 +26,11 @@ describe('ai page layout', () => {
 		assert.match(aiSource, /\.textarea\s*\{[\s\S]*height:\s*calc\(1\.5em \* 3 \+ 18px\);[\s\S]*min-height:\s*calc\(1\.5em \* 3 \+ 18px\);[\s\S]*max-height:\s*calc\(1\.5em \* 3 \+ 18px\);[\s\S]*overflow-y:\s*auto;/);
 	});
 	test('regenerates by replacing the old assistant response instead of appending another branch', () => {
-		assert.match(aiSource, /async function regenerateFrom\(message: AiMessage\)/);
-		assert.match(aiSource, /const tail = messages\.value\.slice\(index\)\.filter\(item => !isTemp\(item\)\);/);
-		assert.match(aiSource, /for \(const item of tail\) \{[\s\S]*await misskeyApi\('ai\/messages\/delete', \{ messageId: item\.id \}\);[\s\S]*\}/);
-		assert.match(aiSource, /messages\.value = messages\.value\.slice\(0, index\);[\s\S]*draft\.value = userMessage\.content;[\s\S]*await sendMessage\(\);/);
+		assert.match(aiSource, /async function regenerateFrom\(message: AiMessage\) \{[\s\S]*await misskeyApi\('ai\/messages\/delete-from', \{ messageId: message\.id \}\);[\s\S]*messages\.value = messages\.value\.slice\(0, index\);[\s\S]*draft\.value = userMessage\.content;[\s\S]*await sendMessage\(\);[\s\S]*\n\}/);
+		assert.notMatch(aiSource, /for \(const item of tail\) \{[\s\S]*await misskeyApi\('ai\/messages\/delete'/);
+	});
+
+	test('edits history by replacing the branch in one server request', () => {
+		assert.match(aiSource, /async function editMessage\(message: AiMessage\) \{[\s\S]*await misskeyApi\('ai\/messages\/delete-from', \{ messageId: message\.id \}\);[\s\S]*messages\.value = messages\.value\.slice\(0, index\);[\s\S]*draft\.value = result;[\s\S]*await sendMessage\(\);[\s\S]*\n\}/);
 	});
 });

@@ -84,9 +84,19 @@ describe('AiService', () => {
 					return a.id.localeCompare(b.id) * idDirection;
 				})
 				.slice(skip, take === undefined ? undefined : skip + take)),
+			findOneBy: jest.fn(async ({ id, userId }: { id: string; userId: string }) => {
+				const message = messages.find(item => item.id === id);
+				return message?.userId === userId ? message : null;
+			}),
 			insertOne: jest.fn(async (message: any) => {
 				messages.push(message);
 				return message;
+			}),
+			delete: jest.fn(async (ids: string | string[]) => {
+				const targetIds = new Set(Array.isArray(ids) ? ids : [ids]);
+				for (let i = messages.length - 1; i >= 0; i--) {
+					if (targetIds.has(messages[i].id)) messages.splice(i, 1);
+				}
 			}),
 		};
 		const metaService = {
@@ -303,6 +313,45 @@ describe('AiService', () => {
 		const page = await Reflect.apply(service.listMessages, service, ['user1', 'conversation1', { limit: 2, offset: 1 }]);
 
 		expect(page.map((message: any) => message.id)).toEqual(['message2', 'message3']);
+	});
+
+	it('deletes a message branch with one repository delete', async () => {
+		const { service, conversations, messages, aiMessagesRepository } = createService();
+		conversations.set('conversation1', {
+			id: 'conversation1',
+			userId: 'user1',
+			title: 'Chat',
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			systemPrompt: null,
+			createdAt: new Date(0),
+			updatedAt: new Date(0),
+		});
+		conversations.set('conversation2', {
+			id: 'conversation2',
+			userId: 'user1',
+			title: 'Other chat',
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			systemPrompt: null,
+			createdAt: new Date(0),
+			updatedAt: new Date(0),
+		});
+
+		messages.push(
+			{ id: 'message1', conversationId: 'conversation1', userId: 'user1', role: 'user', content: 'One', attachments: [], usage: null, error: null, createdAt: new Date(1) },
+			{ id: 'message2', conversationId: 'conversation1', userId: 'user1', role: 'assistant', content: 'Two', attachments: [], usage: null, error: null, createdAt: new Date(2) },
+			{ id: 'message3', conversationId: 'conversation1', userId: 'user1', role: 'user', content: 'Three', attachments: [], usage: null, error: null, createdAt: new Date(3) },
+			{ id: 'message4', conversationId: 'conversation1', userId: 'user1', role: 'assistant', content: 'Four', attachments: [], usage: null, error: null, createdAt: new Date(4) },
+			{ id: 'other-conversation-message', conversationId: 'conversation2', userId: 'user1', role: 'user', content: 'Other conversation', attachments: [], usage: null, error: null, createdAt: new Date(5) },
+			{ id: 'other-user-message', conversationId: 'conversation1', userId: 'user2', role: 'user', content: 'Other user', attachments: [], usage: null, error: null, createdAt: new Date(6) },
+		);
+
+		await Reflect.apply((service as any).deleteMessageBranch, service, ['user1', 'message2']);
+
+		expect(aiMessagesRepository.delete).toHaveBeenCalledTimes(1);
+		expect(aiMessagesRepository.delete).toHaveBeenCalledWith(['message2', 'message3', 'message4']);
+		expect(messages.map(message => message.id)).toEqual(['message1', 'other-conversation-message', 'other-user-message']);
 	});
 
 	it('saves user and assistant messages from a streaming response', async () => {

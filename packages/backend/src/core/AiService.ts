@@ -525,6 +525,28 @@ export class AiService {
 		await this.aiMessagesRepository.delete(message.id);
 	}
 
+	/** Deletes the selected message and all later messages in the same owned conversation. */
+	@bindThis
+	public async deleteMessageBranch(userId: MiUser['id'], messageId: MiAiMessage['id']): Promise<void> {
+		const message = await this.aiMessagesRepository.findOneBy({
+			id: messageId,
+			userId,
+		});
+		if (message == null) throw new AiServiceError('NO_SUCH_MESSAGE', 'No such message.', 404);
+
+		const messages = await this.aiMessagesRepository.find({
+			where: {
+				conversationId: message.conversationId,
+				userId,
+			},
+			order: { createdAt: 'ASC', id: 'ASC' },
+		});
+		const index = messages.findIndex(item => item.id === message.id);
+		if (index === -1) throw new AiServiceError('NO_SUCH_MESSAGE', 'No such message.', 404);
+
+		await this.aiMessagesRepository.delete(messages.slice(index).map(item => item.id));
+	}
+
 	@bindThis
 	public async streamChat(params: StreamChatParams): Promise<AiChatResult> {
 		const content = this.trimText(params.content, MAX_AI_USER_CONTENT_LENGTH, '');
