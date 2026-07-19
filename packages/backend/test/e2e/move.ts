@@ -35,7 +35,8 @@ describe('Account Move', () => {
 
 		const config = loadConfig();
 		url = new URL(config.url);
-		const connection = await initTestDb(false);
+		// justBorrow: suite must not dropSchema while the e2e server process is live (wipes MiMeta).
+		const connection = await initTestDb(true);
 		root = await ensureRoot();
 		alice = await signup({ username: 'alice' });
 		bob = await signup({ username: 'bob' });

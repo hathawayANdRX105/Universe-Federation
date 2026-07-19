@@ -66,7 +66,10 @@ describe('Mute', () => {
 			const bobNote = await post(bob, { text: 'hi' });
 			const carolNote = await post(carol, { text: 'hi' });
 
-			const res = await api('notes/local-timeline', {}, alice);
+			// fanout redis settle
+			await new Promise(r => setTimeout(r, 500));
+
+			const res = await api('notes/local-timeline', { limit: 100 }, alice);
 
 			assert.strictEqual(res.status, 200);
 			assert.strictEqual(Array.isArray(res.body), true);
@@ -82,7 +85,9 @@ describe('Mute', () => {
 				renoteId: carolNote.id,
 			});
 
-			const res = await api('notes/local-timeline', {}, alice);
+			await new Promise(r => setTimeout(r, 500));
+
+			const res = await api('notes/local-timeline', { limit: 100 }, alice);
 
 			assert.strictEqual(res.status, 200);
 			assert.strictEqual(Array.isArray(res.body), true);

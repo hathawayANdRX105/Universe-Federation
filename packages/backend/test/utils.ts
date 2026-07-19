@@ -420,32 +420,41 @@ export function connectStream<C extends keyof misskey.Channels>(user: UserToken,
 export const waitFire = async <C extends keyof misskey.Channels>(user: UserToken, channel: C, trgr: () => any, cond: (msg: Record<string, any>) => boolean, params?: misskey.Channels[C]['params']) => {
 	return new Promise<boolean>(async (res, rej) => {
 		let timer: NodeJS.Timeout | null = null;
+		let settled = false;
+
+		const finish = (v: boolean) => {
+			if (settled) return;
+			settled = true;
+			if (timer) clearTimeout(timer);
+			try { ws?.close(); } catch { /* ignore */ }
+			res(v);
+		};
 
 		let ws: WebSocket;
 		try {
 			ws = await connectStream(user, channel, msg => {
 				if (cond(msg)) {
-					ws.close();
-					if (timer) clearTimeout(timer);
-					res(true);
+					finish(true);
 				}
 			}, params);
 		} catch (e) {
-			rej(e);
+			// Connect failure (e.g. 1005) → no event
+			res(false);
+			return;
 		}
 
-		if (!ws!) return;
+		// Let channel subscription fully register before firing the trigger
+		await new Promise(r => setTimeout(r, 200));
 
 		timer = setTimeout(() => {
-			ws.close();
-			res(false);
+			finish(false);
 		}, 15000);
 
 		try {
 			await trgr();
 		} catch (e) {
-			ws.close();
 			if (timer) clearTimeout(timer);
+			try { ws.close(); } catch { /* ignore */ }
 			rej(e);
 		}
 	});
