@@ -3,9 +3,11 @@ name: CI - PR Gate
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
 
 concurrency:
-  group: ci-pr-gate-${{ github.event.pull_request.number }}
+  group: ci-pr-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
