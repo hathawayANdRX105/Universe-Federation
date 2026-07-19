@@ -11,7 +11,7 @@ import { setTimeout } from 'node:timers/promises';
 import { Redis } from 'ioredis';
 import type { INestApplicationContext } from '@nestjs/common';
 import type * as misskey from 'misskey-js';
-import { api, post, randomString, sendEnvUpdateRequest, signup, startJobQueue, uploadFile, withNotesCount, initTestDb } from '../utils.js';
+import { api, post, randomString, sendEnvUpdateRequest, signup, startJobQueue, stopAllJobQueues, uploadFile, withNotesCount, initTestDb } from '../utils.js';
 import { loadConfig } from '@/config.js';
 import { MiInstance } from '@/models/Instance.js';
 import { MiNote } from '@/models/Note.js';
@@ -160,8 +160,9 @@ describe('Timelines', () => {
 		redisForTimelines = new Redis(loadConfig().redisForTimelines);
 	});
 
-	afterAll(() => {
+	afterAll(async () => {
 		redisForTimelines.disconnect();
+		await stopAllJobQueues();
 	});
 
 	describe('Home TL', () => {

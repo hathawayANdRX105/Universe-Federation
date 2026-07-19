@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { initTestDb, port, sendEnvResetRequest } from './utils.js';
+import { initTestDb, port, sendEnvResetRequest, stopAllJobQueues } from './utils.js';
 
-// Jest process only: startJobQueue Nest must not drop/sync the shared DB.
+// Jest process only: secondary Nest must not drop/sync the shared DB.
 process.env.MK_TEST_KEEP_SCHEMA = '1';
 
 async function stopTestServer() {
@@ -20,10 +20,12 @@ async function stopTestServer() {
 }
 
 beforeAll(async () => {
-	// Nest must be stopped before dropSchema (open TypeORM connections race the wipe).
+	// Close queue Nest left by previous suite (holds DB connections).
+	await stopAllJobQueues();
+	// Nest server must be stopped before dropSchema.
 	await stopTestServer();
 	const db = await initTestDb(false);
 	await db.destroy();
-	// Server process env-reset clears MK_TEST_KEEP_SCHEMA and full-drops+syncs on boot.
+	// Server process clears KEEP and full-drops on boot.
 	await sendEnvResetRequest();
 }, 1000 * 60 * 2);

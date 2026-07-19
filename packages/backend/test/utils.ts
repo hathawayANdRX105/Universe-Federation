@@ -22,12 +22,31 @@ import { DEFAULT_POLICIES } from '@/core/RoleService.js';
 import { validateContentTypeSetAsActivityPub } from '@/core/activitypub/misc/validator.js';
 import { ApiError } from '@/server/api/error.js';
 import { server as _startServer, jobQueue as _startJobQueue } from '@/boot/common.js';
+import type { INestApplicationContext } from '@nestjs/common';
 export const startServer = _startServer;
-/** Start queue processors in the test process without dropSchema (shared test DB). */
+
+// Secondary Nest apps (queue processors) opened in the Jest process.
+// Must be closed before schema drops or they race the live e2e DB.
+const openJobQueues: INestApplicationContext[] = [];
+
+/** Start queue processors without dropSchema/synchronize (shared test DB). */
 export async function startJobQueue() {
-	// Secondary Nest app in the Jest process must never drop the live e2e schema.
 	process.env.MK_TEST_KEEP_SCHEMA = '1';
-	return await _startJobQueue();
+	const app = await _startJobQueue();
+	openJobQueues.push(app);
+	return app;
+}
+
+/** Close every startJobQueue() app still open in this process. */
+export async function stopAllJobQueues() {
+	while (openJobQueues.length > 0) {
+		const app = openJobQueues.pop()!;
+		try {
+			await app.close();
+		} catch (e) {
+			console.warn('stopAllJobQueues close failed', e);
+		}
+	}
 }
 
 
