@@ -34,6 +34,10 @@ export const paramDef = {
 	required: ['roomId', 'mute'],
 } as const;
 
+function isRoomNotFoundError(error: unknown): boolean {
+	return error instanceof Error && error.name === 'EntityNotFoundError';
+}
+
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
@@ -42,7 +46,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
 
-			await this.chatService.muteRoom(me.id, ps.roomId, ps.mute);
+			try {
+				await this.chatService.muteRoom(me.id, ps.roomId, ps.mute);
+			} catch (error) {
+				if (isRoomNotFoundError(error)) throw new ApiError(meta.errors.noSuchRoom);
+				throw error;
+			}
 		});
 	}
 }
