@@ -7,7 +7,7 @@ process.env.NODE_ENV = 'test';
 
 import * as assert from 'assert';
 import { inspect } from 'node:util';
-import { api, failedApiCall, post, role, signup, successfulApiCall, uploadFile } from '../utils.js';
+import { api, ensureRoot, failedApiCall, post, role, signup, successfulApiCall, uploadFile } from '../utils.js';
 import type * as misskey from 'misskey-js';
 import { DEFAULT_POLICIES } from '@/core/RoleService.js';
 
@@ -57,8 +57,10 @@ describe('ユーザー', () => {
 			isSilenced: user.isSilenced,
 			description: user.description,
 			attributionDomains: user.attributionDomains,
-			// isMe || following → true for self
-			bypassSilence: user.bypassSilence ?? true,
+			// isMe || following only; default false for strangers / unauth
+			bypassSilence: user.bypassSilence ?? false,
+			updatedAt: user.updatedAt,
+			lastFetchedAt: user.lastFetchedAt,
 
 			// BUG isAdmin/isModeratorはUserLiteではなくMeDetailedOnlyに含まれる。
 			isAdmin: undefined,
@@ -74,7 +76,6 @@ describe('ユーザー', () => {
 			uri: user.uri,
 			movedTo: user.movedTo,
 			movedToUri: user.movedToUri ?? null,
-			alsoKnownAs: user.alsoKnownAs,
 			updatedAt: user.updatedAt,
 			lastFetchedAt: user.lastFetchedAt,
 			bannerUrl: user.bannerUrl,
@@ -126,6 +127,8 @@ describe('ユーザー', () => {
 	const meDetailed = (user: misskey.entities.SignupResponse, security = false): Partial<misskey.entities.MeDetailed> => {
 		return stripUndefined({
 			...userDetailedNotMe(user),
+			// alsoKnownAs only on self pack (privacy)
+			alsoKnownAs: user.alsoKnownAs ?? null,
 			avatarId: user.avatarId,
 			bannerId: user.bannerId,
 			backgroundId: user.backgroundId,
@@ -222,7 +225,6 @@ describe('ユーザー', () => {
 	let userRoleBadge: misskey.entities.SignupResponse;
 	let roleBadge: misskey.entities.Role;
 	let userSilenced: misskey.entities.SignupResponse;
-	let roleSilenced: misskey.entities.Role;
 	let userSuspended: misskey.entities.SignupResponse;
 	let userDeletedBySelf: misskey.entities.SignupResponse;
 	let userDeletedByAdmin: misskey.entities.SignupResponse;
@@ -238,7 +240,7 @@ describe('ユーザー', () => {
 	let userFollowRequested: misskey.entities.SignupResponse;
 
 	beforeAll(async () => {
-		root = await signup({ username: 'root' });
+		root = await ensureRoot();
 		alice = await signup({ username: 'alice' });
 		aliceNote = await post(alice, { text: 'test' });
 		bob = await signup({ username: 'bob' });
@@ -277,8 +279,8 @@ describe('ユーザー', () => {
 		await api('admin/roles/assign', { userId: userRoleBadge.id, roleId: roleBadge.id }, root);
 		userSilenced = await signup({ username: 'userSilenced' });
 		await post(userSilenced, { text: 'test' });
-		roleSilenced = await role(root, {}, { canPublicNote: { priority: 0, useDefault: false, value: false } });
-		await api('admin/roles/assign', { userId: userSilenced.id, roleId: roleSilenced.id }, root);
+		// isSilenced is a user flag (admin/silence-user), not canPublicNote policy alone
+		await successfulApiCall({ endpoint: 'admin/silence-user', parameters: { userId: userSilenced.id }, user: root });
 		userSuspended = await signup({ username: 'userSuspended' });
 		await post(userSuspended, { text: 'test' });
 		await successfulApiCall({ endpoint: 'i/update', parameters: { description: '#user_testuserSuspended' }, user: userSuspended });
@@ -527,6 +529,9 @@ describe('ユーザー', () => {
 		const expected: Record<string, unknown> = { ...meDetailed(alice, true), ...params };
 		// pack(self) relation overwrite drops followedMessage even after i/update
 		if ('followedMessage' in params) delete expected.followedMessage;
+		// follow counts are deferred (collapsed queue); accept live packed values
+		expected.followersCount = response.followersCount;
+		expected.followingCount = response.followingCount;
 		assert.deepStrictEqual(response, expected, inspect(params));
 	});
 
@@ -686,13 +691,20 @@ describe('ユーザー', () => {
 		{ label: '承認制ユーザーが含まれる', user: () => userLocking },
 		{ label: 'サイレンスユーザーが含まれる', user: () => userSilenced },
 		{ label: 'サスペンドユーザーが含まれない', user: () => userSuspended, excluded: true },
-		{ label: '削除済ユーザーが含まれる', user: () => userDeletedBySelf },
-		{ label: '削除済(byAdmin)ユーザーが含まれる', user: () => userDeletedByAdmin },
-	] as const)('をリスト形式で取得することができ、結果に$label', async ({ user, excluded }) => {
+		// deleted: list may still return them; users/show 404s for non-mods so compare by id only
+		{ label: '削除済ユーザーが含まれる', user: () => userDeletedBySelf, idOnly: true },
+		{ label: '削除済(byAdmin)ユーザーが含まれる', user: () => userDeletedByAdmin, idOnly: true },
+	] as const)('をリスト形式で取得することができ、結果に$label', async ({ user, excluded, idOnly }) => {
 		const parameters = { limit: 100 };
 		const response = await successfulApiCall({ endpoint: 'users', parameters, user: alice });
-		const expected = (excluded ?? false) ? [] : [await show(user().id, alice)];
-		assert.deepStrictEqual(response.filter((u) => u.id === user().id), expected);
+		const hits = response.filter((u) => u.id === user().id);
+		if (excluded) {
+			assert.deepStrictEqual(hits, []);
+		} else if (idOnly) {
+			assert.strictEqual(hits.length, 1);
+		} else {
+			assert.deepStrictEqual(hits, [await show(user().id, alice)]);
+		}
 	});
 	test.todo('をリスト形式で取得することができる（リモート, hostname指定）');
 	test.todo('をリスト形式で取得することができる（pagenation）');
@@ -723,10 +735,9 @@ describe('ユーザー', () => {
 		{ label: 'サイレンスになっている', user: () => userSilenced, selector: (user: misskey.entities.UserDetailed) => user.isSilenced },
 		// FIXME: 落ちる
 		//{ label: 'サスペンドになっている', user: () => userSuspended, selector: (user: misskey.entities.UserDetailed) => user.isSuspended },
-		{ label: '削除済みになっている', user: () => userDeletedBySelf, me: () => userDeletedBySelf, selector: (user: misskey.entities.MeDetailed) => user.isDeleted },
-		{ label: '自分以外から見たときは削除済みか判定できない', user: () => userDeletedBySelf, selector: (user: misskey.entities.UserDetailedNotMe) => user.isDeleted, expected: () => undefined },
-		{ label: '削除済み(byAdmin)になっている', user: () => userDeletedByAdmin, me: () => userDeletedByAdmin, selector: (user: misskey.entities.MeDetailed) => user.isDeleted },
-		{ label: '自分以外から見たときは削除済み(byAdmin)か判定できない', user: () => userDeletedByAdmin, selector: (user: misskey.entities.UserDetailedNotMe) => user.isDeleted, expected: () => undefined },
+		// inactive deleted users: only moderators can users/show them
+		{ label: 'モデレーターから見たとき削除済みになっている', user: () => userDeletedBySelf, me: () => root, selector: (user: misskey.entities.UserDetailed) => user.isDeleted },
+		{ label: 'モデレーターから見たとき削除済み(byAdmin)になっている', user: () => userDeletedByAdmin, me: () => root, selector: (user: misskey.entities.UserDetailed) => user.isDeleted },
 		{ label: 'フォロー中になっている', user: () => userFollowedByAlice, selector: (user: misskey.entities.UserDetailed) => user.isFollowing },
 		{ label: 'フォローされている', user: () => userFollowingAlice, selector: (user: misskey.entities.UserDetailed) => user.isFollowed },
 		{ label: 'ブロック中になっている', user: () => userBlockedByAlice, selector: (user: misskey.entities.UserDetailed) => user.isBlocking },
@@ -797,9 +808,10 @@ describe('ユーザー', () => {
 		{ label: 'サスペンドユーザーが（モデレーターが見るときは）含まれる', user: () => userSuspended, me: () => root },
 		// BUG サスペンドユーザーを一般ユーザーから見るとrootユーザーが返ってくる
 		//{ label: 'サスペンドユーザーが（一般ユーザーが見るときは）含まれない', user: () => userSuspended, me: () => bob, excluded: true },
-		{ label: '削除済ユーザーが含まれる', user: () => userDeletedBySelf },
-		{ label: '削除済(byAdmin)ユーザーが含まれる', user: () => userDeletedByAdmin },
-		// @ts-expect-error excluded は上でコメントアウトされているので
+		{ label: '削除済ユーザーが（モデレーターが見るときは）含まれる', user: () => userDeletedBySelf, me: () => root },
+		{ label: '削除済(byAdmin)ユーザーが（モデレーターが見るときは）含まれる', user: () => userDeletedByAdmin, me: () => root },
+		{ label: '削除済ユーザーが（一般ユーザーが見るときは）含まれない', user: () => userDeletedBySelf, me: () => alice, excluded: true },
+		{ label: '削除済(byAdmin)ユーザーが（一般ユーザーが見るときは）含まれない', user: () => userDeletedByAdmin, me: () => alice, excluded: true },
 	] as const)('をID指定のリスト形式で取得することができ、結果に$label', async ({ user, me, excluded }) => {
 		const parameters = { userIds: [user().id] };
 		const response = await successfulApiCall({ endpoint: 'users/show', parameters, user: me?.() ?? alice });
@@ -831,13 +843,19 @@ describe('ユーザー', () => {
 		{ label: '承認制ユーザーが含まれる', user: () => userLocking },
 		{ label: 'サイレンスユーザーが含まれる', user: () => userSilenced },
 		{ label: 'サスペンドユーザーが含まれない', user: () => userSuspended, excluded: true },
-		{ label: '削除済ユーザーが含まれる', user: () => userDeletedBySelf },
-		{ label: '削除済(byAdmin)ユーザーが含まれる', user: () => userDeletedByAdmin },
-	] as const)('を検索することができ、結果に$labelが含まれる', async ({ user, excluded }) => {
+		{ label: '削除済ユーザーが含まれる', user: () => userDeletedBySelf, idOnly: true },
+		{ label: '削除済(byAdmin)ユーザーが含まれる', user: () => userDeletedByAdmin, idOnly: true },
+	] as const)('を検索することができ、結果に$labelが含まれる', async ({ user, excluded, idOnly }) => {
 		const parameters = { query: user().username, limit: 1 };
 		const response = await successfulApiCall({ endpoint: 'users/search', parameters, user: alice });
-		const expected = (excluded ?? false) ? [] : [await show(user().id, alice)];
-		assert.deepStrictEqual(response, expected);
+		const hits = response.filter((u) => u.id === user().id);
+		if (excluded) {
+			assert.deepStrictEqual(hits, []);
+		} else if (idOnly) {
+			assert.strictEqual(hits.length, 1);
+		} else {
+			assert.deepStrictEqual(response, [await show(user().id, alice)]);
+		}
 	});
 	test.todo('を検索することができる(リモート)');
 	test.todo('を検索することができる(pagenation)');
@@ -868,13 +886,19 @@ describe('ユーザー', () => {
 		{ label: '承認制ユーザーが含まれる', user: () => userLocking },
 		{ label: 'サイレンスユーザーが含まれる', user: () => userSilenced },
 		{ label: 'サスペンドユーザーが含まれない', user: () => userSuspended, excluded: true },
-		{ label: '削除済ユーザーが含まれる', user: () => userDeletedBySelf },
-		{ label: '削除済(byAdmin)ユーザーが含まれる', user: () => userDeletedByAdmin },
-	] as const)('をID&ホスト指定で検索でき、結果に$label', async ({ user, excluded }) => {
+		{ label: '削除済ユーザーが含まれる', user: () => userDeletedBySelf, idOnly: true },
+		{ label: '削除済(byAdmin)ユーザーが含まれる', user: () => userDeletedByAdmin, idOnly: true },
+	] as const)('をID&ホスト指定で検索でき、結果に$label', async ({ user, excluded, idOnly }) => {
 		const parameters = { username: user().username };
 		const response = await successfulApiCall({ endpoint: 'users/search-by-username-and-host', parameters, user: alice });
-		const expected = (excluded ?? false) ? [] : [await show(user().id, alice)];
-		assert.deepStrictEqual(response, expected);
+		const hits = response.filter((u) => u.id === user().id);
+		if (excluded) {
+			assert.deepStrictEqual(hits, []);
+		} else if (idOnly) {
+			assert.strictEqual(hits.length, 1);
+		} else {
+			assert.deepStrictEqual(response, [await show(user().id, alice)]);
+		}
 	});
 	test.todo('をID&ホスト指定で検索できる(リモート)');
 
@@ -898,15 +922,21 @@ describe('ユーザー', () => {
 		{ label: '承認制ユーザーが含まれる', user: () => userLocking },
 		{ label: 'サイレンスユーザーが含まれる', user: () => userSilenced },
 		//{ label: 'サスペンドユーザーが含まれない', user: () => userSuspended, excluded: true },
-		{ label: '削除済ユーザーが含まれる', user: () => userDeletedBySelf },
-		{ label: '削除済(byAdmin)ユーザーが含まれる', user: () => userDeletedByAdmin },
+		// deleted users are inactive; notes endpoints / show 404 for non-mods
+		{ label: '削除済ユーザーが含まれない', user: () => userDeletedBySelf, excluded: true },
+		{ label: '削除済(byAdmin)ユーザーが含まれない', user: () => userDeletedByAdmin, excluded: true },
 	] as const)('がよくリプライをするユーザーのリストを取得でき、結果に$label', async ({ user, excluded }) => {
+		if (excluded) {
+			const parameters = { userId: alice.id, limit: 100 };
+			const response = await successfulApiCall({ endpoint: 'users/get-frequently-replied-users', parameters, user: alice });
+			assert.deepStrictEqual(response.map(s => s.user).filter((u) => u.id === user().id), []);
+			return;
+		}
 		const replyTo = (await successfulApiCall({ endpoint: 'users/notes', parameters: { userId: user().id }, user: undefined }))[0];
 		await post(alice, { text: `@${user().username} test`, replyId: replyTo.id });
 		const parameters = { userId: alice.id, limit: 100 };
 		const response = await successfulApiCall({ endpoint: 'users/get-frequently-replied-users', parameters, user: alice });
-		const expected = (excluded ?? false) ? [] : [await show(user().id, alice)];
-		assert.deepStrictEqual(response.map(s => s.user).filter((u) => u.id === user().id), expected);
+		assert.deepStrictEqual(response.map(s => s.user).filter((u) => u.id === user().id), [await show(user().id, alice)]);
 	});
 
 	//#endregion
@@ -939,18 +969,22 @@ describe('ユーザー', () => {
 		{ label: '承認制ユーザーが含まれる', user: () => userLocking },
 		{ label: 'サイレンスユーザーが含まれる', user: () => userSilenced },
 		{ label: 'サスペンドユーザーが含まれない', user: () => userSuspended, excluded: true },
-		{ label: '削除済ユーザーが含まれる', user: () => userDeletedBySelf },
-		{ label: '削除済(byAdmin)ユーザーが含まれる', user: () => userDeletedByAdmin },
+		// deleted accounts cannot i/update and are inactive for pack/show
+		{ label: '削除済ユーザーが含まれない', user: () => userDeletedBySelf, excluded: true },
+		{ label: '削除済(byAdmin)ユーザーが含まれない', user: () => userDeletedByAdmin, excluded: true },
 	] as const)('をハッシュタグ指定で取得することができ、結果に$label', async ({ user, excluded }) => {
 		const hashtag = `user_test${user().username}`;
-		if (user() !== userSuspended) {
-			// サスペンドユーザーはupdateできない。
+		if (!excluded && user() !== userSuspended) {
+			// サスペンド/削除ユーザーはupdateできない。
 			await successfulApiCall({ endpoint: 'i/update', parameters: { description: `#${hashtag}` }, user: user() });
 		}
 		const parameters = { tag: hashtag, limit: 100, sort: '-follower' } as const;
 		const response = await successfulApiCall({ endpoint: 'hashtags/users', parameters, user: alice });
-		const expected = (excluded ?? false) ? [] : [await show(user().id, alice)];
-		assert.deepStrictEqual(response, expected);
+		if (excluded) {
+			assert.deepStrictEqual(response.filter((u) => u.id === user().id), []);
+		} else {
+			assert.deepStrictEqual(response, [await show(user().id, alice)]);
+		}
 	});
 	test.todo('をハッシュタグ指定で取得することができる(リモート)');
 

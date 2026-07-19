@@ -629,6 +629,29 @@ export async function initTestDb(justBorrow = false, initEntities?: any[]) {
 	return db;
 }
 
+/** Resolve the instance root user for admin e2e calls (signup 'root' fails once preserved). */
+export async function ensureRoot(password = 'test'): Promise<misskey.entities.SignupResponse> {
+	const res = await api('signup', { username: 'root', password });
+	if (res.status === 200 && res.body != null && typeof res.body === 'object' && 'token' in res.body && typeof res.body.token === 'string') {
+		return res.body as misskey.entities.SignupResponse;
+	}
+
+	const db = await initTestDb(true);
+	try {
+		const rows: { id: string; username: string; token: string | null }[] = await db.query(
+			`SELECT u.id, u.username, u.token FROM meta m JOIN "user" u ON u.id = m."rootUserId" WHERE m.id = 'x'`,
+		);
+		const row = rows[0];
+		if (row?.token == null) {
+			throw new Error(`ensureRoot: no root token (signup status ${res.status})`);
+		}
+		const me = await successfulApiCall({ endpoint: 'i', parameters: {}, user: { id: row.id, token: row.token } });
+		return { ...me, token: row.token } as misskey.entities.SignupResponse;
+	} finally {
+		await db.destroy();
+	}
+}
+
 export async function sendEnvUpdateRequest(params: { key: string, value?: string }) {
 	const res = await fetch(
 		`http://localhost:${port + 1000}/env`,

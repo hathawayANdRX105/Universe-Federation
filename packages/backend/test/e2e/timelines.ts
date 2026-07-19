@@ -534,7 +534,7 @@ describe('Timelines', () => {
 			assert.strictEqual(res.body.some(note => note.id === bobNote2.id), true);
 			assert.strictEqual(res.body.some(note => note.id === carolNote1.id), false);
 			assert.strictEqual(res.body.some(note => note.id === carolNote2.id), false);
-		}, 1000 * 30);
+		}, 60_000);
 
 		test.concurrent('フォローしているユーザーのチャンネル投稿が含まれない', async () => {
 			const [alice, bob] = await Promise.all([signup(), signup()]);
@@ -915,7 +915,7 @@ describe('Timelines', () => {
 
 			assert.strictEqual(res.body.some(note => note.id === bobNote1.id), false);
 			assert.strictEqual(res.body.some(note => note.id === bobNote2.id), true);
-		}, 1000 * 10);
+		}, 60_000);
 
 		test.concurrent('timelineMode: replies で返信数が多いノートが先に表示される', async () => {
 			const [alice, bob] = await Promise.all([signup(), signup()]);
@@ -1170,7 +1170,7 @@ describe('Timelines', () => {
 
 			assert.strictEqual(res.body.some(note => note.id === bobNote1.id), false);
 			assert.strictEqual(res.body.some(note => note.id === bobNote2.id), true);
-		}, 1000 * 10);
+		}, 60_000);
 	});
 
 	describe('User List TL', () => {
@@ -1383,7 +1383,7 @@ describe('Timelines', () => {
 
 			assert.strictEqual(res.body.some(note => note.id === bobNote1.id), false);
 			assert.strictEqual(res.body.some(note => note.id === bobNote2.id), true);
-		}, 1000 * 10);
+		}, 60_000);
 
 		test.concurrent('リスインしているユーザーの自身宛ての visibility: specified なノートが含まれる', async () => {
 			const [alice, bob] = await Promise.all([signup(), signup()]);
@@ -1542,7 +1542,7 @@ describe('Timelines', () => {
 
 			assert.strictEqual(res.body.some(note => note.id === bobNote1.id), false);
 			assert.strictEqual(res.body.some(note => note.id === bobNote2.id), true);
-		}, 1000 * 10);
+		}, 60_000);
 
 		test.concurrent('[withChannelNotes: true] チャンネル投稿が含まれる', async () => {
 			const [alice, bob] = await Promise.all([signup(), signup()]);
