@@ -234,3 +234,5 @@ export const reversiUpdateKeys = [
 	'loopedBoard',
 	'timeLimitForEachTurn',
 ] as const satisfies (keyof Misskey.entities.ReversiGameDetailed)[];
+
+// path-scope smoke marker
