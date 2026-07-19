@@ -8,6 +8,10 @@ import MuteRoomEndpoint from '@/server/api/endpoints/chat/rooms/mute.js';
 import LeaveRoomEndpoint from '@/server/api/endpoints/chat/rooms/leave.js';
 import IgnoreRoomInvitationEndpoint from '@/server/api/endpoints/chat/rooms/invitations/ignore.js';
 
+function entityNotFoundError(): Error {
+	return Object.assign(new Error('not found'), { name: 'EntityNotFoundError' });
+}
+
 describe('chat room state endpoints', () => {
 	const me = { id: 'me' } as never;
 
@@ -21,7 +25,7 @@ describe('chat room state endpoints', () => {
 	test('mute maps missing room membership to no such room', async () => {
 		const chatService = createChatService({
 			muteRoom: jest.fn(async () => {
-				throw new Error('not a member');
+				throw entityNotFoundError();
 			}),
 		});
 		const endpoint = new MuteRoomEndpoint(chatService);
@@ -35,7 +39,7 @@ describe('chat room state endpoints', () => {
 	test('leave maps missing room membership to no such room', async () => {
 		const chatService = createChatService({
 			leaveRoom: jest.fn(async () => {
-				throw new Error('not a member');
+				throw entityNotFoundError();
 			}),
 		});
 		const endpoint = new LeaveRoomEndpoint(chatService);
@@ -49,7 +53,7 @@ describe('chat room state endpoints', () => {
 	test('ignore invitation maps missing invitation to no such room', async () => {
 		const chatService = createChatService({
 			ignoreRoomInvitation: jest.fn(async () => {
-				throw new Error('no invitation');
+				throw entityNotFoundError();
 			}),
 		});
 		const endpoint = new IgnoreRoomInvitationEndpoint(chatService);
@@ -58,5 +62,41 @@ describe('chat room state endpoints', () => {
 			code: 'NO_SUCH_ROOM',
 		});
 		expect(chatService.ignoreRoomInvitation).toHaveBeenCalledWith('me', 'room');
+	});
+
+	test('mute propagates internal failures', async () => {
+		const dbError = new Error('db down');
+		const chatService = createChatService({
+			muteRoom: jest.fn(async () => {
+				throw dbError;
+			}),
+		});
+		const endpoint = new MuteRoomEndpoint(chatService);
+
+		await expect(endpoint.exec({ roomId: 'room', mute: true }, me, null)).rejects.toBe(dbError);
+	});
+
+	test('leave propagates internal failures', async () => {
+		const dbError = new Error('db down');
+		const chatService = createChatService({
+			leaveRoom: jest.fn(async () => {
+				throw dbError;
+			}),
+		});
+		const endpoint = new LeaveRoomEndpoint(chatService);
+
+		await expect(endpoint.exec({ roomId: 'room' }, me, null)).rejects.toBe(dbError);
+	});
+
+	test('ignore invitation propagates internal failures', async () => {
+		const dbError = new Error('db down');
+		const chatService = createChatService({
+			ignoreRoomInvitation: jest.fn(async () => {
+				throw dbError;
+			}),
+		});
+		const endpoint = new IgnoreRoomInvitationEndpoint(chatService);
+
+		await expect(endpoint.exec({ roomId: 'room' }, me, null)).rejects.toBe(dbError);
 	});
 });
