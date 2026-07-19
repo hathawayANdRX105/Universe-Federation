@@ -10,14 +10,11 @@ import { WebSocket } from 'ws';
 import type { INestApplicationContext } from '@nestjs/common';
 import { MiFollowing } from '@/models/Following.js';
 import { MiInstance } from '@/models/Instance.js';
-import { api, createAppToken, initTestDb, port, post, signup, startJobQueue, waitFire } from '../utils.js';
+import { api, createAppToken, initTestDb, port, post, signup, waitFire } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
 describe('Streaming', () => {
 	let Followings: any;
-	// hold job-queue app so GC doesn't tear down workers mid-suite
-	let streamingJobQueue: INestApplicationContext | undefined;
-
 	const follow = async (follower: { id: string; host: string | null }, followee: { id: string; host: string | null }) => {
 		await Followings.save({
 			id: 'a',
@@ -111,11 +108,6 @@ describe('Streaming', () => {
 				userId: takumi.id,
 			}, chitose);
 
-			// Streaming fanout needs workers (pub/sub + job queue)
-			streamingJobQueue = await startJobQueue();
-			// Give Nest workers / redis subscribers a moment before first waitFire
-			await new Promise(r => setTimeout(r, 3000));
-			void streamingJobQueue;
 		}, 1000 * 60 * 2);
 
 		describe('Events', () => {
