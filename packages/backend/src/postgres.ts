@@ -370,8 +370,6 @@ export function createPostgresDataSource(config: Config, globalLogger?: MisskeyL
 			},
 		} : {}),
 		synchronize: envService.env.NODE_ENV === 'test',
-		// Unit tests rely on Nest dropSchema. E2e sets MK_TEST_KEEP_SCHEMA=1 after the
-		// first boot so env-reset restarts do not wipe under concurrent suites.
 		dropSchema: envService.env.NODE_ENV === 'test' && process.env.MK_TEST_KEEP_SCHEMA !== '1',
 		cache: config.db.disableCache === false && envService.env.NODE_ENV !== 'test' ? { // dbをcloseしても何故かredisのコネクションが内部的に残り続けるようで、テストの際に支障が出るため無効にする(キャッシュも含めてテストしたいため本当は有効にしたいが...)
 			type: 'ioredis',

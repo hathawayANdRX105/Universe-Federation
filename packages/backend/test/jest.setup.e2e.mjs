@@ -8,7 +8,8 @@ import { initTestDb, port, sendEnvResetRequest } from './utils.js';
 async function stopTestServer() {
 	const res = await fetch(`http://localhost:${port + 1000}/env-stop`, {
 		method: 'POST',
-		body: JSON.stringify({}),
+		headers: { 'Content-Type': 'application/json' },
+		body: '{}',
 	});
 	if (res.status !== 200) {
 		throw new Error(`env-stop failed status=${res.status}`);
@@ -16,11 +17,11 @@ async function stopTestServer() {
 }
 
 beforeAll(async () => {
-	// 1) Stop live Nest so dropSchema cannot race in-flight requests
+	// Critical order: Nest must be fully stopped before dropSchema.
+	// Dropping under a live Nest DataSource causes notes/create INTERNAL_ERROR.
 	await stopTestServer();
-	// 2) Drop+recreate schema on a dedicated connection
 	const db = await initTestDb(false);
 	await db.destroy();
-	// 3) Relaunch Nest with MK_TEST_KEEP_SCHEMA (no Nest dropSchema)
+	// Relaunch Nest with MK_TEST_KEEP_SCHEMA=1 (synchronize only; tables already exist).
 	await sendEnvResetRequest();
 }, 1000 * 60 * 2);

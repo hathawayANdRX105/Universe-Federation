@@ -15,29 +15,45 @@ process.env.NODE_ENV = 'test';
 
 let app: INestApplicationContext;
 let serverService: ServerService;
+let booted = false;
+
+async function bootApp(): Promise<void> {
+	app = await NestFactory.createApplicationContext(MainModule, {
+		logger: new NestLogger(),
+	});
+	app.enableShutdownHooks();
+	const config = app.get<Config>(DI.config);
+	await killTestServer(config);
+	console.log('starting application...');
+	serverService = app.get(ServerService);
+	await serverService.launch();
+	booted = true;
+}
+
+async function stopApp(): Promise<void> {
+	if (!booted) return;
+	booted = false;
+	try {
+		await serverService.dispose();
+	} catch (e) {
+		console.warn('serverService.dispose', e);
+	}
+	try {
+		await app.close();
+	} catch (e) {
+		console.warn('app.close', e);
+	}
+}
 
 /**
  * テスト用のサーバインスタンスを起動する
  */
 async function launch() {
-	app = await NestFactory.createApplicationContext(MainModule, {
-		logger: new NestLogger(),
-	});
-	app.enableShutdownHooks();
-
+	await bootApp();
 	const config = app.get<Config>(DI.config);
-
-	await killTestServer(config);
-
-	console.log('starting application...');
-
-	serverService = app.get(ServerService);
-	await serverService.launch();
-
 	await startControllerEndpoints(config);
 
-	// After first boot, keep schema across Nest restarts. Per-suite resets drop via
-	// initTestDb while Nest is stopped, then call /env-reset to relaunch.
+	// After first successful boot, external drops own schema reset; Nest relaunch must not dropSchema again.
 	process.env.MK_TEST_KEEP_SCHEMA = '1';
 
 	// ジョブキューは必要な時にテストコード側で起動する
@@ -46,11 +62,7 @@ async function launch() {
 	console.log('application initialized.');
 }
 
-/**
- * 既に重複したポートで待ち受けしているサーバがある場合はkillする
- */
 async function killTestServer(config: Config) {
-	//
 	try {
 		const pid = await portToPid(config.port);
 		if (pid) {
@@ -61,10 +73,6 @@ async function killTestServer(config: Config) {
 	}
 }
 
-/**
- * 別プロセスに切り離してしまったが故に出来なくなった環境変数の書き換え等を実現するためのエンドポイントを作る
- * @param config
- */
 async function startControllerEndpoints(config: Config) {
 	const port = config.port + 1000;
 	const fastify = Fastify();
@@ -76,49 +84,28 @@ async function startControllerEndpoints(config: Config) {
 			res.code(400).send({ success: false });
 			return;
 		}
-
 		process.env[key] = req.body['value'];
-
 		res.code(200).send({ success: true });
 	});
 
-	// Stop Nest without relaunch — caller may dropSchema safely then POST /env-reset.
+	// Fully stop Nest so a client can dropSchema without racing open connections.
 	fastify.post('/env-stop', async (_req, res) => {
-		try {
-			await serverService.dispose();
-			await app.close();
-		} catch (e) {
-			console.warn('env-stop dispose error', e);
-		}
+		await stopApp();
 		res.code(200).send({ success: true });
 	});
 
-	fastify.post<{ Body: { key?: string, value?: string } }>('/env-reset', async (req, res) => {
-		// Preserve MK_TEST_KEEP_SCHEMA across reset so relaunch does not dropSchema.
+	fastify.post('/env-reset', async (_req, res) => {
 		const keep = process.env.MK_TEST_KEEP_SCHEMA;
 		process.env = JSON.parse(originEnv);
 		process.env.NODE_ENV = 'test';
-		if (keep) process.env.MK_TEST_KEEP_SCHEMA = keep;
-		else process.env.MK_TEST_KEEP_SCHEMA = '1';
+		// Keep schema flag so relaunch synchronize-only after external drop.
+		process.env.MK_TEST_KEEP_SCHEMA = keep ?? '1';
 
-		try {
-			await serverService.dispose();
-			await app.close();
-		} catch {
-			// already stopped via /env-stop
-		}
-
+		await stopApp();
 		await killTestServer(config);
-
-		console.log('starting application...');
-
-		app = await NestFactory.createApplicationContext(MainModule, {
-			logger: new NestLogger(),
-		});
-		app.enableShutdownHooks();
-		serverService = app.get(ServerService);
-		await serverService.launch();
-
+		// brief settle for postgres connections
+		await new Promise(r => setTimeout(r, 200));
+		await bootApp();
 		res.code(200).send({ success: true });
 	});
 

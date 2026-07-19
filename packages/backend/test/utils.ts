@@ -160,7 +160,7 @@ export const post = async (user: UserToken, params: misskey.Endpoints['notes/cre
 	const res = await api('notes/create', params, user);
 	const created = (res.body as { createdNote?: misskey.entities.Note } | null)?.createdNote;
 	if (res.status !== 200 || created == null || typeof created.id !== 'string') {
-		throw new Error(`post failed status=${res.status} body=${inspect(res.body, { depth: 5 })}`);
+		throw new Error(`post failed status=${res.status} body=${inspect(res.body, { depth: 8, breakLength: 120 })}`);
 	}
 	return created;
 };
