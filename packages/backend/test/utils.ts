@@ -645,7 +645,7 @@ export async function ensureRoot(password = 'test'): Promise<misskey.entities.Si
 		if (row?.token == null) {
 			throw new Error(`ensureRoot: no root token (signup status ${res.status})`);
 		}
-		const me = await successfulApiCall({ endpoint: 'i', parameters: {}, user: { id: row.id, token: row.token } });
+		const me = await successfulApiCall({ endpoint: 'i', parameters: {}, user: { token: row.token } });
 		return { ...me, token: row.token } as misskey.entities.SignupResponse;
 	} finally {
 		await db.destroy();
