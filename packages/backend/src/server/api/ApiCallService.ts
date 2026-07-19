@@ -131,6 +131,10 @@ export class ApiCallService {
 				user: userId ?? '<unauthenticated>',
 				...data,
 			});
+			if (this.envService.env.NODE_ENV === 'test') {
+				// Ensure CI logs surface the real stack (Nest logger may drop structured fields).
+				console.error(message, err);
+			}
 
 			if (this.config.sentryForBackend) {
 				Sentry.captureMessage(`Internal error occurred in ${ep.name}: ${renderInlineError(err)}`, {
