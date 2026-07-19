@@ -19,6 +19,9 @@ on:
       - '.github/workflows/medium-tests.yml'
       - '.github/workflows/heavy-tests.yml'
       - '.github/workflows/pr-tests.yml'
+      - '.config/ci.yml'
+      - '.config/test-example.yml'
+      - '.config/cypress-devcontainer.yml'
   workflow_dispatch:
 
 concurrency:
