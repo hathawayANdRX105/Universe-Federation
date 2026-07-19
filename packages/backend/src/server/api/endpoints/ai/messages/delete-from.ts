@@ -11,16 +11,15 @@ export const meta = {
 	tags: ['ai'],
 
 	requireCredential: true,
-	kind: 'read:account',
+	kind: 'write:account',
 } as const;
 
 export const paramDef = {
 	type: 'object',
 	properties: {
-		limit: { type: 'integer', minimum: 1, maximum: 100, default: 100 },
-		offset: { type: 'integer', minimum: 0, default: 0 },
+		messageId: { type: 'string', format: 'misskey:id' },
 	},
-	required: [],
+	required: ['messageId'],
 } as const;
 
 @Injectable()
@@ -29,10 +28,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private readonly aiService: AiService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
-			return await this.aiService.listConversations(me.id, {
-				limit: ps.limit,
-				offset: ps.offset,
-			});
+			await this.aiService.deleteMessageBranch(me.id, ps.messageId);
 		});
 	}
 }

@@ -66,6 +66,11 @@ type StreamChatParams = {
 	onDelta?: (text: string) => void | Promise<void>;
 };
 
+type AiListOptions = {
+	limit?: number;
+	offset?: number;
+};
+
 const MAX_AI_ATTACHMENTS = 8;
 const MAX_AI_CONTEXT_MESSAGES = 100;
 const MAX_AI_MODELS = 100;
@@ -76,6 +81,9 @@ const MAX_AI_SYSTEM_PROMPT_LENGTH = 12000;
 const MAX_AI_TITLE_LENGTH = 256;
 const MAX_AI_SSE_BUFFER_LENGTH = 1024 * 1024;
 const MAX_AI_ASSISTANT_CONTENT_LENGTH = 200000;
+const MAX_AI_CONVERSATION_LIST_LIMIT = 100;
+const MAX_AI_MESSAGE_LIST_LIMIT = 500;
+const MAX_AI_LIST_OFFSET = 100000;
 
 export type PackedAiProvider = {
 	id: string;
@@ -433,11 +441,14 @@ export class AiService {
 	}
 
 	@bindThis
-	public async listConversations(userId: MiUser['id']): Promise<PackedAiConversation[]> {
+	public async listConversations(userId: MiUser['id'], options: AiListOptions = {}): Promise<PackedAiConversation[]> {
+		const limit = this.clampInt(options.limit, 1, MAX_AI_CONVERSATION_LIST_LIMIT, MAX_AI_CONVERSATION_LIST_LIMIT);
+		const offset = this.clampInt(options.offset, 0, MAX_AI_LIST_OFFSET, 0);
 		const conversations = await this.aiConversationsRepository.find({
 			where: { userId },
-			order: { updatedAt: 'DESC' },
-			take: 100,
+			order: { updatedAt: 'DESC', id: 'DESC' },
+			skip: offset,
+			take: limit,
 		});
 		return conversations.map(this.packConversation);
 	}
@@ -491,14 +502,17 @@ export class AiService {
 	}
 
 	@bindThis
-	public async listMessages(userId: MiUser['id'], conversationId: MiAiConversation['id']): Promise<PackedAiMessage[]> {
+	public async listMessages(userId: MiUser['id'], conversationId: MiAiConversation['id'], options: AiListOptions = {}): Promise<PackedAiMessage[]> {
+		const limit = this.clampInt(options.limit, 1, MAX_AI_MESSAGE_LIST_LIMIT, MAX_AI_MESSAGE_LIST_LIMIT);
+		const offset = this.clampInt(options.offset, 0, MAX_AI_LIST_OFFSET, 0);
 		await this.getOwnedConversation(userId, conversationId);
 		const messages = await this.aiMessagesRepository.find({
 			where: { conversationId, userId },
-			order: { createdAt: 'ASC', id: 'ASC' },
-			take: 500,
+			order: { createdAt: 'DESC', id: 'DESC' },
+			skip: offset,
+			take: limit,
 		});
-		return messages.map(this.packMessage);
+		return messages.reverse().map(this.packMessage);
 	}
 
 	@bindThis
@@ -511,6 +525,28 @@ export class AiService {
 		await this.aiMessagesRepository.delete(message.id);
 	}
 
+	/** Deletes the selected message and all later messages in the same owned conversation. */
+	@bindThis
+	public async deleteMessageBranch(userId: MiUser['id'], messageId: MiAiMessage['id']): Promise<void> {
+		const message = await this.aiMessagesRepository.findOneBy({
+			id: messageId,
+			userId,
+		});
+		if (message == null) throw new AiServiceError('NO_SUCH_MESSAGE', 'No such message.', 404);
+
+		const messages = await this.aiMessagesRepository.find({
+			where: {
+				conversationId: message.conversationId,
+				userId,
+			},
+			order: { createdAt: 'ASC', id: 'ASC' },
+		});
+		const index = messages.findIndex(item => item.id === message.id);
+		if (index === -1) throw new AiServiceError('NO_SUCH_MESSAGE', 'No such message.', 404);
+
+		await this.aiMessagesRepository.delete(messages.slice(index).map(item => item.id));
+	}
+
 	@bindThis
 	public async streamChat(params: StreamChatParams): Promise<AiChatResult> {
 		const content = this.trimText(params.content, MAX_AI_USER_CONTENT_LENGTH, '');
@@ -521,12 +557,14 @@ export class AiService {
 		let conversation: MiAiConversation;
 		let provider: MiAiProvider;
 		let model: string;
+		let attachments: MiAiMessage['attachments'];
 
 		if (params.conversationId) {
 			conversation = await this.getOwnedConversation(params.user.id, params.conversationId);
 			const resolved = await this.resolveProviderAndModel(params.providerId ?? conversation.providerId, params.model ?? conversation.model);
 			provider = resolved.provider;
 			model = resolved.model;
+			attachments = await this.resolveAttachments(params.user.id, params.fileIds ?? [], model);
 			if (provider.id !== conversation.providerId || model !== conversation.model) {
 				await this.aiConversationsRepository.update(conversation.id, {
 					providerId: provider.id,
@@ -536,6 +574,8 @@ export class AiService {
 				conversation = await this.getOwnedConversation(params.user.id, conversation.id);
 			}
 		} else {
+			const resolved = await this.resolveProviderAndModel(params.providerId, params.model);
+			attachments = await this.resolveAttachments(params.user.id, params.fileIds ?? [], resolved.model);
 			const created = await this.createConversation(params.user, {
 				providerId: params.providerId,
 				model: params.model,
@@ -546,7 +586,6 @@ export class AiService {
 			model = conversation.model;
 		}
 
-		const attachments = await this.resolveAttachments(params.user.id, params.fileIds ?? [], model);
 		const now = this.timeService.date;
 		const userMessage = await this.aiMessagesRepository.insertOne({
 			id: this.idService.gen(),
@@ -590,6 +629,11 @@ export class AiService {
 			conversation = await this.getOwnedConversation(params.user.id, conversation.id);
 		} catch (err) {
 			const savedAt = this.timeService.date;
+			// node-fetch reports caller-triggered request aborts as AbortError;
+			// internal timeouts must keep timeout wording.
+			const persistedError = params.abortSignal?.aborted && err instanceof Error && err.name === 'AbortError'
+				? new AiServiceError('STREAM_ABORTED', 'AI generation was stopped by the client.', 499)
+				: err;
 			assistantMessage = await this.aiMessagesRepository.insertOne({
 				id: this.idService.gen(),
 				conversationId: conversation.id,
@@ -598,7 +642,7 @@ export class AiService {
 				content: assistantContent,
 				attachments: [],
 				usage: null,
-				error: this.sanitizeError(err),
+				error: this.sanitizeError(persistedError),
 				createdAt: savedAt,
 			});
 			await this.aiConversationsRepository.update(conversation.id, {
@@ -884,6 +928,7 @@ export class AiService {
 			}),
 			timeout: provider.timeoutMs,
 			size: 1024 * 1024 * 8,
+			signal: abortSignal,
 		}, {
 			throwErrorWhenResponseNotOk: false,
 			validators: [],

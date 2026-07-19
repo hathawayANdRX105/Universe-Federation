@@ -46,7 +46,17 @@ describe('AiService', () => {
 			}),
 		};
 		const aiConversationsRepository = {
-			find: jest.fn(async ({ where }: any) => Array.from(conversations.values()).filter(conversation => conversation.userId === where.userId)),
+			find: jest.fn(async ({ where, order, skip = 0, take }: any) => Array.from(conversations.values())
+				.filter(conversation => conversation.userId === where.userId)
+				.slice()
+				.sort((a, b) => {
+					const updatedAtDirection = order?.updatedAt === 'ASC' ? 1 : -1;
+					const updatedAtCompare = (a.updatedAt.getTime() - b.updatedAt.getTime()) * updatedAtDirection;
+					if (updatedAtCompare !== 0) return updatedAtCompare;
+					const idDirection = order?.id === 'ASC' ? 1 : -1;
+					return a.id.localeCompare(b.id) * idDirection;
+				})
+				.slice(skip, take === undefined ? undefined : skip + take)),
 			findOneBy: jest.fn(async ({ id, userId }: { id: string; userId: string }) => {
 				const conversation = conversations.get(id);
 				return conversation?.userId === userId ? conversation : null;
@@ -63,14 +73,30 @@ describe('AiService', () => {
 			}),
 		};
 		const aiMessagesRepository = {
-			find: jest.fn(async ({ where, take }: any) => messages
+			find: jest.fn(async ({ where, order, skip = 0, take }: any) => messages
 				.filter(message => message.conversationId === where.conversationId && message.userId === where.userId)
 				.slice()
-				.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
-				.slice(0, take)),
+				.sort((a, b) => {
+					const createdAtDirection = order?.createdAt === 'DESC' ? -1 : 1;
+					const createdAtCompare = (a.createdAt.getTime() - b.createdAt.getTime()) * createdAtDirection;
+					if (createdAtCompare !== 0) return createdAtCompare;
+					const idDirection = order?.id === 'DESC' ? -1 : 1;
+					return a.id.localeCompare(b.id) * idDirection;
+				})
+				.slice(skip, take === undefined ? undefined : skip + take)),
+			findOneBy: jest.fn(async ({ id, userId }: { id: string; userId: string }) => {
+				const message = messages.find(item => item.id === id);
+				return message?.userId === userId ? message : null;
+			}),
 			insertOne: jest.fn(async (message: any) => {
 				messages.push(message);
 				return message;
+			}),
+			delete: jest.fn(async (ids: string | string[]) => {
+				const targetIds = new Set(Array.isArray(ids) ? ids : [ids]);
+				for (let i = messages.length - 1; i >= 0; i--) {
+					if (targetIds.has(messages[i].id)) messages.splice(i, 1);
+				}
 			}),
 		};
 		const metaService = {
@@ -226,6 +252,107 @@ describe('AiService', () => {
 			providers: [expect.objectContaining({ id: 'provider2' })],
 		});
 	});
+	it('paginates conversations by updated time', async () => {
+		const { service, conversations } = createService();
+
+		for (let i = 1; i <= 3; i++) {
+			conversations.set(`conversation${i}`, {
+				id: `conversation${i}`,
+				userId: 'user1',
+				title: `Chat ${i}`,
+				providerId: 'provider1',
+				model: 'gpt-4o',
+				systemPrompt: null,
+				createdAt: new Date(i),
+				updatedAt: new Date(i),
+			});
+		}
+		conversations.set('other-user-conversation', {
+			id: 'other-user-conversation',
+			userId: 'user2',
+			title: 'Other chat',
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			systemPrompt: null,
+			createdAt: new Date(4),
+			updatedAt: new Date(4),
+		});
+
+		const page = await Reflect.apply(service.listConversations, service, ['user1', { limit: 1, offset: 1 }]);
+
+		expect(page.map((conversation: any) => conversation.id)).toEqual(['conversation2']);
+	});
+
+	it('paginates messages in chronological order', async () => {
+		const { service, conversations, messages } = createService();
+		conversations.set('conversation1', {
+			id: 'conversation1',
+			userId: 'user1',
+			title: 'Chat',
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			systemPrompt: null,
+			createdAt: new Date(0),
+			updatedAt: new Date(0),
+		});
+
+		for (let i = 1; i <= 4; i++) {
+			messages.push({
+				id: `message${i}`,
+				conversationId: 'conversation1',
+				userId: 'user1',
+				role: i % 2 === 0 ? 'assistant' : 'user',
+				content: `Message ${i}`,
+				attachments: [],
+				usage: null,
+				error: null,
+				createdAt: new Date(i),
+			});
+		}
+
+		const page = await Reflect.apply(service.listMessages, service, ['user1', 'conversation1', { limit: 2, offset: 1 }]);
+
+		expect(page.map((message: any) => message.id)).toEqual(['message2', 'message3']);
+	});
+
+	it('deletes a message branch with one repository delete', async () => {
+		const { service, conversations, messages, aiMessagesRepository } = createService();
+		conversations.set('conversation1', {
+			id: 'conversation1',
+			userId: 'user1',
+			title: 'Chat',
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			systemPrompt: null,
+			createdAt: new Date(0),
+			updatedAt: new Date(0),
+		});
+		conversations.set('conversation2', {
+			id: 'conversation2',
+			userId: 'user1',
+			title: 'Other chat',
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			systemPrompt: null,
+			createdAt: new Date(0),
+			updatedAt: new Date(0),
+		});
+
+		messages.push(
+			{ id: 'message1', conversationId: 'conversation1', userId: 'user1', role: 'user', content: 'One', attachments: [], usage: null, error: null, createdAt: new Date(1) },
+			{ id: 'message2', conversationId: 'conversation1', userId: 'user1', role: 'assistant', content: 'Two', attachments: [], usage: null, error: null, createdAt: new Date(2) },
+			{ id: 'message3', conversationId: 'conversation1', userId: 'user1', role: 'user', content: 'Three', attachments: [], usage: null, error: null, createdAt: new Date(3) },
+			{ id: 'message4', conversationId: 'conversation1', userId: 'user1', role: 'assistant', content: 'Four', attachments: [], usage: null, error: null, createdAt: new Date(4) },
+			{ id: 'other-conversation-message', conversationId: 'conversation2', userId: 'user1', role: 'user', content: 'Other conversation', attachments: [], usage: null, error: null, createdAt: new Date(5) },
+			{ id: 'other-user-message', conversationId: 'conversation1', userId: 'user2', role: 'user', content: 'Other user', attachments: [], usage: null, error: null, createdAt: new Date(6) },
+		);
+
+		await Reflect.apply((service as any).deleteMessageBranch, service, ['user1', 'message2']);
+
+		expect(aiMessagesRepository.delete).toHaveBeenCalledTimes(1);
+		expect(aiMessagesRepository.delete).toHaveBeenCalledWith(['message2', 'message3', 'message4']);
+		expect(messages.map(message => message.id)).toEqual(['message1', 'other-conversation-message', 'other-user-message']);
+	});
 
 	it('saves user and assistant messages from a streaming response', async () => {
 		const { service, providers, messages, httpRequestService } = createService();
@@ -264,6 +391,57 @@ describe('AiService', () => {
 		}), expect.anything());
 	});
 
+	it('passes the caller abort signal to provider chat requests', async () => {
+		const { service, providers, httpRequestService } = createService();
+		providers.set('provider1', createProvider());
+		const abortController = new AbortController();
+		httpRequestService.send.mockResolvedValue({
+			ok: true,
+			headers: {
+				get: () => 'text/event-stream',
+			},
+			body: (async function* () {
+				yield Buffer.from('data: [DONE]\n\n');
+			})(),
+		} as never);
+
+		await service.streamChat({
+			user: { id: 'user1' } as never,
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			content: 'Hi',
+			abortSignal: abortController.signal,
+		});
+
+		expect(httpRequestService.send).toHaveBeenCalledWith('https://ai.example/v1/chat/completions', expect.objectContaining({
+			signal: abortController.signal,
+		}), expect.anything());
+	});
+
+	it('saves client-stopped provider aborts with stopped generation wording', async () => {
+		const { service, providers, messages, httpRequestService } = createService();
+		providers.set('provider1', createProvider());
+		const abortController = new AbortController();
+		httpRequestService.send.mockImplementation(async () => {
+			abortController.abort();
+			const error = new Error('provider request aborted');
+			error.name = 'AbortError';
+			throw error;
+		});
+
+		await expect(service.streamChat({
+			user: { id: 'user1' } as never,
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			content: 'Hi',
+			abortSignal: abortController.signal,
+		})).rejects.toThrow('provider request aborted');
+
+		const assistant = messages.find(message => message.role === 'assistant');
+		expect(assistant?.error).toBe('AI generation was stopped by the client.');
+		expect(assistant?.error).not.toBe('Request timed out.');
+	});
+
 	it('rejects image attachments for non-vision models', async () => {
 		const { service, providers } = createService();
 		providers.set('provider1', createProvider({
@@ -297,6 +475,56 @@ describe('AiService', () => {
 			code: 'TOO_MANY_ATTACHMENTS',
 		});
 		expect(driveFilesRepository.find).not.toHaveBeenCalled();
+	});
+
+	it('does not leave an empty conversation when a new chat references a missing attachment', async () => {
+		const { service, providers, conversations, messages } = createService();
+		providers.set('provider1', createProvider());
+
+		await expect(service.streamChat({
+			user: { id: 'user1' } as never,
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			content: '',
+			fileIds: ['missing-file'],
+		})).rejects.toMatchObject({
+			code: 'NO_SUCH_FILE',
+		});
+
+		expect(messages).toHaveLength(0);
+		expect(conversations.size).toBe(0);
+	});
+	it('does not update an existing conversation model when attachments are invalid', async () => {
+		const { service, providers, conversations, messages } = createService();
+		providers.set('provider1', createProvider({
+			models: ['gpt-4o-mini', 'gpt-4o'],
+			defaultModel: 'gpt-4o-mini',
+			allowedModels: ['gpt-4o-mini', 'gpt-4o'],
+		}));
+		conversations.set('conversation1', {
+			id: 'conversation1',
+			userId: 'user1',
+			title: 'Chat',
+			providerId: 'provider1',
+			model: 'gpt-4o-mini',
+			systemPrompt: null,
+			createdAt: new Date(0),
+			updatedAt: new Date(0),
+		});
+
+		await expect(service.streamChat({
+			user: { id: 'user1' } as never,
+			conversationId: 'conversation1',
+			providerId: 'provider1',
+			model: 'gpt-4o',
+			content: '',
+			fileIds: ['missing-file'],
+		})).rejects.toMatchObject({
+			code: 'NO_SUCH_FILE',
+		});
+
+		expect(messages).toHaveLength(0);
+		expect(conversations.get('conversation1').model).toBe('gpt-4o-mini');
 	});
 
 	it('caps streaming response growth and redacts provider secrets in saved errors', async () => {

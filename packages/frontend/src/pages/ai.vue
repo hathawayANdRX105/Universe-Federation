@@ -31,6 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<i class="ti ti-dots"></i>
 						</button>
 					</button>
+					<MkButton v-if="conversationsHasMore" :class="$style.sidebarLoadMore" rounded :wait="conversationsLoadingMore" @click="loadMoreConversations"><i class="ti ti-chevron-down"></i> {{ i18n.ts.loadMore }}</MkButton>
 				</div>
 			</aside>
 
@@ -60,6 +61,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 
 				<div ref="messagesEl" :class="$style.messages">
+					<MkButton v-if="messagesHasMore && selectedConversationId" :class="$style.loadOlderMessages" rounded :wait="messagesLoadingMore" @click="loadMoreMessages"><i class="ti ti-chevron-up"></i> {{ i18n.ts.loadMore }}</MkButton>
 					<div v-if="displayMessages.length === 0" :class="$style.emptyState">
 						<i class="ti ti-sparkles"></i>
 						<div>{{ i18n.ts._ai.startConversation }}</div>
@@ -227,7 +229,11 @@ const status = ref<AiStatus>({
 	maxContextMessages: 20,
 });
 const conversations = ref<AiConversation[]>([]);
+const conversationsHasMore = ref(false);
+const conversationsLoadingMore = ref(false);
 const messages = ref<AiMessage[]>([]);
+const messagesHasMore = ref(false);
+const messagesLoadingMore = ref(false);
 const selectedConversationId = ref<string | null>(null);
 const selectedProviderId = ref<string | null>(null);
 const selectedModel = ref<string | null>(null);
@@ -243,6 +249,8 @@ const draftEl = ref<HTMLTextAreaElement | null>(null);
 
 const AI_MOBILE_BREAKPOINT = 850;
 const AI_STREAM_BUFFER_LIMIT = 1024 * 1024;
+const AI_CONVERSATIONS_PAGE_SIZE = 40;
+const AI_MESSAGES_PAGE_SIZE = 50;
 const isMobileLayout = ref(window.innerWidth <= AI_MOBILE_BREAKPOINT);
 
 const suggestions = computed(() => [
@@ -328,22 +336,97 @@ async function loadStatus() {
 	status.value = await misskeyApi<AiStatus>('ai/status');
 }
 
+function splitOverfetchPage<T>(items: T[], limit: number) {
+	return {
+		items: items.slice(0, limit),
+		hasMore: items.length > limit,
+	};
+}
+
+function splitAscendingOverfetchPage<T>(items: T[], limit: number) {
+	return {
+		items: items.slice(Math.max(items.length - limit, 0)),
+		hasMore: items.length > limit,
+	};
+}
+
+async function fetchConversationsPage(offset: number) {
+	return splitOverfetchPage(await misskeyApi<AiConversation[]>('ai/conversations/list', {
+		limit: AI_CONVERSATIONS_PAGE_SIZE + 1,
+		offset,
+	}), AI_CONVERSATIONS_PAGE_SIZE);
+}
+
 async function loadConversations() {
-	conversations.value = await misskeyApi<AiConversation[]>('ai/conversations/list');
+	const page = await fetchConversationsPage(0);
+	conversations.value = page.items;
+	conversationsHasMore.value = page.hasMore;
+}
+
+async function loadMoreConversations() {
+	if (conversationsLoadingMore.value || !conversationsHasMore.value) return;
+	conversationsLoadingMore.value = true;
+	try {
+		const page = await fetchConversationsPage(conversations.value.length);
+		const loadedIds = new Set(conversations.value.map(conversation => conversation.id));
+		conversations.value = [
+			...conversations.value,
+			...page.items.filter(conversation => !loadedIds.has(conversation.id)),
+		];
+		conversationsHasMore.value = page.hasMore;
+	} finally {
+		conversationsLoadingMore.value = false;
+	}
+}
+
+async function fetchMessagesPage(conversationId: string, offset: number) {
+	return splitAscendingOverfetchPage(await misskeyApi<AiMessage[]>('ai/messages/list', {
+		conversationId,
+		limit: AI_MESSAGES_PAGE_SIZE + 1,
+		offset,
+	}), AI_MESSAGES_PAGE_SIZE);
 }
 
 async function selectConversation(conversationId: string) {
 	selectedConversationId.value = conversationId;
+	messages.value = [];
+	messagesHasMore.value = false;
+	messagesLoadingMore.value = false;
 	const conversation = conversations.value.find(item => item.id === conversationId)
 		?? await misskeyApi<AiConversation>('ai/conversations/show', { conversationId });
 	applyDefaultSelection(conversation);
-	messages.value = await misskeyApi<AiMessage[]>('ai/messages/list', { conversationId });
+	const page = await fetchMessagesPage(conversationId, 0);
+	messages.value = page.items;
+	messagesHasMore.value = page.hasMore;
 	await scrollToBottom();
+}
+
+async function loadMoreMessages() {
+	if (!selectedConversationId.value || messagesLoadingMore.value || !messagesHasMore.value) return;
+	const previousScrollHeight = messagesEl.value?.scrollHeight ?? 0;
+	messagesLoadingMore.value = true;
+	try {
+		const page = await fetchMessagesPage(selectedConversationId.value, messages.value.length);
+		const loadedIds = new Set(messages.value.map(message => message.id));
+		messages.value = [
+			...page.items.filter(message => !loadedIds.has(message.id)),
+			...messages.value,
+		];
+		messagesHasMore.value = page.hasMore;
+		await nextTick();
+		if (messagesEl.value) {
+			messagesEl.value.scrollTop += messagesEl.value.scrollHeight - previousScrollHeight;
+		}
+	} finally {
+		messagesLoadingMore.value = false;
+	}
 }
 
 function startNewConversation() {
 	selectedConversationId.value = null;
 	messages.value = [];
+	messagesHasMore.value = false;
+	messagesLoadingMore.value = false;
 	pendingAttachments.value = [];
 	draft.value = '';
 	applyDefaultSelection(null);
@@ -441,7 +524,8 @@ async function sendMessage() {
 
 	streaming.value = true;
 	streamingMessageId.value = tempAssistantMessage.id;
-	abortController.value = new AbortController();
+	const requestAbortController = new AbortController();
+	abortController.value = requestAbortController;
 
 	try {
 		const result = await requestChatStream({
@@ -454,17 +538,17 @@ async function sendMessage() {
 		}, (text) => {
 			tempAssistantMessage.content = (tempAssistantMessage.content ?? '') + text;
 			void scrollToBottom();
-		});
+		}, requestAbortController.signal);
 
 		selectedConversationId.value = result.conversation.id;
 		await loadConversations();
-		messages.value = await misskeyApi<AiMessage[]>('ai/messages/list', {
-			conversationId: result.conversation.id,
-		});
+		const page = await fetchMessagesPage(result.conversation.id, 0);
+		messages.value = page.items;
+		messagesHasMore.value = page.hasMore;
 		applyDefaultSelection(result.conversation);
 		await scrollToBottom();
 	} catch (err) {
-		if (abortController.value?.signal.aborted) {
+		if (requestAbortController.signal.aborted) {
 			tempAssistantMessage.error = i18n.ts._ai.stopped;
 		} else {
 			tempAssistantMessage.error = printError(err);
@@ -475,9 +559,11 @@ async function sendMessage() {
 			});
 		}
 	} finally {
-		streaming.value = false;
-		streamingMessageId.value = null;
-		abortController.value = null;
+		if (abortController.value === requestAbortController) {
+			streaming.value = false;
+			streamingMessageId.value = null;
+			abortController.value = null;
+		}
 	}
 }
 
@@ -488,7 +574,7 @@ async function requestChatStream(body: {
 	content: string;
 	fileIds: string[];
 	systemPrompt: string | null;
-}, onDelta: (text: string) => void): Promise<ChatStreamDone> {
+}, onDelta: (text: string) => void, signal: AbortSignal): Promise<ChatStreamDone> {
 	const res = await window.fetch(`${apiUrl}/ai/chat-stream`, {
 		method: 'POST',
 		headers: {
@@ -498,7 +584,7 @@ async function requestChatStream(body: {
 		body: JSON.stringify(body),
 		credentials: 'omit',
 		cache: 'no-cache',
-		signal: abortController.value?.signal,
+		signal,
 	});
 
 	if (!res.ok || res.body == null) {
@@ -573,8 +659,6 @@ function parseSseEvent(raw: string): { type: string; data: any; } {
 
 function stopStreaming() {
 	abortController.value?.abort();
-	streaming.value = false;
-	streamingMessageId.value = null;
 }
 
 function onDraftKeydown(ev: KeyboardEvent) {
@@ -614,14 +698,16 @@ function copyMessage(content: string | null) {
 	os.toast(i18n.ts.copiedToClipboard);
 }
 
-function regenerateFrom(message: AiMessage) {
+async function regenerateFrom(message: AiMessage) {
 	const index = messages.value.findIndex(item => item.id === message.id);
 	const userMessage = [...messages.value.slice(0, index)].reverse().find(item => item.role === 'user');
 	if (!userMessage?.content) return;
+
+	await misskeyApi('ai/messages/delete-from', { messageId: message.id });
+	messages.value = messages.value.slice(0, index);
 	draft.value = userMessage.content;
-	nextTick(() => {
-		void sendMessage();
-	});
+	await nextTick();
+	await sendMessage();
 }
 
 async function editMessage(message: AiMessage) {
@@ -635,10 +721,7 @@ async function editMessage(message: AiMessage) {
 
 	// Delete this message and everything after it on the server, then resend.
 	const index = messages.value.findIndex(item => item.id === message.id);
-	const tail = messages.value.slice(index).filter(item => !isTemp(item));
-	for (const item of tail) {
-		await misskeyApi('ai/messages/delete', { messageId: item.id });
-	}
+	await misskeyApi('ai/messages/delete-from', { messageId: message.id });
 	messages.value = messages.value.slice(0, index);
 	draft.value = result;
 	await nextTick();
@@ -773,6 +856,11 @@ definePage(() => ({
 	color: var(--MI_THEME-fgTransparentWeak);
 }
 
+.sidebarLoadMore {
+	width: calc(100% - 16px);
+	margin: 10px 8px 0;
+}
+
 .conversation {
 	display: flex;
 	align-items: center;
@@ -877,6 +965,12 @@ definePage(() => ({
 	padding: 24px var(--ai-pane-gutter);
 	scrollbar-gutter: stable;
 	overscroll-behavior: contain;
+}
+
+.loadOlderMessages {
+	display: flex;
+	width: fit-content;
+	margin: 0 auto 18px;
 }
 
 .emptyState {
