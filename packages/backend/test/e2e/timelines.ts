@@ -798,12 +798,19 @@ describe('Timelines', () => {
 			const carolNote = await post(carol, { text: 'hi', visibility: 'home' });
 			const bobNote = await post(bob, { text: 'hi' });
 
-			await waitForPushToTl();
+			// Wait until public bob note is visible; home carol note must still be absent
+			const start = Date.now();
+			let body: misskey.entities.Note[] = [];
+			while (Date.now() - start < 15_000) {
+				const res = await api('notes/local-timeline', { limit: 100 }, alice);
+				assert.strictEqual(res.status, 200);
+				body = res.body as misskey.entities.Note[];
+				if (body.some(n => n.id === bobNote.id)) break;
+				await setTimeout(200);
+			}
 
-			const res = await api('notes/local-timeline', { limit: 100 }, alice);
-
-			assert.strictEqual(res.body.some(note => note.id === bobNote.id), true);
-			assert.strictEqual(res.body.some(note => note.id === carolNote.id), false);
+			assert.strictEqual(body.some(note => note.id === bobNote.id), true);
+			assert.strictEqual(body.some(note => note.id === carolNote.id), false);
 		});
 
 		test.concurrent('ミュートしているユーザーのノートが含まれない', async () => {
