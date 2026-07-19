@@ -32,7 +32,8 @@ describe('wide layout sizing', () => {
 		assert.match(universalSource, /\.bustCap\s*\{[\s\S]*width:\s*82vw;[\s\S]*max-width:\s*82vw;[\s\S]*margin-inline:\s*auto;/);
 		assert.match(universalSource, /\.wideWithWidgets\s*\{[\s\S]*width:\s*82vw;[\s\S]*max-width:\s*82vw;[\s\S]*margin-inline:\s*auto;/);
 		assert.match(universalSource, /isDesktop && !pageMetadata\?\.needWideArea \? \$style\.standardContents : null/);
-		assert.match(universalSource, /\.standardContents\s*\{[\s\S]*flex:\s*0 1 var\(--layout-main-column-width\);[\s\S]*width:\s*var\(--layout-main-column-width\);[\s\S]*max-width:\s*min\(100%,\s*var\(--layout-main-column-width\)\);/);
+		assert.match(universalSource, /\.standardContents\s*\{[\s\S]*flex:\s*1 1 var\(--layout-main-column-width\);[\s\S]*min-width:\s*0;/);
+		assert.notMatch(universalSource, /\.standardContents\s*\{[\s\S]*flex:\s*0 1 var\(--layout-main-column-width\)/);
 		assert.match(universalSource, /flex:\s*0 0 var\(--layout-side-rail-width\);[\s\S]*width:\s*var\(--layout-side-rail-width\);/);
 		assert.match(universalSource, /margin-left:\s*var\(--layout-column-gap\);/);
 		assert.match(universalSource, /@media \(max-width:\s*1600px\)\s*\{[\s\S]*display:\s*none;/);
