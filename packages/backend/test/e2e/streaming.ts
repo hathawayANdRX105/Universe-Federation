@@ -10,11 +10,25 @@ import { WebSocket } from 'ws';
 import type { INestApplicationContext } from '@nestjs/common';
 import { MiFollowing } from '@/models/Following.js';
 import { MiInstance } from '@/models/Instance.js';
-import { api, createAppToken, initTestDb, port, post, signup, waitFire } from '../utils.js';
+import { NoteCreateService } from '@/core/NoteCreateService.js';
+import { api, createAppToken, initTestDb, port, post, signup, startJobQueue, waitFire } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
 describe('Streaming', () => {
 	let Followings: any;
+	let noteApp: INestApplicationContext;
+	let noteCreateService: NoteCreateService;
+
+	/** Remote users cannot use notes/create API (auth requires local user). */
+	const createRemoteNote = async (user: misskey.entities.SignupResponse, text: string): Promise<misskey.entities.Note> => {
+		if (user.host == null) throw new Error('user is not remote');
+		const note = await noteCreateService.create(user as any, { text, visibility: 'public' });
+		return note as unknown as misskey.entities.Note;
+	};
+	afterAll(async () => {
+		try { await noteApp?.close(); } catch { /* ignore */ }
+	});
+
 	const follow = async (follower: { id: string; host: string | null }, followee: { id: string; host: string | null }) => {
 		await Followings.save({
 			id: 'a',
@@ -49,6 +63,8 @@ describe('Streaming', () => {
 		beforeAll(async () => {
 			const connection = await initTestDb(true);
 			Followings = connection.getRepository(MiFollowing);
+			noteApp = await startJobQueue();
+			noteCreateService = noteApp.get(NoteCreateService);
 			const instances = connection.getRepository(MiInstance);
 			await instances.insert({
 				id: 'aaaaaa',
@@ -68,7 +84,7 @@ describe('Streaming', () => {
 
 			kyokoNote = await post(kyoko, { text: 'foo' });
 			kanakoNote = await post(kanako, { text: 'hoge' });
-			takumiNote = await post(takumi, { text: 'piyo' });
+			takumiNote = await createRemoteNote(takumi, 'piyo');
 
 			// Follow: ayano => kyoko
 			await api('following/create', { userId: kyoko.id, withReplies: false }, ayano);
@@ -361,7 +377,7 @@ describe('Streaming', () => {
 			test('リモートユーザーの投稿は流れない', async () => {
 				const fired = await waitFire(
 					ayano, 'localTimeline',	// ayano:Local
-					() => api('notes/create', { text: 'foo' }, chinatsu),	// chinatsu posts
+					() => createRemoteNote(chinatsu, 'foo'),	// chinatsu posts
 					msg => msg.type === 'note' && msg.body.userId === chinatsu.id,	// wait chinatsu
 				);
 
@@ -371,7 +387,7 @@ describe('Streaming', () => {
 			test('フォローしてたとしてもリモートユーザーの投稿は流れない', async () => {
 				const fired = await waitFire(
 					ayano, 'localTimeline',	// ayano:Local
-					() => api('notes/create', { text: 'foo' }, akari),	// akari posts
+					() => createRemoteNote(akari, 'foo'),	// akari posts
 					msg => msg.type === 'note' && msg.body.userId === akari.id,	// wait akari
 				);
 
@@ -445,7 +461,7 @@ describe('Streaming', () => {
 			test('フォローしているリモートユーザーの投稿が流れる', async () => {
 				const fired = await waitFire(
 					ayano, 'hybridTimeline',	// ayano:Hybrid
-					() => api('notes/create', { text: 'foo' }, akari),	// akari posts
+					() => createRemoteNote(akari, 'foo'),	// akari posts
 					msg => msg.type === 'note' && msg.body.userId === akari.id,	// wait akari
 				);
 
@@ -455,7 +471,7 @@ describe('Streaming', () => {
 			test('フォローしていないリモートユーザーの投稿は流れない', async () => {
 				const fired = await waitFire(
 					ayano, 'hybridTimeline',	// ayano:Hybrid
-					() => api('notes/create', { text: 'foo' }, chinatsu),	// chinatsu posts
+					() => createRemoteNote(chinatsu, 'foo'),	// chinatsu posts
 					msg => msg.type === 'note' && msg.body.userId === chinatsu.id,	// wait chinatsu
 				);
 
@@ -561,7 +577,7 @@ describe('Streaming', () => {
 			test('フォローしていないリモートユーザーの投稿が流れる', async () => {
 				const fired = await waitFire(
 					ayano, 'globalTimeline',	// ayano:Global
-					() => api('notes/create', { text: 'foo' }, chinatsu),	// chinatsu posts
+					() => createRemoteNote(chinatsu, 'foo'),	// chinatsu posts
 					msg => msg.type === 'note' && msg.body.userId === chinatsu.id,	// wait chinatsu
 				);
 
@@ -605,7 +621,7 @@ describe('Streaming', () => {
 			test('リストに入れていないユーザーの投稿は流れない', async () => {
 				const fired = await waitFire(
 					chitose, 'userList',
-					() => api('notes/create', { text: 'foo' }, chinatsu),
+					() => createRemoteNote(chinatsu, 'foo'),
 					msg => msg.type === 'note' && msg.body.userId === chinatsu.id,
 					{ listId: list.id },
 				);
@@ -685,7 +701,7 @@ describe('Streaming', () => {
 				// chitose が example.com をミュートしている状態で、リスインしている takumi が ノートした時の動きを見たい
 				const fired = await waitFire(
 					chitose, 'userList',
-					() => api('notes/create', { text: 'foo' }, takumi),
+					() => createRemoteNote(takumi, 'foo'),
 					msg => msg.type === 'note' && msg.body.userId === kyoko.id,
 					{ listId: list.id },
 				);
