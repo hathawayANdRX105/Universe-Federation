@@ -439,7 +439,7 @@ export const waitFire = async <C extends keyof misskey.Channels>(user: UserToken
 		timer = setTimeout(() => {
 			ws.close();
 			res(false);
-		}, 3000);
+		}, 15000);
 
 		try {
 			await trgr();

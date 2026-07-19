@@ -9,7 +9,7 @@ import * as assert from 'assert';
 import { WebSocket } from 'ws';
 import { MiFollowing } from '@/models/Following.js';
 import { MiInstance } from '@/models/Instance.js';
-import { api, createAppToken, initTestDb, port, post, signup, waitFire } from '../utils.js';
+import { api, createAppToken, initTestDb, port, post, signup, startJobQueue, waitFire } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
 describe('Streaming', () => {
@@ -108,6 +108,11 @@ describe('Streaming', () => {
 				listId: list.id,
 				userId: takumi.id,
 			}, chitose);
+
+			// Streaming fanout needs workers (pub/sub + job queue)
+			await startJobQueue();
+			// Give Nest workers a moment to subscribe before first waitFire
+			await new Promise(r => setTimeout(r, 1000));
 		}, 1000 * 60 * 2);
 
 		describe('Events', () => {

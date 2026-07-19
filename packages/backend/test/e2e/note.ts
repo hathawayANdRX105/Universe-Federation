@@ -1006,7 +1006,7 @@ describe('Note', () => {
 		});
 
 		describe('翻訳機能の利用が許可されていない場合', () => {
-			let cannotTranslateRole: misskey.entities.Role;
+			let cannotTranslateRole: misskey.entities.Role | undefined;
 
 			beforeAll(async () => {
 				cannotTranslateRole = await role(root, {}, { canUseTranslator: false });
@@ -1025,6 +1025,7 @@ describe('Note', () => {
 			});
 
 			afterAll(async () => {
+				if (cannotTranslateRole == null) return;
 				await api('admin/roles/unassign', { roleId: cannotTranslateRole.id, userId: alice.id }, root);
 			});
 		});
