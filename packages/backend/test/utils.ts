@@ -310,6 +310,21 @@ export const channel = async (user: UserToken, channel: Partial<misskey.entities
 };
 
 export const role = async (user: UserToken, role: Partial<misskey.entities.Role> = {}, policies: any = {}): Promise<misskey.entities.Role> => {
+	// Role policies must be { priority, useDefault, value } — bare booleans fail AJV.
+	const shaped: Record<string, { priority: number; useDefault: boolean; value: unknown }> = Object.fromEntries(
+		Object.entries(DEFAULT_POLICIES).map(([k, v]) => [k, {
+			priority: 0,
+			useDefault: true,
+			value: v,
+		}]),
+	);
+	for (const [k, v] of Object.entries(policies ?? {})) {
+		if (v != null && typeof v === 'object' && 'useDefault' in (v as object)) {
+			shaped[k] = v as any;
+		} else {
+			shaped[k] = { priority: 0, useDefault: false, value: v };
+		}
+	}
 	const res = await api('admin/roles/create', {
 		asBadge: false,
 		canEditMembersByModerator: false,
@@ -326,15 +341,7 @@ export const role = async (user: UserToken, role: Partial<misskey.entities.Role>
 		isPublic: false,
 		name: 'New Role',
 		target: 'manual',
-		policies: {
-			// map() alone makes a numeric-key object; roles need named policy keys
-			...Object.fromEntries(Object.entries(DEFAULT_POLICIES).map(([k, v]) => [k, {
-				priority: 0,
-				useDefault: true,
-				value: v,
-			}])),
-			...policies,
-		},
+		policies: shaped,
 		...role,
 	}, user);
 	if (res.status !== 200 || res.body == null) {
@@ -692,7 +699,7 @@ export async function waitForTimelineNote(
 	user: UserToken,
 	noteId: string,
 	parameters: Record<string, unknown> = {},
-	timeoutMs = 5000,
+	timeoutMs = 15000,
 ): Promise<misskey.entities.Note[]> {
 	const start = Date.now();
 	let body: misskey.entities.Note[] = [];

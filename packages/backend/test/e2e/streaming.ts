@@ -10,8 +10,11 @@ import { WebSocket } from 'ws';
 import type { INestApplicationContext } from '@nestjs/common';
 import { MiFollowing } from '@/models/Following.js';
 import { MiInstance } from '@/models/Instance.js';
+import { NestFactory } from '@nestjs/core';
+import { MainModule } from '@/MainModule.js';
+import { NestLogger } from '@/NestLogger.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
-import { api, createAppToken, initTestDb, port, post, signup, startJobQueue, waitFire } from '../utils.js';
+import { api, createAppToken, initTestDb, port, post, signup, waitFire } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
 describe('Streaming', () => {
@@ -63,7 +66,11 @@ describe('Streaming', () => {
 		beforeAll(async () => {
 			const connection = await initTestDb(true);
 			Followings = connection.getRepository(MiFollowing);
-			noteApp = await startJobQueue();
+			// KEEP schema: only need NoteCreateService to enqueue post-note jobs.
+			// Queue workers run in test-server process (not here).
+			process.env.MK_TEST_KEEP_SCHEMA = '1';
+			noteApp = await NestFactory.createApplicationContext(MainModule, { logger: new NestLogger() });
+			await noteApp.init();
 			noteCreateService = noteApp.get(NoteCreateService);
 			const instances = connection.getRepository(MiInstance);
 			await instances.insert({

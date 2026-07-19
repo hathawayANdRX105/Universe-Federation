@@ -976,9 +976,10 @@ describe('Note', () => {
 
 			assert.strictEqual(deleteOneRes.status, 204);
 			// repliesCount is updated via collapsed queue; poll briefly
+			// repliesCount is deferred via CollapsedQueue (timeout 30s)
 			let mainNote = await Notes.findOneBy({ id: mainNoteRes.body.createdNote.id });
-			for (let i = 0; i < 20 && (mainNote?.repliesCount ?? 0) !== 1; i++) {
-				await new Promise(r => setTimeout(r, 100));
+			for (let i = 0; i < 40 && (mainNote?.repliesCount ?? 0) !== 1; i++) {
+				await new Promise(r => setTimeout(r, 1000));
 				mainNote = await Notes.findOneBy({ id: mainNoteRes.body.createdNote.id });
 			}
 			assert.ok(mainNote);
@@ -990,8 +991,8 @@ describe('Note', () => {
 
 			assert.strictEqual(deleteTwoRes.status, 204);
 			mainNote = await Notes.findOneBy({ id: mainNoteRes.body.createdNote.id });
-			for (let i = 0; i < 20 && (mainNote?.repliesCount ?? 0) !== 0; i++) {
-				await new Promise(r => setTimeout(r, 100));
+			for (let i = 0; i < 40 && (mainNote?.repliesCount ?? 0) !== 0; i++) {
+				await new Promise(r => setTimeout(r, 1000));
 				mainNote = await Notes.findOneBy({ id: mainNoteRes.body.createdNote.id });
 			}
 			assert.ok(mainNote);

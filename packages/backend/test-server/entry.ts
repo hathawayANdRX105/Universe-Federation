@@ -3,28 +3,58 @@ import fkill from 'fkill';
 import Fastify from 'fastify';
 import { NestFactory } from '@nestjs/core';
 import { MainModule } from '@/MainModule.js';
+import { QueueProcessorModule } from '@/queue/QueueProcessorModule.js';
+import { QueueProcessorService } from '@/queue/QueueProcessorService.js';
 import { ServerService } from '@/server/ServerService.js';
 import type { Config } from '@/config.js';
 import { NestLogger } from '@/NestLogger.js';
 import { DI } from '@/di-symbols.js';
-import { INestApplicationContext } from '@nestjs/common';
+import type { INestApplicationContext } from '@nestjs/common';
 
 const originEnv = JSON.stringify(process.env);
 process.env.NODE_ENV = 'test';
 
 let app: INestApplicationContext;
+let queueApp: INestApplicationContext | null = null;
 let serverService: ServerService;
 
-async function launch() {
+async function startQueue(): Promise<void> {
+	// post-note background tasks (LTL fanout, repliesCount++) need workers.
+	queueApp = await NestFactory.createApplicationContext(QueueProcessorModule, {
+		logger: new NestLogger(),
+	});
+	await queueApp.init();
+	queueApp.enableShutdownHooks();
+	queueApp.get(QueueProcessorService).start();
+}
+
+async function stopQueue(): Promise<void> {
+	if (!queueApp) return;
+	try { await queueApp.close(); } catch { /* */ }
+	queueApp = null;
+}
+
+async function bootServer(): Promise<Config> {
 	app = await NestFactory.createApplicationContext(MainModule, {
 		logger: new NestLogger(),
 	});
 	app.enableShutdownHooks();
 	const config = app.get<Config>(DI.config);
 	await killTestServer(config);
-	console.log('starting application...');
 	serverService = app.get(ServerService);
 	await serverService.launch();
+	await startQueue();
+	return config;
+}
+
+async function stopServer(): Promise<void> {
+	await stopQueue();
+	try { await serverService.dispose(); } catch { /* */ }
+	try { await app.close(); } catch { /* */ }
+}
+
+async function launch() {
+	const config = await bootServer();
 	await startControllerEndpoints(config);
 	console.log('application initialized.');
 }
@@ -57,17 +87,11 @@ async function startControllerEndpoints(config: Config) {
 		process.env = { ...restored, NODE_ENV: 'test' };
 		delete process.env.MK_TEST_KEEP_SCHEMA;
 
-		try { await serverService.dispose(); } catch { /* */ }
-		try { await app.close(); } catch { /* */ }
+		await stopServer();
 		await killTestServer(config);
 
 		console.log('starting application...');
-		app = await NestFactory.createApplicationContext(MainModule, {
-			logger: new NestLogger(),
-		});
-		app.enableShutdownHooks();
-		serverService = app.get(ServerService);
-		await serverService.launch();
+		await bootServer();
 		console.log('application re-initialized.');
 		res.code(200).send({ success: true });
 	});
