@@ -1,22 +1,28 @@
 name: CI - Integration
 
+# Heavy suite: main, nightly, manual, or PR with label `run-integration`.
+# Not path-filtered as a required PR check (that lives in CI - PR Validation).
 on:
   workflow_dispatch:
   push:
     branches: [main]
   schedule:
     - cron: '0 3 * * *'
+  pull_request:
+    types: [labeled, opened, synchronize, reopened, ready_for_review]
 
 concurrency:
-  group: ci-integration-${{ github.event_name }}-${{ github.ref }}
+  group: ci-integration-${{ github.event.pull_request.number || github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  # Skip PR runs unless explicitly labeled — avoids pending required-check traps.
   browser-e2e:
     name: Browser end-to-end tests
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-integration') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     services:
@@ -81,6 +87,7 @@ jobs:
 
   federation:
     name: Federation integration tests
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-integration') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -111,6 +118,7 @@ jobs:
 
   container-smoke:
     name: Production container smoke test
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-integration') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
