@@ -1606,13 +1606,20 @@ describe('Timelines', () => {
 			const bobNote2 = await post(bob, { text: 'hi', replyId: bobNote1.id });
 			const bobNote3 = await post(bob, { text: 'hi', renoteId: bobNote1.id });
 
-			await waitForPushToTl();
+			// Fanout user timeline may lag; poll until notes appear (mute must not hide author when userId specified)
+			const start = Date.now();
+			let body: misskey.entities.Note[] = [];
+			while (Date.now() - start < 15_000) {
+				const res = await api('users/notes', { userId: bob.id, withReplies: true, withRenotes: true }, alice);
+				assert.strictEqual(res.status, 200);
+				body = res.body as misskey.entities.Note[];
+				if ([bobNote1.id, bobNote2.id, bobNote3.id].every(id => body.some(n => n.id === id))) break;
+				await setTimeout(200);
+			}
 
-			const res = await api('users/notes', { userId: bob.id }, alice);
-
-			assert.strictEqual(res.body.some(note => note.id === bobNote1.id), true);
-			assert.strictEqual(res.body.some(note => note.id === bobNote2.id), true);
-			assert.strictEqual(res.body.some(note => note.id === bobNote3.id), true);
+			assert.strictEqual(body.some(note => note.id === bobNote1.id), true);
+			assert.strictEqual(body.some(note => note.id === bobNote2.id), true);
+			assert.strictEqual(body.some(note => note.id === bobNote3.id), true);
 		});
 
 		test.concurrent('自身の visibility: specified なノートが含まれる', async () => {

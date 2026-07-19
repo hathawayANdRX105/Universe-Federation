@@ -57,6 +57,12 @@ export interface NoteVisibilityFilters {
 	includeSilencedAuthor?: boolean;
 
 	/**
+	 * If true, do not silence solely because the note author is muted (users/notes of a muted user).
+	 * Renote/reply targets and muted instances still silence.
+	 */
+	includeMutedAuthor?: boolean;
+
+	/**
 	 * Set to an ID to apply visibility from the context of a specific user list.
 	 * Membership and "with replies" settings will be adopted from this list.
 	 */
@@ -448,7 +454,7 @@ export class NoteVisibilityService {
 
 	// Based on inconsistent logic from all around the app
 	private shouldSilence(note: PopulatedNote, me: PopulatedMe, data: NoteVisibilityData, filters: NoteVisibilityFilters | undefined): boolean {
-		if (this.shouldSilenceForMute(note, data)) {
+		if (this.shouldSilenceForMute(note, data, filters?.includeMutedAuthor ?? false)) {
 			return true;
 		}
 
@@ -463,15 +469,15 @@ export class NoteVisibilityService {
 		return false;
 	}
 
-	private shouldSilenceForMute(note: PopulatedNote, data: NoteVisibilityData): boolean {
+	private shouldSilenceForMute(note: PopulatedNote, data: NoteVisibilityData, includeMutedAuthor: boolean): boolean {
 		// Silence if we've muted the thread
 		if (data.userMutedThreads.has(note.threadId)) return true;
 
 		// Silence if we've muted the note
 		if (data.userMutedNotes.has(note.id)) return true;
 
-		// Silence if we've muted the user
-		if (data.userRelations.get(note.userId)?.isMuting) return true;
+		// Silence if we've muted the user (skip for users/notes of that muted author)
+		if (!includeMutedAuthor && data.userRelations.get(note.userId)?.isMuting) return true;
 
 		// Silence if we've muted renotes from the user
 		if (isPopulatedBoost(note) && data.userRelations.get(note.userId)?.isMutingRenotes) return true;
@@ -480,17 +486,17 @@ export class NoteVisibilityService {
 		if (note.userHost && data.userMutedInstances.has(note.userHost)) return true;
 
 		// Match QueryService.generateMutedUserQueryForNotes: renote/reply targets
-		// (quotes keep renoteUserId; pure renotes also recurse via checkNoteVisibilityFor).
 		if (note.reply && note.reply.userId !== note.userId && data.userRelations.get(note.reply.userId)?.isMuting) {
 			return true;
 		}
 		if (note.renote && note.renote.userId !== note.userId && data.userRelations.get(note.renote.userId)?.isMuting) {
 			return true;
 		}
-		if (note.reply?.userHost && note.reply.userHost !== note.userHost && data.userMutedInstances.has(note.reply.userHost)) {
+		// Always mute renotes/replies of muted-instance posts (including pure renotes of remote notes)
+		if (note.reply?.userHost && data.userMutedInstances.has(note.reply.userHost)) {
 			return true;
 		}
-		if (note.renote?.userHost && note.renote.userHost !== note.userHost && data.userMutedInstances.has(note.renote.userHost)) {
+		if (note.renote?.userHost && data.userMutedInstances.has(note.renote.userHost)) {
 			return true;
 		}
 

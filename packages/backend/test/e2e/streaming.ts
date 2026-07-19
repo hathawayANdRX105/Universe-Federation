@@ -704,6 +704,7 @@ describe('Streaming', () => {
 				await api('i/update', {
 					mutedInstances: ['example.com'],
 				}, chitose);
+				await new Promise(r => setTimeout(r, 500)); // stream profile mutedInstances
 
 				// chitose が example.com をミュートしている状態で、リスインしている takumi が ノートした時の動きを見たい
 				const fired = await waitFire(
@@ -721,6 +722,7 @@ describe('Streaming', () => {
 				await api('i/update', {
 					mutedInstances: ['example.com'],
 				}, chitose);
+				await new Promise(r => setTimeout(r, 500)); // stream profile mutedInstances
 
 				// chitose が example.com をミュートしている状態で、リスインしている kyoko が takumi のノートにリプライした時の動きを見たい
 				const fired = await waitFire(
@@ -738,6 +740,7 @@ describe('Streaming', () => {
 				await api('i/update', {
 					mutedInstances: ['example.com'],
 				}, chitose);
+				await new Promise(r => setTimeout(r, 500)); // stream profile mutedInstances
 
 				// chitose が example.com をミュートしている状態で、リスインしている kyoko が takumi のノートをリノートした時の動きを見たい
 				const fired = await waitFire(
