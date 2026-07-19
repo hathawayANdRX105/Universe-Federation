@@ -21,7 +21,15 @@ import type * as misskey from 'misskey-js';
 import { DEFAULT_POLICIES } from '@/core/RoleService.js';
 import { validateContentTypeSetAsActivityPub } from '@/core/activitypub/misc/validator.js';
 import { ApiError } from '@/server/api/error.js';
-export { server as startServer, jobQueue as startJobQueue } from '@/boot/common.js';
+import { server as _startServer, jobQueue as _startJobQueue } from '@/boot/common.js';
+export const startServer = _startServer;
+/** Start queue processors in the test process without dropSchema (shared test DB). */
+export async function startJobQueue() {
+	// Secondary Nest app in the Jest process must never drop the live e2e schema.
+	process.env.MK_TEST_KEEP_SCHEMA = '1';
+	return await _startJobQueue();
+}
+
 
 export interface UserToken {
 	token: string;

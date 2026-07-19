@@ -5,6 +5,11 @@
 
 import { initTestDb, port, sendEnvResetRequest } from './utils.js';
 
+// Critical: startJobQueue()/secondary Nest contexts run in this process.
+// Without this flag, createPostgresDataSource dropSchema:true wipes the live
+// server DB and notes/create returns INTERNAL_ERROR mid-suite.
+process.env.MK_TEST_KEEP_SCHEMA = '1';
+
 async function stopTestServer() {
 	const res = await fetch(`http://localhost:${port + 1000}/env-stop`, {
 		method: 'POST',
@@ -17,11 +22,10 @@ async function stopTestServer() {
 }
 
 beforeAll(async () => {
-	// Critical order: Nest must be fully stopped before dropSchema.
-	// Dropping under a live Nest DataSource causes notes/create INTERNAL_ERROR.
+	// Nest must be fully stopped before dropSchema.
 	await stopTestServer();
 	const db = await initTestDb(false);
 	await db.destroy();
-	// Relaunch Nest with MK_TEST_KEEP_SCHEMA=1 (synchronize only; tables already exist).
+	// Relaunch Nest with MK_TEST_KEEP_SCHEMA (server process also keeps it after first boot).
 	await sendEnvResetRequest();
 }, 1000 * 60 * 2);
