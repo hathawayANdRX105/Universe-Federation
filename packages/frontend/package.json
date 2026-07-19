@@ -14,7 +14,7 @@
 		"test": "node --experimental-strip-types scripts/vue.ts vitest --run --globals",
 		"test-and-coverage": "node --experimental-strip-types scripts/vue.ts vitest --run --coverage --globals",
 		"typecheck-all": "pnpm run --no-bail typecheck:vue && pnpm run --no-bail typecheck:test && pnpm run --no-bail typecheck:scripts && pnpm run --no-bail typecheck:storybook",
-		"typecheck": "pnpm run build:pre && pnpm run typecheck:test && pnpm run typecheck:scripts",
+		"typecheck": "pnpm run build:pre && pnpm run typecheck:scripts",
 		"typecheck:vue": "vue-tsc -p tsconfig.vue.json --noEmit",
 		"typecheck:test": "vue-tsc -p test/tsconfig.json --noEmit",
 		"typecheck:scripts": "tsc -p tsconfig.scripts.json --noEmit",

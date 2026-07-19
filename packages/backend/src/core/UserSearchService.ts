@@ -148,12 +148,18 @@ export class UserSearchService {
 			})));
 
 		// 自分自身がヒットするとしたらここ
+		// updatedAt NULL はアクティブ扱い（未ログイン検索と揃える）
 		const activeUserQuery = withFollowParams(this.generateUserQueryBuilder(params)
 			.andWhere(`user.id NOT IN (${followingUserQuery.getQuery()})`)
-			.andWhere('user.updatedAt > :activeThreshold', { activeThreshold }));
+			.andWhere(new Brackets(qb => {
+				qb
+					.where('user.updatedAt IS NULL')
+					.orWhere('user.updatedAt > :activeThreshold', { activeThreshold });
+			})));
 
 		const inactiveUserQuery = withFollowParams(this.generateUserQueryBuilder(params)
 			.andWhere(`user.id NOT IN (${followingUserQuery.getQuery()})`)
+			.andWhere('user.updatedAt IS NOT NULL')
 			.andWhere('user.updatedAt <= :activeThreshold', { activeThreshold }));
 
 		return [activeFollowingUsersQuery, inactiveFollowingUsersQuery, activeUserQuery, inactiveUserQuery];
