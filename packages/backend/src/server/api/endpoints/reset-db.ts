@@ -77,7 +77,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			await resetDb(this.db);
 
 			// resetDb wipes meta; reseed defaults (same as GlobalModule.fetchMeta).
-			await this.metasRepository.upsert({ id: 'x' }, ['id']);
+			// Column default disableRegistration=true hides Cypress signup; open it for tests.
+			await this.metasRepository.upsert({ id: 'x', disableRegistration: false }, ['id']);
 			const after = await this.metasRepository.findOneOrFail({ where: { id: Not(IsNull()) }, order: { id: 'DESC' } });
 			// DI meta instance does not see the wipe; push the reseeded row through MetaService.
 			await this.metaService.update(after);
