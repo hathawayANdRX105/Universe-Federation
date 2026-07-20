@@ -14,13 +14,14 @@ Instructions for **AI agents** and human contributors working in this repository
 GitHub templates (forms members fill):
 
 - `.github/ISSUE_TEMPLATE/bug.yml`
+- `.github/ISSUE_TEMPLATE/feature.yml`
 - `.github/ISSUE_TEMPLATE/task.yml`
 - `.github/ISSUE_TEMPLATE/config.yml`
 - `.github/pull_request_template.md`
 
 ## Hard rules
 
-1. **No direct pushes to `main`.** Branch → PR → review → merge.
+1. **No direct pushes to `main` or `dev`.** Branch → PR → review → merge into **`dev`**. `main` is stable; only merge from `dev` when explicitly stabilizing a release.
 2. **One Issue = one PR.** PR body must include `Fixes #N` / `Closes #N`. Never pack multiple Issues into one PR.
 3. **Issue first.** Discuss / file Issue before coding (except trivial typo with maintainer OK).
 4. **Single assignee** per Issue. Help via comments / `help-wanted`, not dual ownership.
@@ -37,6 +38,8 @@ GitHub templates (forms members fill):
 | `refactor/<issue>-slug` | Behavior-preserving structure change |
 | `chore/<issue>-slug` | CI / deps / tooling |
 | `docs/<issue>-slug` | Docs only |
+
+Open PRs against **`dev`**, not `main`.
 
 ## Local agent tooling (optional)
 
@@ -58,6 +61,6 @@ Never commit: `.beads/`, `.codegraph/`, `.code-review-graph/`, `.worktree/`.
 
 ## Session close (agents)
 
-1. Push branch; open/update PR with `Fixes #N`.
+1. Push branch; open/update the PR **into `dev`** with `Fixes #N`.
 2. Update Issue / Project column if used.
 3. If using bd: close/update beads with reason; do not leave work only in chat.

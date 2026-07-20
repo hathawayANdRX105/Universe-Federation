@@ -3,15 +3,14 @@
 模板：`.github/pull_request_template.md`  
 流程：[01-dev-workflow.md](./01-dev-workflow.md)
 
-合入用 **`Fixes #N`** 关 Issue。
+合入用 **`Fixes #N`** 关 Issue。PR **base 选 `dev`**（不要默认合 `main`）。
 
-## 3.1 REQUIRED（每次）
+## 3.1 开 PR 前
 
-| 区块 | 写什么 |
-|------|--------|
-| **What** | 合入后变什么 |
-| **Why** | 动机 / 根因 |
-| **Issue** | `Fixes #N` |
+- 已有 Issue 并认领  
+- 分支从 **`dev`** 拉出  
+- 只含这一件 Issue  
+- 工作区干净；能解释自己的改动  
 | **How to test** | 步骤 + 命令 |
 | **Checklist** | 一 Issue、无密钥垃圾、已测或说明 |
 
