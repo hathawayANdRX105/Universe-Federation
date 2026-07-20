@@ -1,5 +1,5 @@
 name: Feature
-description: New capability or user-facing improvement (problem + acceptance)
+description: New capability or user-facing improvement
 labels: ["enhancement"]
 body:
   - type: markdown
@@ -7,10 +7,11 @@ body:
       value: |
         Guide: [agent/02-issue-guide.md](../../agent/02-issue-guide.md)
 
-        **Good features** (see e.g. [omp#4815](https://github.com/can1357/oh-my-pi/issues/4815), [omp#4983](https://github.com/can1357/oh-my-pi/issues/4983), [omp#5793](https://github.com/can1357/oh-my-pi/issues/5793)):
-        clear ask · problem / use case · **Done when / acceptance** · non-goals · optional design notes.
+        Bugs → Bug template. Internal refactor/CI/docs → Task template.
+        **Required** fields first. Extra fields: fill only when the field description says so.
+        Published headings stay plain (no “(optional)” text in the Issue body).
 
-        One mergeable idea per issue when possible. Prefer MVP + non-goals over a novel.
+        Quality bar: [omp#4815](https://github.com/can1357/oh-my-pi/issues/4815), [omp#4983](https://github.com/can1357/oh-my-pi/issues/4983).
 
   - type: textarea
     id: description
@@ -24,15 +25,15 @@ body:
     id: use-case
     attributes:
       label: Problem / use case
-      description: Who hurts today? What workflow fails? Why existing levers are not enough (if any).
+      description: Who is blocked today? What workflow fails? Why existing levers are not enough (if any).
     validations:
       required: true
 
   - type: textarea
     id: done
     attributes:
-      label: Done when (acceptance)
-      description: Checklist a PR can satisfy. Prefer testable / observable outcomes.
+      label: Done when
+      description: Acceptance checklist a single PR can satisfy. Prefer observable outcomes.
       placeholder: |
         - [ ]
         - [ ]
@@ -40,42 +41,59 @@ body:
     validations:
       required: true
 
+  - type: markdown
+    attributes:
+      value: |
+        ### Extra fields (fill only when useful)
+        Leave blank if not applicable. Do not write “(optional)” into the Issue body.
+
   - type: textarea
     id: non-goals
     attributes:
-      label: Non-goals / out of scope (optional)
-      description: Explicitly what this issue must not expand into (keeps PR small).
+      label: Non-goals
+      description: |
+        **Add when:** the idea can balloon (platform redesign, protocol change, multi-app).
+        **Skip when:** scope is already tiny and obvious.
     validations:
       required: false
 
   - type: textarea
     id: proposed
     attributes:
-      label: Proposed approach (optional)
-      description: High-level idea or API shape. Not a full implementation plan unless maintainers ask.
+      label: Proposed approach
+      description: |
+        **Add when:** you have a high-level shape (API flag, UI placement) that helps discussion.
+        **Skip when:** you only know the user problem — maintainers can design.
+        Not a full implementation plan unless asked.
     validations:
       required: false
 
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered (optional)
-      description: Workarounds or other designs you rejected and why.
+      label: Alternatives considered
+      description: |
+        **Add when:** you tried workarounds or rejected designs and want that recorded.
+        **Skip when:** none worth mentioning.
     validations:
       required: false
 
   - type: textarea
     id: area
     attributes:
-      label: Area (optional)
-      description: e.g. chat, timeline, federation, CI, frontend, API…
+      label: Area
+      description: |
+        **Add when:** a coarse module label helps routing (chat, timeline, federation, frontend, API, CI…).
+        **Skip when:** title already makes area obvious.
     validations:
       required: false
 
   - type: textarea
     id: additional
     attributes:
-      label: Additional context (optional)
-      description: Links, screenshots, prior art, related issues.
+      label: Additional context
+      description: |
+        **Add when:** links, screenshots, prior art, related issues.
+        **Skip when:** nothing else.
     validations:
       required: false

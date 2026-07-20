@@ -1,37 +1,32 @@
 name: Task / Refactor
-description: Internal scoped work — refactor, CI, docs, chore, active perf (one PR-sized unit)
+description: Internal work — refactor, CI, docs, chore, active perf (one PR-sized unit)
+labels: ["chore"]
 body:
   - type: markdown
     attributes:
       value: |
         Guide: [agent/02-issue-guide.md](../../agent/02-issue-guide.md)
 
-        For **user-facing new capability** use Feature. For **broken behavior / regression** use Bug.
+        User-facing **new capability** → Feature. **Broken behavior / regression** → Bug.
         Title prefixes: `refactor:` / `chore:` / `docs:` / `test:` / `perf:` (optimization, not a regression).
+        You may add labels such as `docs` or `perf` after create if the default `chore` label is wrong — edit the issue.
 
-        **Good internal tasks** state Goal, Done when, and bounds. Perf tasks should include how success is observed (see e.g. omp perf-style reports).
+        **Required** fields first. Extra fields: fill only when the field description says so.
+        Published headings stay plain (no “(optional)” in the Issue body).
 
   - type: textarea
     id: goal
     attributes:
       label: Goal
-      description: What should change in the codebase/product when this is done?
+      description: What should change in the codebase when this is done?
     validations:
       required: true
 
   - type: textarea
-    id: background
-    attributes:
-      label: Background / why now (optional)
-      description: Pain, context, or link to related bug/feature. Keep short.
-    validations:
-      required: false
-
-  - type: textarea
     id: done
     attributes:
-      label: Done when (acceptance)
-      description: Checklist a single PR can close.
+      label: Done when
+      description: Acceptance checklist a single PR can close.
       placeholder: |
         - [ ]
         - [ ]
@@ -39,33 +34,58 @@ body:
     validations:
       required: true
 
+  - type: markdown
+    attributes:
+      value: |
+        ### Extra fields (fill only when useful)
+        Leave blank if not applicable. Do not write “(optional)” into the Issue body.
+
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: |
+        **Add when:** context is not obvious (why now, link to a bug/incident).
+        **Skip when:** Goal alone is enough.
+    validations:
+      required: false
+
   - type: textarea
     id: out
     attributes:
-      label: Out of scope (optional)
-      description: What this must not expand into.
+      label: Out of scope
+      description: |
+        **Add when:** the work could sprawl (rewrite whole subsystem, behavior change disguised as chore).
+        **Skip when:** scope is already one tight change.
     validations:
       required: false
 
   - type: textarea
     id: observe
     attributes:
-      label: How to observe success (optional)
-      description: Especially for `perf:` — metric, log, bench, or before/after note the PR should include.
+      label: How to observe success
+      description: |
+        **Add when:** title is `perf:` or success is not visible in a unit test alone (metric, log, bench, before/after).
+        **Skip when:** Done when already implies a clear functional check.
     validations:
       required: false
 
   - type: textarea
     id: suspected
     attributes:
-      label: Suspected areas (optional)
-      description: Packages/files/symbols if known. Do not require a full design.
+      label: Suspected areas
+      description: |
+        **Add when:** you know packages/files/symbols.
+        **Skip when:** unknown — do not invent.
     validations:
       required: false
 
   - type: textarea
     id: additional
     attributes:
-      label: Additional context (optional)
+      label: Additional context
+      description: |
+        **Add when:** links or notes that do not fit above.
+        **Skip when:** nothing else.
     validations:
       required: false

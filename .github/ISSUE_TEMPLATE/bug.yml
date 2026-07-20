@@ -1,5 +1,5 @@
 name: Bug
-description: Reproducible defect or regression (facts first; optional deep analysis)
+description: Reproducible defect or regression (facts first)
 labels: ["bug"]
 body:
   - type: markdown
@@ -7,10 +7,10 @@ body:
       value: |
         Guide: [agent/02-issue-guide.md](../../agent/02-issue-guide.md)
 
-        **Good bugs** (see e.g. [omp#5995](https://github.com/can1357/oh-my-pi/issues/5995), [omp#6011](https://github.com/can1357/oh-my-pi/issues/6011)):
-        specific title · what breaks and why it matters · numbered repro · expected authoritative outcome · version/env · optional evidence / related issues / regression ideas.
+        **Required** fields first. Extra fields appear only as form inputs — fill them when the note under each field says so.
+        In the published Issue, headings are plain names (no “(optional)” suffix). Leave a field empty if it does not apply; do not write “N/A” walls.
 
-        Prefer **facts you observed**. Root-cause walls are optional; only add them when solid.
+        Quality bar: [omp#5995](https://github.com/can1357/oh-my-pi/issues/5995), [omp#6011](https://github.com/can1357/oh-my-pi/issues/6011).
 
   - type: checkboxes
     id: bug-confirmation
@@ -19,14 +19,14 @@ body:
       options:
         - label: This is a reproducible bug or regression (not a feature idea or support question).
           required: true
-        - label: I searched for similar issues / related reports (or explain in Additional context).
+        - label: I searched for similar issues (or explain under Additional context).
           required: true
 
   - type: textarea
     id: description
     attributes:
       label: Description
-      description: What breaks? Why does it matter / what is unsafe or misleading? Prefer concrete symptoms over vague “it doesn’t work”.
+      description: What breaks, and why it matters (unsafe, misleading, data risk, user impact). Prefer concrete symptoms.
     validations:
       required: true
 
@@ -34,7 +34,7 @@ body:
     id: reproduction
     attributes:
       label: Steps to reproduce
-      description: Shortest exact steps. Include commands/payloads when relevant. Note if timing/race/size matters.
+      description: Shortest exact steps. Include commands/payloads when relevant. Note races/timing if needed.
       placeholder: |
         1.
         2.
@@ -47,7 +47,7 @@ body:
     id: expected
     attributes:
       label: Expected behavior
-      description: Authoritative outcome (what must happen; what must not be reported as success/skip/etc.).
+      description: Authoritative outcome — what must happen, and what must not be treated as success.
     validations:
       required: true
 
@@ -55,7 +55,7 @@ body:
     id: actual
     attributes:
       label: Actual behavior
-      description: What you observed. Paste UI text, status, or failure mode.
+      description: What you observed (UI text, status, failure mode).
     validations:
       required: true
 
@@ -63,7 +63,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Fill every line you can. Version + client/OS are especially important.
+      description: Always fill. Version + client/OS matter most.
       value: |
         - Instance URL (if relevant):
         - App / UF version (or commit):
@@ -74,11 +74,19 @@ body:
     validations:
       required: true
 
+  - type: markdown
+    attributes:
+      value: |
+        ### Extra fields (fill only when useful)
+        Leave blank if not applicable. Do **not** put the word “optional” in the Issue body.
+
   - type: textarea
     id: error-output
     attributes:
-      label: Error output / logs (optional)
-      description: Stack traces, console, server logs. Use fenced code.
+      label: Error output
+      description: |
+        **Add when:** there is a stack trace, tool exit text, console error, or server log that shows the failure.
+        **Skip when:** pure UI/state with no log line (e.g. wrong badge only).
       render: shell
     validations:
       required: false
@@ -86,47 +94,62 @@ body:
   - type: textarea
     id: impact
     attributes:
-      label: Impact (optional)
-      description: Who is hurt? Frequency? Workarounds?
+      label: Impact
+      description: |
+        **Add when:** severity is not obvious from Description (who is hurt, how often, workarounds).
+        **Skip when:** Description already states impact clearly.
     validations:
       required: false
 
   - type: textarea
     id: evidence
     attributes:
-      label: Evidence (optional)
-      description: Measurements, counts, before/after, captures. For perf bugs include how you measured.
+      label: Evidence
+      description: |
+        **Add when:** perf numbers, success/fail counts, screenshots of waterfalls, or “N/N cycles” style captures help.
+        **Skip when:** a short deterministic repro is enough.
     validations:
       required: false
 
   - type: textarea
     id: related
     attributes:
-      label: Related issues / duplicates (optional)
-      description: "Related but distinct: #N … Duplicate check: searched X, not the same as #M because …"
+      label: Related issues
+      description: |
+        **Add when:** easy to confuse with another issue, or you need “related but distinct from #N”.
+        **Skip when:** no near-duplicates.
+      placeholder: |
+        Related but distinct: #…
+        Not a duplicate of #… because …
     validations:
       required: false
 
   - type: textarea
     id: suspected
     attributes:
-      label: Suspected code paths (optional)
-      description: Only if you actually inspected code. File/symbol paths help; do not invent a full design.
+      label: Suspected code paths
+      description: |
+        **Add when:** you actually opened the code and can name files/symbols.
+        **Skip when:** guessing — do not invent a design essay.
     validations:
       required: false
 
   - type: textarea
     id: regression-tests
     attributes:
-      label: Suggested regression coverage (optional)
-      description: Minimal test or assertion that would catch this (omp-style “regression coverage”).
+      label: Suggested regression coverage
+      description: |
+        **Add when:** you can state a minimal test/assertion that would catch this.
+        **Skip when:** you only have a manual repro for now.
     validations:
       required: false
 
   - type: textarea
     id: additional
     attributes:
-      label: Additional context (optional)
-      description: Screenshots, config snippets (redact secrets), notes.
+      label: Additional context
+      description: |
+        **Add when:** redacted config, screenshots, or notes that do not fit above.
+        **Skip when:** nothing else to say. Never paste secrets.
     validations:
       required: false

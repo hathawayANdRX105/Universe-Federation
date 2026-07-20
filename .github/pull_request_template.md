@@ -29,21 +29,28 @@ Fixes #
 - [ ] No secrets, real config, or junk files
 - [ ] Tested (steps above) or explained why not
 
-<!-- ========== optional: paste only when needed ==========
+<!--
+=== Extra sections (copy a block into the PR body only when it applies) ===
+Do not leave empty “optional” headings in the PR. Headings below are plain names.
 
-## Screenshots (UI only)
+## Screenshots
+When: UI/UX change a reviewer cannot verify from the diff alone.
 - Before:
 - After:
 
-## Risk / migration (breaking or data change)
+## Risk
+When: migrations, data shape changes, hard-to-revert behavior, security-sensitive paths.
 - Risk: low / medium / high
 - Migration or config:
 - Revert by reverting this PR? yes / no
 
-## Changelog (user-facing)
+## Changelog
+When: user-facing behavior or API change that should appear in CHANGELOG.
 -
 
 ## Notes for reviewers
+When: non-obvious edge cases, intentional follow-ups (link Issues), or “please focus on X”.
 -
 
-========================================================= -->
+===========================================================================
+-->

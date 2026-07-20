@@ -1,85 +1,61 @@
 # 2. 如何提 Issue
 
-模板参考 [oh-my-pi](https://github.com/can1357/oh-my-pi) 优质 closed issue 的**信息密度**，以及 [herdr](https://github.com/ogulcancelik/herdr) 的「事实优先、可复现」。
+模板参考 [oh-my-pi](https://github.com/can1357/oh-my-pi) 优质 closed issue 与 [herdr](https://github.com/ogulcancelik/herdr) 的事实优先。
 
-范例（omp）：
+范例：Bug [#5995](https://github.com/can1357/oh-my-pi/issues/5995)、[#6011](https://github.com/can1357/oh-my-pi/issues/6011)；Feature [#4815](https://github.com/can1357/oh-my-pi/issues/4815)、[#4983](https://github.com/can1357/oh-my-pi/issues/4983)。
 
-- Bug 质量标杆：[#5995](https://github.com/can1357/oh-my-pi/issues/5995)、[#6011](https://github.com/can1357/oh-my-pi/issues/6011)
-- Feature 质量标杆：[#4815](https://github.com/can1357/oh-my-pi/issues/4815)、[#4983](https://github.com/can1357/oh-my-pi/issues/4983)、[#5793](https://github.com/can1357/oh-my-pi/issues/5793)
+## 2.0 模板与 label
 
-## 2.0 选模板（不是按 label 一张）
+| 卡片 | 默认 label | 何时 |
+|------|------------|------|
+| **Bug** | `bug` | 缺陷 / 回归（含性能回归） |
+| **Feature** | `enhancement` | 新能力、用户向改进 |
+| **Task / Refactor** | `chore` | 重构、CI、文档、清理、主动 perf |
 
-| 卡片 | 何时 |
-|------|------|
-| **Bug** | 错了、崩了、**回归**（含性能回归） |
-| **Feature** | 新能力 / 用户向改进 |
-| **Task / Refactor** | 重构、CI、文档、清理、**主动** perf 优化 |
+- 模板自动打默认 label；不对「每个 label 一张模板」。
+- 需要更细分类时，**创建后再加** label（如 `perf`、`docs`），或改掉不合适的默认 `chore`。
+- 标题前缀仍推荐：`fix:` / `feat:` / `perf:` / `refactor:` / `chore:` / `docs:`。
 
-`config.yml` 只负责关空白 Issue + 链接，不是第四种任务。
+`config.yml`：禁止空白 Issue + 文档/安全链接（不是任务类型）。
 
-## 2.1 好 Issue 的共性（从 omp closed 归纳）
+## 2.1 必填 vs 额外字段（规范）
 
-**标题：** 具体机制/症状，可检索（不是 “bug in chat”）。
+**必填：** 每种模板顶部一组，提交前必须写清。
 
-**必有信息：**
+**额外字段：** 表单里仍可能显示，但：
 
-1. **发生了什么**（Description / Current）  
-2. **怎么稳定看到**（numbered Steps / deterministic repro）  
-3. **权威期望**（Expected：必须怎样 / 禁止怎样）  
-4. **环境**（版本、客户端/OS、相关组件）  
-5. Feature/Task 还要 **Done when / acceptance**（可关单的清单）
+1. 字段 **说明（description）** 写清 **何时应填 / 何时可空**。  
+2. 字段 **标题（label）不含 “(optional)”**。  
+3. 发布到 Issue 正文的标题就是 `### Error output` 这种干净名字。  
+4. **不适用就留空**，不要写一堆 “N/A (optional)”。
 
-**常见 optional（有再写，没有别空喊）：**
+| 额外字段 | 推荐何时加上 |
+|----------|----------------|
+| Error output | 有堆栈、工具失败输出、控制台/服务端日志 |
+| Impact | Description 里影响写得不够时 |
+| Evidence | perf 数字、N/N 次复现、waterfall 截图 |
+| Related issues | 易混 issue、需写 related but distinct |
+| Suspected code paths | 已读代码，能点名文件/符号 |
+| Suggested regression coverage | 能写出最小测试/断言 |
+| Non-goals | 功能/任务容易膨胀时 |
+| Proposed approach | 有高层方向，不是长设计 |
+| Alternatives | 试过绕过或否决过方案 |
+| How to observe success | 尤其 `perf:` 任务 |
+| Background | 「为什么现在做」不明显时 |
+| Area / Additional | 路由或补充材料需要时 |
 
-| Optional 块 | 何时有用 | omp 例子 |
-|-------------|----------|----------|
-| Error output / logs | 有堆栈、工具输出 | #5995, #5952 |
-| Impact / why it matters | 安全、误导、无法自助 | #5995, #5907 |
-| Evidence / measurements | perf、概率性、截图计数 | #6011, #5934 |
-| Related / duplicate check | 易混 issue | #6011, #5996 |
-| Suspected code paths | 已读源码 | #5995, #5934 |
-| Suggested regression tests | 可写成测试契约 | #6011, #6003, #6004 |
-| Workarounds | 临时绕过 | #5952, #5793 |
-| Proposed approach | 方向建议，非长设计 | #5970, #5793 |
-| Non-goals / out of scope | 控 PR 膨胀 | #4815, #4983 |
-| Alternatives considered | Feature | #5578, #5793 |
-| Area | 粗分模块 | omp 下拉；我们用自由文本 |
+## 2.2 好 Issue 共性
 
-**不要：** 无复现的猜测；把多个不相关问题塞一条；用 Bug 表单装新功能。
+1. 具体可检索标题  
+2. 发生了什么 + 为何要紧  
+3. 可跟做的 repro / 或 Feature 的 use case  
+4. Expected / Done when 可验收  
+5. Environment（Bug）或范围边界（Feature/Task）
 
-## 2.2 Bug 字段
-
-| 字段 | 必填 |
-|------|------|
-| Confirmation | 是 |
-| Description | 是 |
-| Steps to reproduce | 是 |
-| Expected | 是 |
-| Actual | 是 |
-| Environment | 是 |
-| Error / Impact / Evidence / Related / Suspected paths / Regression tests / Additional | 否 |
-
-## 2.3 Feature 字段
-
-| 字段 | 必填 |
-|------|------|
-| Description | 是 |
-| Problem / use case | 是 |
-| Done when | 是 |
-| Non-goals / Proposed / Alternatives / Area / Additional | 否 |
-
-## 2.4 Task 字段
-
-| 字段 | 必填 |
-|------|------|
-| Goal | 是 |
-| Done when | 是 |
-| Background / Out of scope / How to observe success / Suspected / Additional | 否 |
-
-## 2.5 提完
+## 2.3 提完
 
 Milestone → Assignee → 一个 PR `Fixes #N`。
 
-## 2.6 vs bd
+## 2.4 vs bd
 
 GitHub Issue = 人类协作；bd = 本地 agent 树。
