@@ -261,31 +261,29 @@ describe('After user setup', () => {
 
 	it('note', () => {
 		cy.dismissUserSetup();
-		cy.get('[data-cy-open-post-form]', { timeout: 30000 }).should('exist').click({ force: true });
-		cy.get('[data-cy-post-form-text]', { timeout: 10000 }).should('be.visible').type('Hello, Misskey!');
-		// Submit may sit under residual modal chrome in headless CI
-		cy.get('[data-cy-open-post-form-submit]').click({ force: true });
+		// Prefer the floating navbar post button (avoid duplicate forms)
+		cy.get('[data-cy-open-post-form]', { timeout: 30000 }).first().click({ force: true });
+		cy.get('[data-cy-post-form-text]:visible', { timeout: 10000 }).first().type('Hello, Misskey!');
+		cy.get('[data-cy-open-post-form-submit]:visible').first().click({ force: true });
 		cy.contains('Hello, Misskey!', { timeout: 15000 });
   });
 
 	it('open note form with hotkey', () => {
 		cy.dismissUserSetup();
-		cy.get('[data-cy-open-post-form]', { timeout: 30000 }).should('exist');
-		// Use trigger() to give different `code` to test if hotkeys also work on non-QWERTY keyboards.
-		cy.document().trigger("keydown", { eventConstructor: 'KeyboardEvent', key: "n", code: "KeyL" });
-		// See if the form is opened
-		cy.get('[data-cy-post-form-text]', { timeout: 10000 }).should('be.visible');
-		// Close it (Escape may not blur; click outside / force close via hotkey on document)
-		cy.document().trigger("keydown", { eventConstructor: 'KeyboardEvent', key: "Escape", code: "Escape" });
-		cy.get('body').type('{esc}', { force: true });
-		// If still open, click the open-post-form toggle again to close
+		// Ensure no leftover post form from previous test
 		cy.get('body').then(($body) => {
-			const text = $body.find('[data-cy-post-form-text]:visible');
-			if (text.length) {
-				cy.get('[data-cy-open-post-form]').click({ force: true });
+			if ($body.find('[data-cy-post-form-text]:visible').length) {
+				cy.get('body').type('{esc}', { force: true });
 			}
 		});
-		cy.get('[data-cy-post-form-text]').should('not.be.visible');
+		cy.get('[data-cy-open-post-form]', { timeout: 30000 }).first().should('exist');
+		// Use trigger() to give different `code` to test if hotkeys also work on non-QWERTY keyboards.
+		cy.document().trigger("keydown", { eventConstructor: 'KeyboardEvent', key: "n", code: "KeyL" });
+		cy.get('[data-cy-post-form-text]:visible', { timeout: 10000 }).should('have.length.at.least', 1);
+		// Close via Escape on document
+		cy.document().trigger("keydown", { eventConstructor: 'KeyboardEvent', key: "Escape", code: "Escape" });
+		cy.get('body').type('{esc}', { force: true });
+		cy.get('[data-cy-post-form-text]:visible').should('have.length', 0);
   });
 });
 

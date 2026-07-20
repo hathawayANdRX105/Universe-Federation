@@ -9,6 +9,8 @@ import base from './jest.config.common.ts';
 
 export default {
 	...base,
+	// AP delivery + waitUntil under CI load
+	testTimeout: 180_000,
 	roots: [
 		'<rootDir>/test-federation',
 	],

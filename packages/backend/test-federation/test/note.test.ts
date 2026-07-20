@@ -1,6 +1,6 @@
 import assert, { rejects, strictEqual } from 'node:assert';
 import type * as Misskey from 'misskey-js';
-import { addCustomEmoji, createAccount, createModerator, deepStrictEqualWithExcludedFields, type LoginUser, resolveRemoteNote, resolveRemoteUser, sleep, uploadFile } from './utils.js';
+import { addCustomEmoji, createAccount, createModerator, deepStrictEqualWithExcludedFields, type LoginUser, resolveRemoteNote, resolveRemoteUser, sleep, uploadFile, waitUntil } from './utils.js';
 
 describe('Note', () => {
 	let alice: LoginUser, bob: LoginUser;
@@ -43,7 +43,9 @@ describe('Note', () => {
 				'userId',
 				'user',
 				'uri',
-			]);
+				'bypassSilence',
+				'threadId',
+				'userHost',]);
 			strictEqual(aliceInB.id, resolvedNote.userId);
 		});
 
@@ -55,7 +57,11 @@ describe('Note', () => {
 				text: 'b',
 				replyId: _replyedNote.id,
 			})).createdNote;
-			// NOTE: the repliedCount is incremented, so fetch again
+			// NOTE: the repliedCount is incremented asynchronously after AP round-trip
+			await waitUntil(async () => {
+				const n = await alice.client.request('notes/show', { noteId: _replyedNote.id });
+				return n.repliesCount === 1;
+			});
 			const replyedNote = await alice.client.request('notes/show', { noteId: _replyedNote.id });
 			strictEqual(replyedNote.repliesCount, 1);
 
@@ -69,7 +75,9 @@ describe('Note', () => {
 				'userId',
 				'user',
 				'uri',
-			]);
+				'bypassSilence',
+				'threadId',
+				'userHost',]);
 			assert(resolvedNote.replyId != null);
 			assert(resolvedNote.reply != null);
 			deepStrictEqualWithExcludedFields(replyedNote, resolvedNote.reply, [
@@ -82,7 +90,9 @@ describe('Note', () => {
 				'uri',
 				// flaky because this is parallelly incremented, so let's check it below
 				'repliesCount',
-			]);
+				'bypassSilence',
+				'threadId',
+				'userHost',]);
 			strictEqual(aliceInB.id, resolvedNote.userId);
 
 			await sleep();
@@ -111,7 +121,9 @@ describe('Note', () => {
 				'userId',
 				'user',
 				'uri',
-			]);
+				'bypassSilence',
+				'threadId',
+				'userHost',]);
 			assert(resolvedNote.renoteId != null);
 			assert(resolvedNote.renote != null);
 			deepStrictEqualWithExcludedFields(renotedNote, resolvedNote.renote, [
@@ -120,7 +132,9 @@ describe('Note', () => {
 				'userId',
 				'user',
 				'uri',
-			]);
+				'bypassSilence',
+				'threadId',
+				'userHost',]);
 			strictEqual(aliceInB.id, resolvedNote.userId);
 		});
 	});

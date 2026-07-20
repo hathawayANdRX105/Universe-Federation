@@ -1,7 +1,4 @@
 import assert, { rejects, strictEqual } from 'node:assert';
-
-// AP delivery + waitUntil can exceed Jest's default 5s/60s under CI load.
-jest.setTimeout(180_000);
 import type * as Misskey from 'misskey-js';
 import { createAccount, deepStrictEqualWithExcludedFields, fetchAdmin, type LoginUser, resolveRemoteNote, resolveRemoteUser, sleep, waitUntil } from './utils.js';
 
