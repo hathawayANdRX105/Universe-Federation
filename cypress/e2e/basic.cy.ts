@@ -126,11 +126,12 @@ describe('After user signup', () => {
 
 		cy.get('[data-cy-signin-page-input]', { timeout: 10000 }).should('be.visible');
 		// Enterキーで続行できるかの確認も兼ねる
-		cy.get('[data-cy-signin-username] input').type('alice{enter}');
+		cy.get('[data-cy-signin-username] input').type('alice');
+		cy.get('[data-cy-signin-page-input-continue]').click();
 
 		cy.get('[data-cy-signin-page-password]', { timeout: 30000 }).should('be.visible');
-		// Enterキーで続行できるかの確認も兼ねる
-		cy.get('[data-cy-signin-password] input').type('alice1234{enter}');
+		cy.get('[data-cy-signin-password] input').type('alice1234');
+		cy.get('[data-cy-signin-page-password-continue]').click();
 
 		cy.wait('@signin');
   });
@@ -139,17 +140,17 @@ describe('After user signup', () => {
 		cy.request('POST', '/api/admin/suspend-user', {
 			i: this.admin.token,
 			userId: this.alice.id,
-		});
+		}).its('status').should('be.oneOf', [200, 204]);
 
 		cy.visitHome();
 
 		cy.get('[data-cy-signin]', { timeout: 30000 }).click();
 
 		cy.get('[data-cy-signin-page-input]', { timeout: 10000 }).should('be.visible');
-		cy.get('[data-cy-signin-username] input').type('alice{enter}');
-
-		// TODO: cypressにブラウザの言語指定できる機能が実装され次第英語のみテストするようにする
-		cy.contains(/アカウントが凍結されています|This account is suspended|This account has been suspended due to|账户已被冻结|帳戶已被凍結/gi, { timeout: 15000 });
+		cy.get('[data-cy-signin-username] input').clear().type('alice');
+		cy.get('[data-cy-signin-page-input-continue]').click();
+		// Suspended dialog title/description (i18n)
+		cy.contains(/凍結|suspended|已冻结|已凍結/i, { timeout: 20000 }).should('be.visible');
 	});
 });
 

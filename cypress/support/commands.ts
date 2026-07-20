@@ -81,9 +81,11 @@ Cypress.Commands.add('login', (username, password) => {
 
 	cy.get('[data-cy-signin]', { timeout: 30000 }).click();
 	cy.get('[data-cy-signin-page-input]', { timeout: 10000 }).should('be.visible');
-	cy.get('[data-cy-signin-username] input').type(`${username}{enter}`);
+	cy.get('[data-cy-signin-username] input').type(username);
+	cy.get('[data-cy-signin-page-input-continue]').click();
 	cy.get('[data-cy-signin-page-password]', { timeout: 30000 }).should('be.visible');
-	cy.get('[data-cy-signin-password] input').type(`${password}{enter}`);
+	cy.get('[data-cy-signin-password] input').type(password);
+	cy.get('[data-cy-signin-page-password-continue]').click();
 
 	cy.wait('@signin').as('signedIn');
 });

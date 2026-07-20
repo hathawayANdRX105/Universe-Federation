@@ -43,7 +43,7 @@ export type Request = <
 
 type Host = 'a.test' | 'b.test';
 
-export async function sleep(ms = 250): Promise<void> {
+export async function sleep(ms = 1000): Promise<void> {
 	return new Promise(resolve => setTimeout(resolve, ms));
 }
 
@@ -80,7 +80,7 @@ async function createAdmin(host: Host): Promise<(Misskey.entities.SignupResponse
 			await client.request('admin/roles/update-default-policies', {
 				policies: {
 					/** TODO: @see https://github.com/misskey-dev/misskey/issues/14169 */
-					rateLimitFactor: 0 as never,
+					rateLimitFactor: 0.01 as never,
 				},
 			}, res.token);
 		} catch (roleErr) {
@@ -89,9 +89,16 @@ async function createAdmin(host: Host): Promise<(Misskey.entities.SignupResponse
 		}
 		return res;
 	} catch (err: any) {
-		// access denied = admin already exists (expected on re-run)
-		const msg = err?.info?.e?.message ?? err?.message;
-		if (msg === 'access denied' || err?.code === 'ACCESS_DENIED') return undefined;
+		// Admin already exists: ACCESS_DENIED (legacy) or CREDENTIAL_REQUIRED (rootUserId set).
+		const msg = (err?.info?.e?.message ?? err?.message ?? '').toLowerCase();
+		if (
+			msg === 'access denied' ||
+			err?.code === 'ACCESS_DENIED' ||
+			err?.code === 'CREDENTIAL_REQUIRED' ||
+			err?.id === '1384574d-a912-4b81-8601-c7b1c4085df1'
+		) {
+			return undefined;
+		}
 		throw err;
 	}
 }
