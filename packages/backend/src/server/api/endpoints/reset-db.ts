@@ -13,6 +13,7 @@ import { DI } from '@/di-symbols.js';
 import { resetDb } from '@/misc/reset-db.js';
 import { EnvService } from '@/global/EnvService.js';
 import { InternalEventService } from '@/global/InternalEventService.js';
+import { CacheService } from '@/core/CacheService.js';
 import { ApiError } from '../error.js';
 
 export const meta = {
@@ -65,6 +66,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 		private loggerService: LoggerService,
 		private readonly internalEventService: InternalEventService,
+		private readonly cacheService: CacheService,
 
 		envService: EnvService,
 	) {
@@ -75,7 +77,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			logger.info('---- Resetting database...');
 
 			await this.redisClient.flushdb();
+			// Drop in-process user/token caches so subsequent signups/signins don't hit stale IDs.
+			await this.cacheService.clear();
 			await resetDb(this.db);
+			// Clear again after wipe in case any concurrent request refilled caches mid-reset.
+			await this.cacheService.clear();
 
 			// resetDb wipes meta; reseed defaults. Open registration so Cypress visitor signup shows.
 			await this.metasRepository.upsert({ id: 'x', disableRegistration: false }, ['id']);

@@ -276,18 +276,15 @@ describe('User', () => {
 				createAccount('b.test'),
 			]);
 
+			// Lock BEFORE remote resolve: AccountUpdate only fans out to existing followers,
+			// so Bob must first-fetch Alice after isLocked is already true.
+			await alice.client.request('i/update', { isLocked: true });
+
 			[bobInA, aliceInB] = await Promise.all([
 				resolveRemoteUser('b.test', bob.id, alice),
 				resolveRemoteUser('a.test', alice.id, bob),
 			]);
-
-			await alice.client.request('i/update', { isLocked: true });
-			// AccountUpdate only delivers Update to existing followers; force-refresh Alice on B
-			// so following/create sees isLocked and creates a follow request instead of a follow.
-			await waitUntil(async () => {
-				aliceInB = await resolveRemoteUser('a.test', alice.id, bob);
-				return aliceInB.isLocked === true;
-			});
+			strictEqual(aliceInB.isLocked, true);
 		});
 
 		describe('Send follow request from Bob to Alice and cancel', () => {
