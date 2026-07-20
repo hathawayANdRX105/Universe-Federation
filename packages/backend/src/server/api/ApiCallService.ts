@@ -113,9 +113,12 @@ export class ApiCallService {
 		} else {
 			if (this.envService.env.NODE_ENV === 'test') {
 				console.error('authenticate path non-Auth error', err);
+				const message = err instanceof Error ? err.message : String(err);
+				this.send(reply, 500, new ApiError(null, { e: { message, code: err instanceof Error ? err.name : 'Error' } }));
+			} else {
+				// Never leak internal exception text to clients outside test.
+				this.send(reply, 500, new ApiError());
 			}
-			const message = err instanceof Error ? err.message : String(err);
-			this.send(reply, 500, new ApiError(null, { e: { message, code: err instanceof Error ? err.name : 'Error' } }));
 		}
 	}
 
@@ -158,13 +161,22 @@ export class ApiCallService {
 				});
 			}
 
-			throw new ApiError(null, {
-				e: {
-					message: err.message,
-					code: err.name,
-					id: errId,
-				},
-			});
+			// Client payload: generic outside test. Full detail stays in server logs/Sentry above.
+			throw new ApiError(null, this.envService.env.NODE_ENV === 'test'
+				? {
+					e: {
+						message: err.message,
+						code: err.name,
+						id: errId,
+					},
+				}
+				: {
+					e: {
+						message: 'Internal error occurred. Please contact us if the error persists.',
+						code: 'INTERNAL_ERROR',
+						id: errId,
+					},
+				});
 		}
 	}
 

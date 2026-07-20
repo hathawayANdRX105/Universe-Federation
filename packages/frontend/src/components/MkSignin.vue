@@ -163,18 +163,22 @@ async function onUsernameSubmitted(username: string) {
 	waiting.value = true;
 
 	try {
-		userInfo.value = await misskeyApi('users/show', {
+		const shown = await misskeyApi('users/show', {
 			username,
 		}).catch(() => null);
-
-		// Password page requires a user object; stub if show failed (e.g. rate limit).
-		if (userInfo.value == null) {
-			userInfo.value = { username } as any;
+		if (shown != null) {
+			userInfo.value = shown;
 		}
 
+		// signin-flow decides next step; do not invent a user object before the server accepts the username.
 		await tryLogin({
 			username,
 		});
+
+		// Rate-limited users/show can still proceed; keep username for password/totp pages only after success.
+		if (userInfo.value == null) {
+			userInfo.value = { username } as any;
+		}
 	} catch {
 		// tryLogin already surfaces errors via onSigninApiError
 	} finally {

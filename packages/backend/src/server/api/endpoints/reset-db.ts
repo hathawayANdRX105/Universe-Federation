@@ -19,12 +19,13 @@ import { ApiError } from '../error.js';
 export const meta = {
 	tags: ['non-productive'],
 
-	// Cypress posts without a token under NODE_ENV=test; runtime still gates on NODE_ENV.
+	// Cypress posts without a token under NODE_ENV=test.
+	// Runtime still requires NODE_ENV=test AND MK_ALLOW_RESET_DB=1 (set by start:test).
 	requireCredential: false,
 	requireAdmin: false,
 	kind: 'write:admin:meta',
 
-	description: 'Only available when running with <code>NODE_ENV=test</code>. Reset the database and flush Redis.',
+	description: 'Only available when running with <code>NODE_ENV=test</code> and <code>MK_ALLOW_RESET_DB=1</code>. Reset the database and flush Redis.',
 
 	errors: {
 		unavailable: {
@@ -71,7 +72,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		envService: EnvService,
 	) {
 		super(meta, paramDef, async () => {
-			if (envService.env.NODE_ENV !== 'test') throw new ApiError(meta.errors.unavailable);
+			// Double gate: accidental NODE_ENV=test alone must not expose destructive reset.
+			if (envService.env.NODE_ENV !== 'test' || process.env.MK_ALLOW_RESET_DB !== '1') {
+				throw new ApiError(meta.errors.unavailable);
+			}
 
 			const logger = this.loggerService.getLogger('reset-db');
 			logger.info('---- Resetting database...');
