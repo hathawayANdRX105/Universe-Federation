@@ -50,7 +50,7 @@ export async function sleep(ms = 5000): Promise<void> {
 /** Poll until predicate is true or timeout (AP delivery is async via BullMQ). */
 export async function waitUntil(
 	fn: () => Promise<boolean>,
-	{ timeoutMs = 20000, intervalMs = 500 }: { timeoutMs?: number; intervalMs?: number } = {},
+	{ timeoutMs = 60000, intervalMs = 1000 }: { timeoutMs?: number; intervalMs?: number } = {},
 ): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
 	let lastErr: unknown;

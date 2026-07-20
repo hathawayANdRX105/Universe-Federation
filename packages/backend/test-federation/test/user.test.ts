@@ -282,6 +282,8 @@ describe('User', () => {
 			]);
 
 			await alice.client.request('i/update', { isLocked: true });
+			// let profile/AP actor update settle before remote follow requests
+			await sleep();
 		});
 
 		describe('Send follow request from Bob to Alice and cancel', () => {
