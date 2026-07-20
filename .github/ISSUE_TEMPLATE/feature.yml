@@ -1,0 +1,110 @@
+name: Feature
+description: New capability or user-facing improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Guide: [agent/02-issue-guide.md](../../agent/02-issue-guide.md)
+
+        ```
+        ┌─────────────────────────────────────────────────────────┐
+        │  REQUIRED — must fill before submit                     │
+        │  RECOMMENDED EXTRAS — optional; fill when the note says │
+        │  Published headings are plain (no "(optional)" suffix). │
+        └─────────────────────────────────────────────────────────┘
+        ```
+
+        Bugs → Bug template. Internal refactor/CI/docs → Task template.
+        Quality examples: [omp#4815](https://github.com/can1357/oh-my-pi/issues/4815), [omp#4983](https://github.com/can1357/oh-my-pi/issues/4983).
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## REQUIRED
+        Complete every field in this section.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What should exist after this ships? Be concrete.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Problem / use case
+      description: Who is blocked today? What workflow fails? Why existing levers are not enough (if any).
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Acceptance checklist a single PR can satisfy. Prefer observable outcomes.
+      placeholder: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## RECOMMENDED EXTRAS (optional — use when applicable)
+
+        | Field | Prefer to fill when… |
+        | --- | --- |
+        | **Non-goals** | The idea can balloon (protocol change, multi-app, redesign) |
+        | **Proposed approach** | You have a high-level shape that helps discussion (not a full design doc) |
+        | **Alternatives considered** | You tried workarounds or rejected designs worth recording |
+        | **Area** | Title does not already make the module obvious |
+        | **Additional context** | Links, screenshots, prior art, related issues |
+
+        Skip by leaving empty. Do not write “(optional)” into the Issue body.
+
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals
+      description: "Prefer when: scope can sprawl. Skip when: the ask is already tiny and obvious."
+    validations:
+      required: false
+
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed approach
+      description: "Prefer when: a short API/UI shape helps. Skip when: you only know the user problem. Not a full implementation plan unless maintainers ask."
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: "Prefer when: you rejected workarounds/designs. Skip when: none worth mentioning."
+    validations:
+      required: false
+
+  - type: textarea
+    id: area
+    attributes:
+      label: Area
+      description: "Prefer when: routing helps (chat, timeline, federation, frontend, API…). Skip when: title already says it."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: "Prefer when: links, screenshots, prior art. Skip when: nothing else."
+    validations:
+      required: false

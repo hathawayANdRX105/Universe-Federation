@@ -1,0 +1,103 @@
+name: Task / Refactor
+description: Internal work — refactor, CI, docs, chore, active perf (one PR-sized unit)
+labels: ["chore"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Guide: [agent/02-issue-guide.md](../../agent/02-issue-guide.md)
+
+        ```
+        ┌─────────────────────────────────────────────────────────┐
+        │  REQUIRED — must fill before submit                     │
+        │  RECOMMENDED EXTRAS — optional; fill when the note says │
+        │  Published headings are plain (no "(optional)" suffix). │
+        └─────────────────────────────────────────────────────────┘
+        ```
+
+        User-facing **new capability** → Feature. **Broken behavior / regression** → Bug.
+        Title prefixes: `refactor:` / `chore:` / `docs:` / `test:` / `perf:` (optimization, not a regression).
+        Default label is `chore`; add `docs` / `perf` (or change labels) after create if needed.
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## REQUIRED
+        Complete every field in this section.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should change in the codebase when this is done?
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Acceptance checklist a single PR can close.
+      placeholder: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## RECOMMENDED EXTRAS (optional — use when applicable)
+
+        | Field | Prefer to fill when… |
+        | --- | --- |
+        | **Background** | “Why now” is not obvious from Goal alone |
+        | **Out of scope** | Work could sprawl into a rewrite or behavior change |
+        | **How to observe success** | `perf:` work, or success is not a simple functional assert |
+        | **Suspected areas** | You know packages/files/symbols |
+        | **Additional context** | Links or notes that do not fit above |
+
+        Skip by leaving empty. Do not write “(optional)” into the Issue body.
+
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: "Prefer when: context/link to incident is needed. Skip when: Goal is enough."
+    validations:
+      required: false
+
+  - type: textarea
+    id: out
+    attributes:
+      label: Out of scope
+      description: "Prefer when: the task could sprawl. Skip when: scope is already one tight change."
+    validations:
+      required: false
+
+  - type: textarea
+    id: observe
+    attributes:
+      label: How to observe success
+      description: "Prefer when: title is perf: or success needs a metric/log/bench/before-after. Skip when: Done when already implies a clear functional check."
+    validations:
+      required: false
+
+  - type: textarea
+    id: suspected
+    attributes:
+      label: Suspected areas
+      description: "Prefer when: you know packages/files/symbols. Skip when: unknown."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: "Prefer when: extra links/notes. Skip when: nothing else."
+    validations:
+      required: false

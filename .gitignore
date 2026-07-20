@@ -92,3 +92,9 @@ vite.config.local-dev.ts.timestamp-*
 .tsbuildinfo
 *.tsbuildinfo
 tmp/*
+
+# Local agent / tooling (not part of the product tree)
+.beads/
+.codegraph/
+.code-review-graph/
+.worktree/
