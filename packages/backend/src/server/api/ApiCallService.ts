@@ -111,7 +111,11 @@ export class ApiCallService {
 				id: 'b0a7f5f8-dc2f-4171-b91f-de88ad238e14',
 			}));
 		} else {
-			this.send(reply, 500, new ApiError());
+			if (this.envService.env.NODE_ENV === 'test') {
+				console.error('authenticate path non-Auth error', err);
+			}
+			const message = err instanceof Error ? err.message : String(err);
+			this.send(reply, 500, new ApiError(null, { e: { message, code: err instanceof Error ? err.name : 'Error' } }));
 		}
 	}
 
@@ -131,6 +135,10 @@ export class ApiCallService {
 				user: userId ?? '<unauthenticated>',
 				...data,
 			});
+			if (this.envService.env.NODE_ENV === 'test') {
+				// Ensure CI logs surface the real stack (Nest logger may drop structured fields).
+				console.error(message, err);
+			}
 
 			if (this.config.sentryForBackend) {
 				Sentry.captureMessage(`Internal error occurred in ${ep.name}: ${renderInlineError(err)}`, {

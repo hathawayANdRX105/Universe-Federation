@@ -162,13 +162,28 @@ function onUseTotp(): void {
 async function onUsernameSubmitted(username: string) {
 	waiting.value = true;
 
-	userInfo.value = await misskeyApi('users/show', {
-		username,
-	}).catch(() => null);
+	try {
+		userInfo.value = await misskeyApi('users/show', {
+			username,
+		}).catch(() => null);
 
-	await tryLogin({
-		username,
-	});
+		// Password page requires a user object; stub if show failed (e.g. rate limit).
+		if (userInfo.value == null) {
+			userInfo.value = { username } as any;
+		}
+
+		await tryLogin({
+			username,
+		});
+	} catch {
+		// tryLogin already surfaces errors via onSigninApiError
+	} finally {
+		if (waiting.value) {
+			nextTick(() => {
+				waiting.value = false;
+			});
+		}
+	}
 }
 
 async function onPasswordSubmitted(pw: PwResponse) {
@@ -290,6 +305,11 @@ async function onLoginSucceeded(res: Misskey.entities.SigninFlowResponse & { fin
 
 function onSigninApiError(err?: any): void {
 	const id = err?.id ?? null;
+	if (err?.code === 'ACCOUNT_SUSPENDED') {
+		showSuspendedDialog();
+		waiting.value = false;
+		return;
+	}
 
 	switch (id) {
 		case '6cc579cc-885d-43d8-95c2-b8c7fc963280': {
@@ -308,7 +328,8 @@ function onSigninApiError(err?: any): void {
 			});
 			break;
 		}
-		case 'e03a5f46-d309-4865-9b69-56282d94e1eb': {
+		case 'e03a5f46-d309-4865-9b69-56282d94e1eb':
+		case 'a8c724b3-6e9c-4b46-b1a8-bc3ed6258370': { // ACCOUNT_SUSPENDED (ServerUtilityService)
 			showSuspendedDialog();
 			break;
 		}
