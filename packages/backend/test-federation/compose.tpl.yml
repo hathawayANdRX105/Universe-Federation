@@ -17,6 +17,7 @@ services:
       - ./.config/docker.env
     environment:
       - NODE_ENV=production
+      - FORCE_FOLLOW_REMOTE_USER_FOR_TESTING=true
     volumes:
       - type: bind
         source: ../../../built

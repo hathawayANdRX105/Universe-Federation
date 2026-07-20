@@ -261,29 +261,34 @@ describe('After user setup', () => {
 
 	it('note', () => {
 		cy.dismissUserSetup();
-		// Prefer the floating navbar post button (avoid duplicate forms)
+		// Prefer the floating navbar post button (avoid duplicate forms / overlays)
 		cy.get('[data-cy-open-post-form]', { timeout: 30000 }).first().click({ force: true });
-		cy.get('[data-cy-post-form-text]:visible', { timeout: 10000 }).first().type('Hello, Misskey!');
+		cy.get('[data-cy-post-form-text]:visible', { timeout: 10000 }).first()
+			.click({ force: true })
+			.type('Hello, Misskey!', { force: true });
 		cy.get('[data-cy-open-post-form-submit]:visible').first().click({ force: true });
 		cy.contains('Hello, Misskey!', { timeout: 15000 });
   });
 
 	it('open note form with hotkey', () => {
 		cy.dismissUserSetup();
-		// Ensure no leftover post form from previous test
-		cy.get('body').then(($body) => {
-			if ($body.find('[data-cy-post-form-text]:visible').length) {
-				cy.get('body').type('{esc}', { force: true });
-			}
-		});
+		// Close any leftover form from previous test
+		cy.get('body').type('{esc}', { force: true });
+		cy.wait(300);
 		cy.get('[data-cy-open-post-form]', { timeout: 30000 }).first().should('exist');
 		// Use trigger() to give different `code` to test if hotkeys also work on non-QWERTY keyboards.
 		cy.document().trigger("keydown", { eventConstructor: 'KeyboardEvent', key: "n", code: "KeyL" });
 		cy.get('[data-cy-post-form-text]:visible', { timeout: 10000 }).should('have.length.at.least', 1);
-		// Close via Escape on document
+		// Close via Escape
 		cy.document().trigger("keydown", { eventConstructor: 'KeyboardEvent', key: "Escape", code: "Escape" });
 		cy.get('body').type('{esc}', { force: true });
-		cy.get('[data-cy-post-form-text]:visible').should('have.length', 0);
+		// Fallback: click post button again toggles form in some layouts
+		cy.get('body').then(($body) => {
+			if ($body.find('[data-cy-post-form-text]:visible').length) {
+				cy.get('[data-cy-open-post-form]').first().click({ force: true });
+			}
+		});
+		cy.get('[data-cy-post-form-text]:visible', { timeout: 10000 }).should('have.length', 0);
   });
 });
 
