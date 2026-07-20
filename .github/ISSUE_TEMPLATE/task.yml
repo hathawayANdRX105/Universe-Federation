@@ -1,0 +1,33 @@
+name: Task / Refactor
+description: Scoped task, refactor, or chore (one PR-sized unit)
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One issue = one mergeable PR. Prefer a Milestone for the batch.
+        Prefer title prefix: `refactor:` / `chore:` / `docs:` / `test:`.
+        Guide: [agent/02-issue-guide.md](../../agent/02-issue-guide.md)
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should change when this is done?
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Acceptance checks (bullet list).
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: out
+    attributes:
+      label: Out of scope (optional)
+      description: What this issue must NOT expand into.
+    validations:
+      required: false
