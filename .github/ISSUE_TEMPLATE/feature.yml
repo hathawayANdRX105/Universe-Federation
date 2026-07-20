@@ -1,0 +1,54 @@
+name: Feature
+description: Propose a new capability or user-facing improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For **bugs**, use the Bug template. For **refactor / CI / docs / internal chores**, use Task.
+        Guide: [agent/02-issue-guide.md](../../agent/02-issue-guide.md)
+
+        One feature idea per issue. Large ideas should be split into smaller, mergeable units before implementation.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What would you like?
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Why is this needed? What problem does it solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: How we know this is complete (acceptance checks).
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution (optional)
+      description: Ideas only — not a full implementation plan unless maintainers ask.
+    validations:
+      required: false
+
+  - type: textarea
+    id: out
+    attributes:
+      label: Out of scope (optional)
+      description: What this should not expand into.
+    validations:
+      required: false

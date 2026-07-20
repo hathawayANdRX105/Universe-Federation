@@ -1,12 +1,14 @@
 name: Task / Refactor
-description: Scoped task, refactor, or chore (one PR-sized unit)
+description: Scoped internal work — refactor, CI, docs, chore (one PR-sized unit)
 body:
   - type: markdown
     attributes:
       value: |
         One issue = one mergeable PR. Prefer a Milestone for the batch.
-        Prefer title prefix: `refactor:` / `chore:` / `docs:` / `test:`.
+        Title prefix: `refactor:` / `chore:` / `docs:` / `test:` / `perf:` (optimization, not a regression).
+        User-facing **new capability** → Feature template. **Bugs** → Bug template.
         Guide: [agent/02-issue-guide.md](../../agent/02-issue-guide.md)
+
   - type: textarea
     id: goal
     attributes:
@@ -14,6 +16,7 @@ body:
       description: What should change when this is done?
     validations:
       required: true
+
   - type: textarea
     id: done
     attributes:
@@ -24,6 +27,7 @@ body:
         - [ ]
     validations:
       required: true
+
   - type: textarea
     id: out
     attributes:
