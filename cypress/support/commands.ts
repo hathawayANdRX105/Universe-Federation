@@ -61,9 +61,16 @@ Cypress.Commands.add('registerUser', (username, password, isAdmin = false) => {
 
 	// First admin flips requireSetup; wait until API reflects it before visiting UI.
 	if (isAdmin) {
-		cy.request('POST', '/api/meta', { detail: true })
-			.its('body.requireSetup')
-			.should('eq', false);
+		const deadline = Date.now() + 15000;
+		const poll = (): Cypress.Chainable => cy.request('POST', '/api/meta', { detail: true }).then((res) => {
+			if (res.body.requireSetup === false) return;
+			if (Date.now() > deadline) {
+				expect(res.body.requireSetup, 'requireSetup after admin create').to.eq(false);
+				return;
+			}
+			return cy.wait(250).then(poll);
+		});
+		poll();
 	}
 });
 

@@ -89,7 +89,8 @@ async function createAdmin(host: Host): Promise<Misskey.entities.SignupResponse 
 		return res;
 	}).catch(err => {
 		// access denied = admin already exists (expected on re-run)
-		if (err && typeof err === 'object' && 'info' in err && (err as any).info?.e?.message === 'access denied') return undefined;
+		const msg = (err as any)?.info?.e?.message ?? (err as any)?.message;
+		if (msg === 'access denied' || (err as any)?.code === 'ACCESS_DENIED') return undefined;
 		throw err;
 	});
 }
@@ -97,7 +98,12 @@ async function createAdmin(host: Host): Promise<Misskey.entities.SignupResponse 
 export async function fetchAdmin(host: Host): Promise<LoginUser> {
 	const admin = ADMIN_CACHE.get(host) ?? await signin(host, ADMIN_PARAMS)
 		.catch(async err => {
-			if (err.id === '6cc579cc-885d-43d8-95c2-b8c7fc963280') {
+			// Missing local user: historical Misskey id, or current CREDENTIAL_REQUIRED (404).
+			const missingUser =
+				err?.id === '6cc579cc-885d-43d8-95c2-b8c7fc963280' ||
+				err?.id === '1384574d-a912-4b81-8601-c7b1c4085df1' ||
+				err?.code === 'CREDENTIAL_REQUIRED';
+			if (missingUser) {
 				await createAdmin(host);
 				return await signin(host, ADMIN_PARAMS);
 			}
