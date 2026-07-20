@@ -1,5 +1,5 @@
 name: Bug
-description: Reproducible defect or regression (facts first)
+description: Reproducible defect or regression
 labels: ["bug"]
 body:
   - type: markdown
@@ -7,10 +7,23 @@ body:
       value: |
         Guide: [agent/02-issue-guide.md](../../agent/02-issue-guide.md)
 
-        **Required** fields first. Extra fields appear only as form inputs — fill them when the note under each field says so.
-        In the published Issue, headings are plain names (no “(optional)” suffix). Leave a field empty if it does not apply; do not write “N/A” walls.
+        ```
+        ┌─────────────────────────────────────────────────────────┐
+        │  REQUIRED — must fill before submit                     │
+        │  RECOMMENDED EXTRAS — optional; fill when the note says │
+        │    so. Leave blank if not applicable (do not write N/A).│
+        │  Published headings are plain names (no "(optional)").  │
+        └─────────────────────────────────────────────────────────┘
+        ```
 
-        Quality bar: [omp#5995](https://github.com/can1357/oh-my-pi/issues/5995), [omp#6011](https://github.com/can1357/oh-my-pi/issues/6011).
+        Quality examples: [omp#5995](https://github.com/can1357/oh-my-pi/issues/5995), [omp#6011](https://github.com/can1357/oh-my-pi/issues/6011).
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## REQUIRED
+        Complete every field in this section.
 
   - type: checkboxes
     id: bug-confirmation
@@ -34,7 +47,7 @@ body:
     id: reproduction
     attributes:
       label: Steps to reproduce
-      description: Shortest exact steps. Include commands/payloads when relevant. Note races/timing if needed.
+      description: Shortest exact steps. Include commands/payloads when relevant.
       placeholder: |
         1.
         2.
@@ -77,16 +90,26 @@ body:
   - type: markdown
     attributes:
       value: |
-        ### Extra fields (fill only when useful)
-        Leave blank if not applicable. Do **not** put the word “optional” in the Issue body.
+        ---
+        ## RECOMMENDED EXTRAS (optional — use when applicable)
+
+        | Field | Prefer to fill when… |
+        | --- | --- |
+        | **Error output** | There is a stack trace, tool exit text, console error, or server log |
+        | **Impact** | Severity is not already clear from Description (who/how often/workarounds) |
+        | **Evidence** | Perf numbers, N/N repro counts, waterfalls, screenshots of the failure |
+        | **Related issues** | Easy to confuse with another issue, or “related but distinct from #N” |
+        | **Suspected code paths** | You actually opened the code and can name files/symbols (no guessing essays) |
+        | **Suggested regression coverage** | You can state a minimal test/assertion that would catch this |
+        | **Additional context** | Redacted config, extra screenshots, notes that do not fit above |
+
+        Skip a field by leaving it empty. Do **not** put the word “optional” into the Issue body headings.
 
   - type: textarea
     id: error-output
     attributes:
       label: Error output
-      description: |
-        **Add when:** there is a stack trace, tool exit text, console error, or server log that shows the failure.
-        **Skip when:** pure UI/state with no log line (e.g. wrong badge only).
+      description: "Prefer when: stack traces / tool failures / console or server logs exist. Skip when: pure UI state with no log line."
       render: shell
     validations:
       required: false
@@ -95,9 +118,7 @@ body:
     id: impact
     attributes:
       label: Impact
-      description: |
-        **Add when:** severity is not obvious from Description (who is hurt, how often, workarounds).
-        **Skip when:** Description already states impact clearly.
+      description: "Prefer when: Description understates severity (who is hurt, frequency, workarounds). Skip when: Description already covers impact."
     validations:
       required: false
 
@@ -105,9 +126,7 @@ body:
     id: evidence
     attributes:
       label: Evidence
-      description: |
-        **Add when:** perf numbers, success/fail counts, screenshots of waterfalls, or “N/N cycles” style captures help.
-        **Skip when:** a short deterministic repro is enough.
+      description: "Prefer when: measurements, success/fail counts, or captures help (esp. perf / flaky repros). Skip when: a short deterministic repro is enough."
     validations:
       required: false
 
@@ -115,9 +134,7 @@ body:
     id: related
     attributes:
       label: Related issues
-      description: |
-        **Add when:** easy to confuse with another issue, or you need “related but distinct from #N”.
-        **Skip when:** no near-duplicates.
+      description: "Prefer when: near-duplicates exist or you need related-but-distinct. Skip when: none."
       placeholder: |
         Related but distinct: #…
         Not a duplicate of #… because …
@@ -128,9 +145,7 @@ body:
     id: suspected
     attributes:
       label: Suspected code paths
-      description: |
-        **Add when:** you actually opened the code and can name files/symbols.
-        **Skip when:** guessing — do not invent a design essay.
+      description: "Prefer when: you inspected code and can name files/symbols. Skip when: you would only be guessing."
     validations:
       required: false
 
@@ -138,9 +153,7 @@ body:
     id: regression-tests
     attributes:
       label: Suggested regression coverage
-      description: |
-        **Add when:** you can state a minimal test/assertion that would catch this.
-        **Skip when:** you only have a manual repro for now.
+      description: "Prefer when: you can propose a minimal test or assertion. Skip when: only manual repro for now."
     validations:
       required: false
 
@@ -148,8 +161,6 @@ body:
     id: additional
     attributes:
       label: Additional context
-      description: |
-        **Add when:** redacted config, screenshots, or notes that do not fit above.
-        **Skip when:** nothing else to say. Never paste secrets.
+      description: "Prefer when: screenshots, redacted config, or notes that do not fit above. Never paste secrets. Skip when: nothing else."
     validations:
       required: false

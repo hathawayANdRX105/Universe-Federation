@@ -7,11 +7,23 @@ body:
       value: |
         Guide: [agent/02-issue-guide.md](../../agent/02-issue-guide.md)
 
-        Bugs → Bug template. Internal refactor/CI/docs → Task template.
-        **Required** fields first. Extra fields: fill only when the field description says so.
-        Published headings stay plain (no “(optional)” text in the Issue body).
+        ```
+        ┌─────────────────────────────────────────────────────────┐
+        │  REQUIRED — must fill before submit                     │
+        │  RECOMMENDED EXTRAS — optional; fill when the note says │
+        │  Published headings are plain (no "(optional)" suffix). │
+        └─────────────────────────────────────────────────────────┘
+        ```
 
-        Quality bar: [omp#4815](https://github.com/can1357/oh-my-pi/issues/4815), [omp#4983](https://github.com/can1357/oh-my-pi/issues/4983).
+        Bugs → Bug template. Internal refactor/CI/docs → Task template.
+        Quality examples: [omp#4815](https://github.com/can1357/oh-my-pi/issues/4815), [omp#4983](https://github.com/can1357/oh-my-pi/issues/4983).
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## REQUIRED
+        Complete every field in this section.
 
   - type: textarea
     id: description
@@ -44,16 +56,24 @@ body:
   - type: markdown
     attributes:
       value: |
-        ### Extra fields (fill only when useful)
-        Leave blank if not applicable. Do not write “(optional)” into the Issue body.
+        ---
+        ## RECOMMENDED EXTRAS (optional — use when applicable)
+
+        | Field | Prefer to fill when… |
+        | --- | --- |
+        | **Non-goals** | The idea can balloon (protocol change, multi-app, redesign) |
+        | **Proposed approach** | You have a high-level shape that helps discussion (not a full design doc) |
+        | **Alternatives considered** | You tried workarounds or rejected designs worth recording |
+        | **Area** | Title does not already make the module obvious |
+        | **Additional context** | Links, screenshots, prior art, related issues |
+
+        Skip by leaving empty. Do not write “(optional)” into the Issue body.
 
   - type: textarea
     id: non-goals
     attributes:
       label: Non-goals
-      description: |
-        **Add when:** the idea can balloon (platform redesign, protocol change, multi-app).
-        **Skip when:** scope is already tiny and obvious.
+      description: "Prefer when: scope can sprawl. Skip when: the ask is already tiny and obvious."
     validations:
       required: false
 
@@ -61,10 +81,7 @@ body:
     id: proposed
     attributes:
       label: Proposed approach
-      description: |
-        **Add when:** you have a high-level shape (API flag, UI placement) that helps discussion.
-        **Skip when:** you only know the user problem — maintainers can design.
-        Not a full implementation plan unless asked.
+      description: "Prefer when: a short API/UI shape helps. Skip when: you only know the user problem. Not a full implementation plan unless maintainers ask."
     validations:
       required: false
 
@@ -72,9 +89,7 @@ body:
     id: alternatives
     attributes:
       label: Alternatives considered
-      description: |
-        **Add when:** you tried workarounds or rejected designs and want that recorded.
-        **Skip when:** none worth mentioning.
+      description: "Prefer when: you rejected workarounds/designs. Skip when: none worth mentioning."
     validations:
       required: false
 
@@ -82,9 +97,7 @@ body:
     id: area
     attributes:
       label: Area
-      description: |
-        **Add when:** a coarse module label helps routing (chat, timeline, federation, frontend, API, CI…).
-        **Skip when:** title already makes area obvious.
+      description: "Prefer when: routing helps (chat, timeline, federation, frontend, API…). Skip when: title already says it."
     validations:
       required: false
 
@@ -92,8 +105,6 @@ body:
     id: additional
     attributes:
       label: Additional context
-      description: |
-        **Add when:** links, screenshots, prior art, related issues.
-        **Skip when:** nothing else.
+      description: "Prefer when: links, screenshots, prior art. Skip when: nothing else."
     validations:
       required: false
