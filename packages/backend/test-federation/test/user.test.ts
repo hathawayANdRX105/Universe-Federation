@@ -282,8 +282,12 @@ describe('User', () => {
 			]);
 
 			await alice.client.request('i/update', { isLocked: true });
-			// let profile/AP actor update settle before remote follow requests
-			await sleep();
+			// AccountUpdate only delivers Update to existing followers; force-refresh Alice on B
+			// so following/create sees isLocked and creates a follow request instead of a follow.
+			await waitUntil(async () => {
+				aliceInB = await resolveRemoteUser('a.test', alice.id, bob);
+				return aliceInB.isLocked === true;
+			});
 		});
 
 		describe('Send follow request from Bob to Alice and cancel', () => {

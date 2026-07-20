@@ -3,13 +3,7 @@ describe('dark page header tabs', () => {
 		cy.resetState();
 		cy.registerUser('admin', 'admin1234', true);
 		cy.login('admin', 'admin1234');
-		// dismiss setup wizard if present
-		cy.get('body').then($body => {
-			if ($body.find('[data-cy-user-setup] [data-cy-modal-window-close]').length) {
-				cy.get('[data-cy-user-setup] [data-cy-modal-window-close]', { timeout: 30000 }).click();
-				cy.get('[data-cy-modal-dialog-ok]').click({ force: true });
-			}
-		});
+		cy.dismissUserSetup();
 	});
 
 	const forceUnreadableLightHeaderTheme = () => {

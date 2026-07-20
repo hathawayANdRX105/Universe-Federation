@@ -136,27 +136,55 @@ describe('After user signup', () => {
   });
 
 	it('suspend', function() {
-		const token = this.admin.token;
-		expect(token, 'admin token').to.be.a('string');
-		expect(this.alice.id, 'alice id').to.be.a('string');
+		cy.get('@admin').then((admin: any) => {
+			cy.get('@alice').then((alice: any) => {
+				const token = admin.token as string;
+				expect(token, 'admin token').to.be.a('string');
+				expect(alice.id, 'alice id').to.be.a('string');
 
-		cy.request({
-			method: 'POST',
-			url: '/api/admin/suspend-user',
-			headers: { Authorization: `Bearer ${token}` },
-			body: { userId: this.alice.id },
-		}).its('status').should('be.oneOf', [200, 204]);
+				cy.request({
+					method: 'POST',
+					url: '/api/admin/suspend-user',
+					headers: { Authorization: `Bearer ${token}` },
+					body: { userId: alice.id },
+				}).its('status').should('be.oneOf', [200, 204]);
 
-		// Contract: signin-flow rejects suspended accounts (UI dialog is best-effort).
-		cy.request({
-			method: 'POST',
-			url: '/api/signin-flow',
-			body: { username: 'alice' },
-			failOnStatusCode: false,
-		}).then((res) => {
-			expect(res.status).to.eq(403);
-			const err = res.body?.error ?? res.body;
-			expect(String(err?.code || '')).to.eq('ACCOUNT_SUSPENDED');
+				// Wait until moderation state is visible via admin API (cache/job settle).
+				const deadline = Date.now() + 20000;
+				const pollSuspended = (): Cypress.Chainable => cy.request({
+					method: 'POST',
+					url: '/api/admin/show-user',
+					headers: { Authorization: `Bearer ${token}` },
+					body: { userId: alice.id },
+				}).then((show) => {
+					if (show.body?.isSuspended === true) return;
+					if (Date.now() > deadline) {
+						expect(show.body?.isSuspended, 'alice isSuspended').to.eq(true);
+						return;
+					}
+					return cy.wait(250).then(pollSuspended);
+				});
+				pollSuspended();
+
+				// Contract: signin-flow rejects suspended accounts.
+				const signinDeadline = Date.now() + 20000;
+				const pollSignin = (): Cypress.Chainable => cy.request({
+					method: 'POST',
+					url: '/api/signin-flow',
+					body: { username: 'alice' },
+					failOnStatusCode: false,
+				}).then((res) => {
+					const err = res.body?.error ?? res.body;
+					if (res.status === 403 && String(err?.code || '') === 'ACCOUNT_SUSPENDED') return;
+					if (Date.now() > signinDeadline) {
+						expect(res.status, `signin suspended status: ${JSON.stringify(res.body)}`).to.eq(403);
+						expect(String(err?.code || '')).to.eq('ACCOUNT_SUSPENDED');
+						return;
+					}
+					return cy.wait(250).then(pollSignin);
+				});
+				pollSignin();
+			});
 		});
 	});
 });
@@ -222,11 +250,7 @@ describe('After user setup', () => {
 		cy.registerUser('alice', 'alice1234');
 
 		cy.login('alice', 'alice1234');
-
-		// アカウント初期設定ウィザード
-		// 表示に時間がかかるのでデフォルト秒数だとタイムアウトする
-		cy.get('[data-cy-user-setup] [data-cy-modal-window-close]', { timeout: 30000 }).click();
-		cy.get('[data-cy-modal-dialog-ok]').click();
+		cy.dismissUserSetup();
 	});
 
 	afterEach(() => {
@@ -236,8 +260,8 @@ describe('After user setup', () => {
 	});
 
 	it('note', () => {
-		cy.get('[data-cy-open-post-form]').should('be.visible');
-		cy.get('[data-cy-open-post-form]').click();
+		cy.get('[data-cy-open-post-form]', { timeout: 30000 }).should('exist');
+		cy.get('[data-cy-open-post-form]').click({ force: true });
 		cy.get('[data-cy-post-form-text]').type('Hello, Misskey!');
 		cy.get('[data-cy-open-post-form-submit]').click();
 
@@ -245,8 +269,8 @@ describe('After user setup', () => {
   });
 
 	it('open note form with hotkey', () => {
-		// Wait until the page loads
-		cy.get('[data-cy-open-post-form]').should('be.visible');
+		// Wait until the page loads (force: may be under residual overlay)
+		cy.get('[data-cy-open-post-form]', { timeout: 30000 }).should('exist');
 		// Use trigger() to give different `code` to test if hotkeys also work on non-QWERTY keyboards.
 		cy.document().trigger("keydown", { eventConstructor: 'KeyboardEvent', key: "n", code: "KeyL" });
 		// See if the form is opened

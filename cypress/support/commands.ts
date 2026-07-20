@@ -1,33 +1,11 @@
 // ***********************************************
-// This example commands.js shows you how to
-// create various custom commands and overwrite
-// existing commands.
-//
-// For more comprehensive examples of custom
-// commands please read more here:
-// https://on.cypress.io/custom-commands
+// Custom Cypress commands for Universe Federation
 // ***********************************************
-//
-//
-// -- This is a parent command --
-// Cypress.Commands.add('login', (email, password) => { ... })
-//
-//
-// -- This is a child command --
-// Cypress.Commands.add('drag', { prevSubject: 'element'}, (subject, options) => { ... })
-//
-//
-// -- This is a dual command --
-// Cypress.Commands.add('dismiss', { prevSubject: 'optional'}, (subject, options) => { ... })
-//
-//
-// -- This will overwrite an existing command --
-// Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
 
 Cypress.Commands.add('visitHome', () => {
 	cy.visit('/');
 	cy.get('button', { timeout: 30000 }).should('be.visible');
-})
+});
 
 Cypress.Commands.add('resetState', () => {
 	// Wipe DB first, then force a clean client origin paint (visitor/setup UI).
@@ -38,7 +16,6 @@ Cypress.Commands.add('resetState', () => {
 		onBeforeLoad(win) {
 			win.localStorage.clear();
 			win.sessionStorage.clear();
-			// belt-and-suspenders: miLocalStorage keys that control UI
 			try {
 				win.localStorage.removeItem('account');
 				win.localStorage.removeItem('instance');
@@ -59,6 +36,8 @@ Cypress.Commands.add('registerUser', (username, password, isAdmin = false) => {
 		...(isAdmin ? { setupPassword: 'example_password_please_change_this_or_you_will_get_hacked' } : {}),
 	}).then((res) => {
 		expect(res.status).to.be.oneOf([200, 204]);
+		expect(res.body, `register ${username} body`).to.be.an('object');
+		expect(res.body.id, `register ${username} id`).to.be.a('string');
 		// alias full body (includes token for admin/signup)
 		cy.wrap(res.body).as(username);
 	});
@@ -80,10 +59,44 @@ Cypress.Commands.add('registerUser', (username, password, isAdmin = false) => {
 
 // API login — UI multi-step is flaky; captcha is skipped when NODE_ENV=test.
 Cypress.Commands.add('login', (username, password) => {
-	cy.request('POST', '/api/signin-flow', { username, password }).then((res) => {
-		expect(res.status).to.eq(200);
-		expect(res.body.finished, 'signin finished').to.eq(true);
-		const token = res.body.i as string;
+	const attempt = (n: number): Cypress.Chainable => {
+		return cy.request({
+			method: 'POST',
+			url: '/api/signin-flow',
+			body: { username, password },
+			failOnStatusCode: false,
+		}).then((res) => {
+			if (res.status === 429 && n < 5) {
+				return cy.wait(1500).then(() => attempt(n + 1));
+			}
+			// Finished in one shot (no 2FA / captcha required under NODE_ENV=test)
+			if (res.status === 200 && res.body?.finished === true && res.body?.i) {
+				return cy.wrap(res.body);
+			}
+			// Multi-step fallback: username-only then password
+			if (res.status === 200 && res.body?.finished === false) {
+				return cy.request({
+					method: 'POST',
+					url: '/api/signin-flow',
+					body: { username, password },
+					failOnStatusCode: false,
+				}).then((res2) => {
+					if (res2.status === 429 && n < 5) {
+						return cy.wait(1500).then(() => attempt(n + 1));
+					}
+					expect(res2.status, `signin step2 status for ${username}`).to.eq(200);
+					expect(res2.body.finished, 'signin finished').to.eq(true);
+					return cy.wrap(res2.body);
+				});
+			}
+			expect(res.status, `signin status for ${username}: ${JSON.stringify(res.body)}`).to.eq(200);
+			expect(res.body.finished, 'signin finished').to.eq(true);
+			return cy.wrap(res.body);
+		});
+	};
+
+	attempt(0).then((body: { i: string }) => {
+		const token = body.i;
 		expect(token).to.be.a('string');
 		return cy.request({
 			method: 'POST',
@@ -96,11 +109,30 @@ Cypress.Commands.add('login', (username, password) => {
 			return cy.visit('/', {
 				onBeforeLoad(win) {
 					win.localStorage.clear();
+					win.sessionStorage.clear();
 					win.localStorage.setItem('account', JSON.stringify(account));
 				},
 			});
 		});
 	}).then(() => {
-		cy.get('[data-cy-user-setup-continue], [data-cy-open-post-form]', { timeout: 30000 }).should('exist');
+		cy.get('[data-cy-user-setup-continue], [data-cy-open-post-form], [data-cy-user-setup]', { timeout: 30000 }).should('exist');
 	});
+});
+
+// Close account setup wizard + confirmation dialog if present.
+Cypress.Commands.add('dismissUserSetup', () => {
+	cy.get('body', { timeout: 30000 }).should('be.visible');
+	cy.get('body').then(($body) => {
+		if ($body.find('[data-cy-user-setup] [data-cy-modal-window-close]').length) {
+			cy.get('[data-cy-user-setup] [data-cy-modal-window-close]', { timeout: 30000 }).click({ force: true });
+		}
+	});
+	cy.get('body').then(($body) => {
+		if ($body.find('[data-cy-modal-dialog-ok]').length) {
+			cy.get('[data-cy-modal-dialog-ok]').click({ force: true });
+		}
+	});
+	// Wait until overlays that cover the post button are gone
+	cy.get('[data-cy-user-setup]', { timeout: 15000 }).should('not.exist');
+	cy.get('[data-cy-modal-dialog-ok]').should('not.exist');
 });
