@@ -10,8 +10,12 @@ services:
     command: >
       bash -c "
         npm install -g pnpm
-        # Full install: filtered -F installs miss optional deps (e.g. node-domexception).
-        pnpm i --frozen-lockfile
+        pnpm -F backend i
+        pnpm -F misskey-js i
+        pnpm -F megalodon i
+        pnpm -F misskey-reversi i
+        # fetch-blob optional peer used at runtime; filtered installs omit it.
+        pnpm add -w node-domexception@1.0.0
       "
 
   tester:
