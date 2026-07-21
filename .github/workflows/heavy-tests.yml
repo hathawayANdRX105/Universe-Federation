@@ -131,7 +131,16 @@ jobs:
         with:
           submodules: recursive
       - name: Build production image
-        run: DOCKER_BUILDKIT=1 docker build --tag universe-federation:${{ github.sha }} .
+        run: |
+          # Docker Hub flakes (syntax image pull) — short retries
+          for i in 1 2 3; do
+            if DOCKER_BUILDKIT=1 docker build --tag universe-federation:${{ github.sha }} .; then
+              exit 0
+            fi
+            echo "docker build failed (attempt $i); retry in 15s..."
+            sleep 15
+          done
+          exit 1
       - name: Start PostgreSQL and Redis
         run: |
           docker network create universe-federation-test

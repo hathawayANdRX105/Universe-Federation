@@ -204,13 +204,12 @@ def classify(files: list[str]) -> dict[str, str | bool]:
 		".node-version",
 		"tsconfig.json",
 	)
+	# Full-suite "shared" only for real monorepo glue (packages/shared, stub).
+	# Layout/docs trees (config examples, locales moves, scripts, workflows) must NOT
+	# force backend e2e + frontend unit by themselves — those use dedicated scopes.
 	shared_prefixes = (
 		"packages/shared/",
 		"packages/stub/",
-		"locales/",
-		"scripts/",
-		".github/",
-		"config/",
 	)
 
 	backend_files: list[str] = []
@@ -231,6 +230,9 @@ def classify(files: list[str]) -> dict[str, str | bool]:
 		if is_federation_path(p):
 			federation = True
 		if matches(p, frontend_prefixes):
+			frontend = True
+		# Locale tree moves affect built FE strings, not full backend e2e suite
+		if p.startswith("locales/") and not _is_docs_only_path(p):
 			frontend = True
 
 		if not p.startswith("packages/backend/"):
