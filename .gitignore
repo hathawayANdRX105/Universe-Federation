@@ -26,8 +26,8 @@ packages/sw/.yarn/cache
 **/.eslintcache
 
 # Cypress
-cypress/screenshots
-cypress/videos
+tests/e2e/screenshots
+tests/e2e/videos
 
 # Coverage
 coverage

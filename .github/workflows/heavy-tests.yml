@@ -86,8 +86,8 @@ jobs:
         with:
           name: cypress-diagnostics
           path: |
-            cypress/screenshots
-            cypress/videos
+            tests/e2e/screenshots
+            tests/e2e/videos
           if-no-files-found: ignore
 
   federation:
