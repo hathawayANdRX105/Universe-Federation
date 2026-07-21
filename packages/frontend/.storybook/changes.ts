@@ -52,7 +52,7 @@ await fs.readFile(
 		micromatch(Array.from(modules), [
 			'../../assets/**',
 			'../../assets/emojis/fluent-emojis/**',
-			'../../locales/en-US.yml',
+			'../../locales/upstream/en-US.yml',
 			'assets/**',
 			'public/**',
 			'package.json',
