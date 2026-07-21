@@ -27,7 +27,7 @@ services:
       - NODE_OPTIONS="--max-old-space-size=8192"
     volumes:
       - ../../files:/sharkey/files
-      - ../../config:/sharkey/.config:ro
+      - ../../config:/sharkey/config:ro
 
   redis:
     restart: always

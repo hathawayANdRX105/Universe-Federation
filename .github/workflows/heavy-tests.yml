@@ -173,7 +173,7 @@ jobs:
           docker run --detach --name universe-federation-app \
             --network universe-federation-test \
             --publish 3000:3000 \
-            --volume "$RUNNER_TEMP/default.yml:/sharkey/.config/default.yml:ro" \
+            --volume "$RUNNER_TEMP/default.yml:/sharkey/config/default.yml:ro" \
             universe-federation:${{ github.sha }}
       - name: Verify health and public API
         run: |
