@@ -43,19 +43,14 @@ def is_container_path(p: str) -> bool:
 	if "/" not in p.rstrip("/"):
 		if name in {
 			"Dockerfile",
-			"compose.yml",
-			"compose.yaml",
-			"compose.local-db.yml",
-			"compose.local-run.yml",
-			"compose.alpine-db.yml",
-			"compose_example.yml",
 			"healthcheck.sh",
 			".dockerignore",
 		}:
 			return True
 		if name.startswith("compose") and name.endswith((".yml", ".yaml")):
 			return True
-	return matches(p, (".devcontainer/", "chart/", "docker/"))
+	# deploy/compose/* and other deployment layout prefixes
+	return matches(p, (".devcontainer/", "chart/", "docker/", "deploy/compose/"))
 
 
 def is_federation_path(p: str) -> bool:

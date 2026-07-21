@@ -1,5 +1,5 @@
-# このconfigは、 dockerでMisskey本体を起動せず、 redisとpostgresql などだけを起動します
-
+# Middleware only (no app). Run from repository root:
+#   docker compose -f deploy/compose/local-db.yml up -d
 services:
   redis:
     restart: always
@@ -7,7 +7,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./redis:/data
+      - ../../redis:/data
     healthcheck:
       test: "redis-cli ping"
       interval: 5s
@@ -19,9 +19,9 @@ services:
     ports:
       - "5432:5432"
     env_file:
-      - .config/docker.env
+      - ../../.config/docker.env
     volumes:
-      - ./db:/var/lib/postgresql/data
+      - ../../db:/var/lib/postgresql/data
     healthcheck:
       test: "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"
       interval: 5s
@@ -34,6 +34,6 @@ services:
 #      - MEILI_NO_ANALYTICS=true
 #      - MEILI_ENV=production
 #    env_file:
-#      - .config/meilisearch.env
+#      - ../../.config/meilisearch.env
 #    volumes:
-#      - ./meili_data:/meili_data
+#      - ../../meili_data:/meili_data

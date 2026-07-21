@@ -77,8 +77,8 @@
 		{
 			groupName: '[Docker] Update dependencies',
 			matchFileNames: [
-				'compose.local-db.yml',
-				'compose_example.yml',
+				'deploy/compose/local-db.yml',
+				'deploy/compose/example.yml',
 				'packages/backend/test-federation/*.yml',
 				'Dockerfile',
 			],
