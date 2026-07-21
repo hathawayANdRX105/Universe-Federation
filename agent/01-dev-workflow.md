@@ -102,3 +102,15 @@ feature/fix/docs/*  ──PR──►  dev  ──稳定后──►  main
 
 > 找/开 Issue → Assignee 自己 → 从 **dev** 开分支 → PR 到 **dev** 写 `Fixes #编号` → 等 CI 与 Review → 合入。  
 > 一个 PR 只干一件事；仓库不留垃圾文件；**不要动 main。**
+
+## CI scopes (when jobs run)
+
+Checks are **path-scoped** against the PR base (`dev...HEAD`), not “always full suite”.
+
+| Workflow (Checks title) | Runs when |
+|-------------------------|-----------|
+| **Quality** | Non-doc code/tooling changes need lint and/or package tests |
+| **Validate** | Diff touches backend/frontend/shared/container/etc. — each job only if its scope is true |
+| **Integration** | Manual/`main`/schedule, or PR labeled `run-integration` |
+
+Docs/agent/README-only PRs should skip Quality package jobs and Validate test matrices (summary jobs stay green).
