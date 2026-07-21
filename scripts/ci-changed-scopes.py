@@ -210,7 +210,6 @@ def classify(files: list[str]) -> dict[str, str | bool]:
 		"locales/",
 		"scripts/",
 		".github/",
-
 		"config/",
 	)
 
