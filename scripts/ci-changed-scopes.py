@@ -12,6 +12,7 @@ Outputs (boolean unless noted):
   e2e_stream / e2e_timeline / e2e_api   (which API e2e groups)
   e2e_shard_total   (1 or 2 — concurrent jest shards)
   e2e_patterns      (jest --testPathPatterns regex, empty = all e2e files)
+  quality_lint / quality_misskey_js / quality_megalodon  (Quality workflow job switches)
 """
 
 from __future__ import annotations
@@ -20,6 +21,14 @@ import argparse
 import os
 import sys
 from pathlib import PurePosixPath
+
+
+
+def _norm_path(path: str) -> str:
+	p = path.replace("\\", "/")
+	if p.startswith("./"):
+		p = p[2:]
+	return p
 
 
 def matches(path: str, prefixes: tuple[str, ...], names: tuple[str, ...] | set[str] = ()) -> bool:
@@ -136,6 +145,30 @@ def path_in_timeline(p: str) -> bool:
 	return any(c in p for c in TIMELINE_CONTAINS)
 
 
+
+def _is_docs_only_path(p: str) -> bool:
+	"""Paths that never require Quality gate package jobs by themselves."""
+	p = _norm_path(p)
+	if p.startswith(("docs/", "agent/")):
+		return True
+	if p in {
+		"README.md",
+		"AGENTS.md",
+		"SECURITY.md",
+		"CONTRIBUTING.md",
+		"CHANGELOG.md",
+		"LICENSE",
+		"COPYING",
+		"CODE_OF_CONDUCT.md",
+	}:
+		return True
+	if p.startswith(".github/ISSUE_TEMPLATE/") or p == ".github/pull_request_template.md":
+		return True
+	if p.endswith(".md") and not p.startswith((".github/workflows/", "packages/")):
+		return True
+	return False
+
+
 def classify(files: list[str]) -> dict[str, str | bool]:
 	empty = {
 		"backend": False,
@@ -153,6 +186,9 @@ def classify(files: list[str]) -> dict[str, str | bool]:
 		"e2e_shard_total": "0",
 		"e2e_shards": "[]",
 		"e2e_patterns": "",
+		"quality_lint": False,
+		"quality_misskey_js": False,
+		"quality_megalodon": False,
 	}
 	if not files:
 		return empty
@@ -174,13 +210,12 @@ def classify(files: list[str]) -> dict[str, str | bool]:
 	)
 	shared_prefixes = (
 		"packages/shared/",
-		"packages/misskey-js/",
-		"packages/megalodon/",
 		"packages/stub/",
 		"locales/",
 		"scripts/",
 		".github/",
 		".config/",
+		"config/",
 	)
 
 	backend_files: list[str] = []
@@ -189,11 +224,12 @@ def classify(files: list[str]) -> dict[str, str | bool]:
 	e2e_stream = e2e_timeline = e2e_api = False
 	backend_broad = False  # non-narrow backend change → full e2e
 	for f in files:
-		p = f.replace("\\", "/").lstrip("./")
+		p = _norm_path(f)
 		if not p or p.endswith("/"):
 			continue
 
-		if matches(p, shared_prefixes, shared_names):
+		# docs/agent/templates never count as "shared" (would force full suite)
+		if matches(p, shared_prefixes, shared_names) and not _is_docs_only_path(p):
 			shared = True
 		if is_container_path(p):
 			container = True
@@ -343,6 +379,25 @@ def classify(files: list[str]) -> dict[str, str | bool]:
 			e2e_shard_total = "2" if len(groups) >= 2 else "1"
 			e2e_shards = "[1,2]" if e2e_shard_total == "2" else "[1]"
 
+	# Quality gate: skip pure docs-only diffs; package jobs only if those packages (or shared root) change
+	quality_lint = False
+	quality_misskey_js = False
+	quality_megalodon = False
+	for f in files:
+		p = _norm_path(f)
+		if not p or p.endswith("/"):
+			continue
+		if _is_docs_only_path(p):
+			continue
+		quality_lint = True
+		if p.startswith("packages/misskey-js/"):
+			quality_misskey_js = True
+		if p.startswith("packages/megalodon/"):
+			quality_megalodon = True
+	if shared:
+		# lockfile / root package / shared libs → full quality
+		quality_lint = quality_misskey_js = quality_megalodon = True
+
 	return {
 		"backend": backend or shared,
 		"backend_unit": backend_unit or shared,
@@ -359,6 +414,9 @@ def classify(files: list[str]) -> dict[str, str | bool]:
 		"e2e_shard_total": e2e_shard_total,
 		"e2e_shards": e2e_shards if backend_api_e2e else "[]",
 		"e2e_patterns": e2e_patterns,
+		"quality_lint": quality_lint,
+		"quality_misskey_js": quality_misskey_js,
+		"quality_megalodon": quality_megalodon,
 	}
 
 

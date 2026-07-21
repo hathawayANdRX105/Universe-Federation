@@ -1,15 +1,14 @@
-name: CI - PR Validation
+name: Validate
 
-# Always starts on every PR (do NOT use workflow-level paths: filters).
-# Job-level if skips unrelated work so required checks never stay pending.
-# Backend API e2e is path-selective and can run 2 concurrent Jest shards.
+# Starts on every PR; job-level path scopes skip unrelated work (required-check safe).
+# Backend API e2e is path-selective and can run concurrent Jest shards.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 concurrency:
-  group: ci-pr-validation-${{ github.event.pull_request.number || github.run_id }}
+  group: validate-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -17,7 +16,7 @@ permissions:
 
 jobs:
   detect-changes:
-    name: Detect changed scopes
+    name: Detect change scopes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -66,7 +65,7 @@ jobs:
           cat "$GITHUB_OUTPUT" || true
 
   backend-unit:
-    name: Backend unit tests
+    name: Backend unit
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.backend_unit == 'true' }}
     runs-on: ubuntu-24.04
@@ -115,7 +114,7 @@ jobs:
       - run: pnpm --filter backend test
 
   frontend-unit:
-    name: Frontend unit tests
+    name: Frontend unit
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-24.04
@@ -130,7 +129,7 @@ jobs:
       - run: pnpm --filter frontend test
 
   backend-typecheck:
-    name: Backend type check
+    name: Backend typecheck
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.backend_typecheck == 'true' }}
     runs-on: ubuntu-24.04
@@ -143,7 +142,7 @@ jobs:
       - run: pnpm --filter backend typecheck
 
   frontend-typecheck:
-    name: Frontend type check
+    name: Frontend typecheck
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-24.04
@@ -232,7 +231,7 @@ jobs:
           pnpm exec cross-env NODE_ENV=test node ./jest.js --forceExit --config jest.config.e2e.ts "${extra[@]}"
 
   federation:
-    name: Federation integration tests
+    name: Federation
     needs: detect-changes
     # Parked: known-red AP/follow suite (Issue #9). Resume after dependency refactor.
     # Keep job id so validation-gate needs: still resolves; force skip so PR checks stay green.
@@ -266,7 +265,7 @@ jobs:
         run: docker compose --env-file .config/docker.env down --volumes --remove-orphans
 
   container-smoke:
-    name: Production container smoke test
+    name: Container smoke
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.container == 'true' }}
     runs-on: ubuntu-24.04
@@ -347,7 +346,7 @@ jobs:
           docker network rm universe-federation-test 2>/dev/null || true
 
   validation-gate:
-    name: PR Validation
+    name: Validation result
     if: ${{ always() && !cancelled() }}
     needs:
       - detect-changes
@@ -406,5 +405,5 @@ jobs:
               print(f"Failed or unexpected jobs: {bad}")
               print(f"Required map: {required}")
               sys.exit(1)
-          print("PR Validation OK:", required)
+          print("Validation OK:", required)
           PY

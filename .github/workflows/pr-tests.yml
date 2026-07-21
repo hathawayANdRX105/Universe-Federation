@@ -1,5 +1,6 @@
-name: CI - PR Gate
+name: Quality
 
+# Path-scoped quality jobs. Summary job stays green when children skip (required-check safe).
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -7,15 +8,49 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-pr-gate-${{ github.event.pull_request.number || github.ref }}
+  group: quality-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  detect-changes:
+    name: Detect change scopes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      quality_lint: ${{ steps.scopes.outputs.quality_lint }}
+      quality_misskey_js: ${{ steps.scopes.outputs.quality_misskey_js }}
+      quality_megalodon: ${{ steps.scopes.outputs.quality_megalodon }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Classify changed paths
+        id: scopes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "push" ]; then
+            # main push: full quality
+            printf '%s\n' package.json pnpm-lock.yaml packages/misskey-js/package.json packages/megalodon/package.json \
+              | python3 scripts/ci-changed-scopes.py --github-output
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git diff --name-only "origin/${BASE_REF}...${SHA}" \
+            | python3 scripts/ci-changed-scopes.py --github-output
+          echo "scopes:"
+          cat "$GITHUB_OUTPUT" || true
+
   lint:
     name: Lint
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.quality_lint == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -27,7 +62,9 @@ jobs:
       - run: pnpm run eslint
 
   misskey-js:
-    name: misskey-js tests
+    name: misskey-js
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.quality_misskey_js == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -39,7 +76,9 @@ jobs:
       - run: pnpm --filter misskey-js test
 
   megalodon:
-    name: Megalodon tests
+    name: Megalodon
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.quality_megalodon == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -50,31 +89,52 @@ jobs:
       - run: pnpm --filter megalodon build
       - run: pnpm --filter megalodon test
 
-  pr-gate:
-    name: PR Gate
+  quality-result:
+    name: Quality result
     if: ${{ always() && !cancelled() }}
     needs:
+      - detect-changes
       - lint
       - misskey-js
       - megalodon
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every PR gate check to pass
+      - name: Accept success or expected skip
         env:
           NEEDS: ${{ toJSON(needs) }}
+          SCOPE_LINT: ${{ needs.detect-changes.outputs.quality_lint }}
+          SCOPE_MISSKEY_JS: ${{ needs.detect-changes.outputs.quality_misskey_js }}
+          SCOPE_MEGALODON: ${{ needs.detect-changes.outputs.quality_megalodon }}
         run: |
           python3 - <<'PY'
-          import json
-          import os
-          import sys
+          import json, os, sys
 
-          failed = {
-              name: job['result']
-              for name, job in json.loads(os.environ['NEEDS']).items()
-              if job['result'] != 'success'
-          }
-          if failed:
-              print(f'Failed or incomplete required jobs: {failed}')
+          needs = json.loads(os.environ["NEEDS"])
+          detect = needs.get("detect-changes", {})
+          if detect.get("result") != "success":
+              print(f"detect-changes failed: {detect.get('result')}")
               sys.exit(1)
+
+          required = {
+              "lint": os.environ["SCOPE_LINT"] == "true",
+              "misskey-js": os.environ["SCOPE_MISSKEY_JS"] == "true",
+              "megalodon": os.environ["SCOPE_MEGALODON"] == "true",
+          }
+
+          bad = {}
+          for name, must_run in required.items():
+              result = needs[name]["result"]
+              if must_run:
+                  if result != "success":
+                      bad[name] = result
+              else:
+                  if result not in ("skipped", "success"):
+                      bad[name] = result
+
+          if bad:
+              print(f"Failed or unexpected jobs: {bad}")
+              print(f"Required map: {required}")
+              sys.exit(1)
+          print("Quality OK:", required)
           PY
