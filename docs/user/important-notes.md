@@ -1,6 +1,6 @@
 # Basic Precautions
 
-When using a service with Sharkey, there are several important points to keep in mind.
+When using a service with Universe Federation, there are several important points to keep in mind.
 
 1. Because it is decentralized, there is no guarantee that data you upload will be deleted from all other servers even if you delete it once. (However, this applies to the internet in general.)
 
@@ -11,6 +11,6 @@ Any data uploaded, whether shared via post or not, will be publicly accessible. 
 
 4. Account deletion can be a resource-intensive process and may take a long time. In cases with a lot of uploaded data, it may even be impossible to delete an account.
 
-5. Please disable ad blockers. Some servers may rely on advertising revenue to cover operating costs. Additionally, ad blockers can mistakenly block content and features unrelated to ads, potentially causing issues with the client's functionality and preventing normal use of Sharkey. Therefore, we recommend turning off ad blockers and similar features when using Sharkey.
+5. Please disable ad blockers. Some servers may rely on advertising revenue to cover operating costs. Additionally, ad blockers can mistakenly block content and features unrelated to ads, potentially causing issues with the client's functionality and preventing normal use of Universe Federation. Therefore, we recommend turning off ad blockers and similar features when using Universe Federation.
 
 Please understand these points and enjoy using the service.

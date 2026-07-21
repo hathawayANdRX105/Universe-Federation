@@ -1,5 +1,7 @@
 # Upgrade Notes
 
+> Historical upgrade notes from the Sharkey lineage used by this fork. Version labels below refer to those upstream releases; this repository packages them as Universe Federation.
+
 ## 2025.5.2
 
 ### Mark instance as NSFW
